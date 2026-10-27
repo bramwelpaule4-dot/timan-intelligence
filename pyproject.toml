@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "timan-intelligence"
+version = "0.1.0"
+description = "A modular statistical analytics platform for research, NGOs, and businesses."
+readme = "ARCHITECTURE.md"
+requires-python = ">=3.10"
+dependencies = [
+  "pandas>=2.2,<4",
+  "openpyxl>=3.1,<4",
+]
+
+[project.optional-dependencies]
+web = ["streamlit>=1.40,<2"]
+desktop = ["PySide6>=6.7,<7"]
+dev = ["pytest>=8,<9"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
