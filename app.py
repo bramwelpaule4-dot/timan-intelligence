@@ -94,3 +94,327 @@ def show_under_development(page, purpose):
 def clear_dataset():
     st.session_state.dataset = None
     st.session_state.dataset_name = None
+    st.session_state.pop("dataset_uploader", None)
+
+
+if "dataset" not in st.session_state:
+    st.session_state.dataset = None
+if "dataset_name" not in st.session_state:
+    st.session_state.dataset_name = None
+
+st.sidebar.markdown("## 🔷 TIMAN")
+st.sidebar.caption("INTELLIGENCE")
+st.sidebar.divider()
+if "navigation_page" not in st.session_state:
+    st.session_state.navigation_page = "Home"
+page = st.sidebar.radio(
+    "NAVIGATION",
+    list(MODULES.keys()),
+    key="navigation_page",
+)
+st.sidebar.divider()
+st.sidebar.caption("Turning Data into Insights for Informed Decisions.")
+
+if st.session_state.dataset is not None:
+    loaded = st.session_state.dataset
+    st.sidebar.success(f"Dataset: {st.session_state.dataset_name or 'Uploaded dataset'}")
+    st.sidebar.caption(f"{loaded.shape[0]:,} rows · {loaded.shape[1]:,} columns")
+    st.sidebar.button("Clear current dataset", on_click=clear_dataset)
+else:
+    st.sidebar.caption("No dataset loaded")
+
+# HOME
+if page == "Home":
+    st.markdown('<div class="brand">TIMAN INTELLIGENCE</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="subtitle">Turning Data into Insights for Informed Decisions.</div>',
+        unsafe_allow_html=True,
+    )
+    st.write("")
+    st.write(
+        "A statistical analytics platform for exploring datasets, checking data quality, "
+        "calculating descriptive statistics and creating basic visualisations."
+    )
+
+    df = st.session_state.dataset
+    if df is None:
+        a, b, c = st.columns(3)
+        a.metric("Dataset status", "Not loaded")
+        b.metric("Available formats", "CSV / Excel")
+        c.metric("Navigation modules", len(MODULES))
+        st.info("To begin, select **Data Management** from the left navigation and upload a CSV or Excel file.")
+        if st.button("Go to Data Management", type="primary"):
+            st.session_state.navigation_page = "Data Management"
+            st.rerun()
+    else:
+        a, b, c = st.columns(3)
+        a.metric("Rows", f"{df.shape[0]:,}")
+        b.metric("Columns", f"{df.shape[1]:,}")
+        c.metric("Missing cells", f"{int(df.isna().sum().sum()):,}")
+        st.subheader("Dataset preview")
+        st.dataframe(df.head(10), use_container_width=True)
+        st.caption(f"Current dataset: {st.session_state.dataset_name or 'Uploaded dataset'}")
+
+    st.subheader("Module availability")
+    status_rows = [
+        {"Module": name, "Status": status, "Purpose": purpose}
+        for name, (status, purpose) in MODULES.items()
+    ]
+    st.dataframe(pd.DataFrame(status_rows), hide_index=True, use_container_width=True)
+
+# DATA MANAGEMENT
+elif page == "Data Management":
+    st.title("Data Management")
+    st.caption(status_text(MODULES[page][0]))
+    st.write("Upload a CSV or Excel workbook (.xlsx). The imported dataset stays available while you navigate this session.")
+
+    uploaded_file = st.file_uploader(
+        "Choose a CSV or Excel file",
+        type=["csv", "xlsx"],
+        key="dataset_uploader",
+        help="Supported formats: .csv and .xlsx. Password-protected workbooks are not supported.",
+    )
+
+    if uploaded_file is not None:
+        current_name = st.session_state.get("dataset_name")
+        # Avoid re-reading the same upload on every Streamlit rerun.
+        if current_name != uploaded_file.name or st.session_state.dataset is None:
+            try:
+                imported = load_uploaded_file(uploaded_file)
+                st.session_state.dataset = imported
+                st.session_state.dataset_name = uploaded_file.name
+                st.success(f"Successfully imported **{uploaded_file.name}**.")
+            except Exception as exc:
+                st.error(f"Import failed: {exc}")
+        else:
+            st.success(f"Dataset loaded: **{uploaded_file.name}**")
+
+    df = st.session_state.dataset
+    if df is not None:
+        st.subheader("Imported dataset")
+        a, b, c = st.columns(3)
+        a.metric("Rows", f"{df.shape[0]:,}")
+        b.metric("Columns", f"{df.shape[1]:,}")
+        c.metric("Missing cells", f"{int(df.isna().sum().sum()):,}")
+        st.dataframe(df.head(100), use_container_width=True)
+        with st.expander("Column details"):
+            details = pd.DataFrame({
+                "Column": df.columns.astype(str),
+                "Data type": [str(dtype) for dtype in df.dtypes],
+                "Missing values": [int(value) for value in df.isna().sum().values],
+                "Unique values": [int(df[col].nunique(dropna=True)) for col in df.columns],
+            })
+            st.dataframe(details, hide_index=True, use_container_width=True)
+        st.download_button(
+            "Download current dataset as CSV",
+            data=df.to_csv(index=False).encode("utf-8-sig"),
+            file_name="timan_dataset_export.csv",
+            mime="text/csv",
+            key="download_dataset_management",
+        )
+    else:
+        st.info("No dataset loaded yet. Choose a file above to get started.")
+
+# DATA QUALITY
+elif page == "Data Quality":
+    st.title("Data Quality")
+    st.caption(status_text(MODULES[page][0]))
+    df = get_dataset()
+    if df is not None:
+        missing = df.isna().sum()
+        quality = pd.DataFrame({
+            "Variable": df.columns.astype(str),
+            "Data type": [str(dtype) for dtype in df.dtypes],
+            "Missing values": [int(missing[col]) for col in df.columns],
+            "Missing (%)": [
+                round(float(missing[col]) / len(df) * 100, 2) if len(df) else 0
+                for col in df.columns
+            ],
+            "Unique values": [int(df[col].nunique(dropna=True)) for col in df.columns],
+        })
+        a, b, c = st.columns(3)
+        a.metric("Rows", f"{len(df):,}")
+        b.metric("Duplicate rows", f"{int(df.duplicated().sum()):,}")
+        c.metric("Missing cells", f"{int(df.isna().sum().sum()):,}")
+        st.subheader("Variable-level quality profile")
+        st.dataframe(quality, hide_index=True, use_container_width=True)
+        st.caption("No rows are removed and no values are imputed or recoded by this report.")
+        st.download_button(
+            "Download data-quality profile",
+            data=quality.to_csv(index=False).encode("utf-8-sig"),
+            file_name="timan_data_quality.csv",
+            mime="text/csv",
+            key="download_quality",
+        )
+
+# DESCRIPTIVE STATISTICS
+elif page == "Descriptive Statistics":
+    st.title("Descriptive Statistics")
+    st.caption(status_text(MODULES[page][0]))
+    df = get_dataset()
+    if df is not None:
+        st.subheader("Numeric summary")
+        summary = numeric_summary(df)
+        if summary.empty:
+            st.info("No numeric columns were detected in this dataset.")
+        else:
+            st.dataframe(summary, hide_index=True, use_container_width=True)
+            st.download_button(
+                "Download numeric summary",
+                data=summary.to_csv(index=False).encode("utf-8-sig"),
+                file_name="timan_descriptive_statistics.csv",
+                mime="text/csv",
+                key="download_numeric_summary",
+            )
+
+        categorical_columns = [
+            col for col in df.columns
+            if not pd.api.types.is_numeric_dtype(df[col].dtype)
+        ]
+        if categorical_columns:
+            st.subheader("Categorical frequency table")
+            selected_col = st.selectbox(
+                "Select a categorical variable",
+                categorical_columns,
+                format_func=str,
+            )
+            include_missing = st.checkbox("Show missing values as a category", value=True)
+            series = df[selected_col].astype("object")
+            if include_missing:
+                series = series.where(series.notna(), "(Missing)")
+                counts = series.value_counts(dropna=False)
+                denominator = len(df)
+            else:
+                series = series.dropna()
+                counts = series.value_counts(dropna=True)
+                denominator = len(series)
+            frequencies = counts.rename_axis("Category").reset_index(name="Frequency")
+            frequencies["Percentage (%)"] = (
+                frequencies["Frequency"] / denominator * 100
+            ).round(2) if denominator else 0.0
+            st.dataframe(frequencies, hide_index=True, use_container_width=True)
+            st.caption(
+                f"Percentage denominator: {denominator:,} records"
+                + (" (including missing values)." if include_missing else " (non-missing records only).")
+            )
+            st.download_button(
+                "Download frequency table",
+                data=frequencies.to_csv(index=False).encode("utf-8-sig"),
+                file_name="timan_frequency_table.csv",
+                mime="text/csv",
+                key="download_frequency_table",
+            )
+        else:
+            st.info("No non-numeric columns were detected for categorical frequency tables.")
+
+# VISUALISATIONS
+elif page == "Visualisations":
+    st.title("Visualisations")
+    st.caption(status_text(MODULES[page][0]))
+    df = get_dataset()
+    if df is not None:
+        numeric_cols = list(df.select_dtypes(include="number").columns)
+        all_cols = list(df.columns)
+        chart_type = st.selectbox(
+            "Chart type",
+            ["Bar chart", "Histogram", "Line chart", "Scatter plot"],
+        )
+
+        if chart_type == "Bar chart":
+            if not all_cols:
+                st.info("No columns are available to chart.")
+            else:
+                col = st.selectbox("Category or value column", all_cols, key="bar_col")
+                top_n = st.slider("Number of categories to show", min_value=3, max_value=30, value=10)
+                counts = df[col].astype("object").where(df[col].notna(), "(Missing)").value_counts().head(top_n)
+                st.bar_chart(counts)
+                st.caption(f"Showing up to {top_n} most frequent values for {col}.")
+        elif chart_type == "Histogram":
+            if not numeric_cols:
+                st.info("A histogram requires at least one numeric column.")
+            else:
+                col = st.selectbox("Numeric variable", numeric_cols, key="hist_col")
+                bins = st.slider("Number of bins", min_value=5, max_value=50, value=20)
+                values = pd.to_numeric(df[col], errors="coerce").dropna()
+                if values.empty:
+                    st.warning("This column has no usable numeric values.")
+                else:
+                    hist, edges = __import__("numpy").histogram(values, bins=bins)
+                    chart_df = pd.DataFrame({
+                        "Bin range": [
+                            f"{edges[i]:.3g}–{edges[i + 1]:.3g}" for i in range(len(hist))
+                        ],
+                        "Frequency": hist,
+                    }).set_index("Bin range")
+                    st.bar_chart(chart_df)
+        elif chart_type == "Line chart":
+            if not numeric_cols:
+                st.info("A line chart requires at least one numeric column.")
+            else:
+                col = st.selectbox("Numeric variable", numeric_cols, key="line_col")
+                st.line_chart(pd.to_numeric(df[col], errors="coerce").reset_index(drop=True))
+                st.caption("Points follow the dataset's current row order; no time variable is inferred.")
+        elif chart_type == "Scatter plot":
+            if len(numeric_cols) < 2:
+                st.info("A scatter plot requires at least two numeric columns.")
+            else:
+                x_col = st.selectbox("X-axis variable", numeric_cols, key="scatter_x")
+                y_options = [col for col in numeric_cols if col != x_col]
+                y_col = st.selectbox("Y-axis variable", y_options, key="scatter_y")
+                plot_df = df[[x_col, y_col]].apply(pd.to_numeric, errors="coerce").dropna()
+                if plot_df.empty:
+                    st.warning("The selected variables have no paired numeric observations.")
+                else:
+                    st.scatter_chart(plot_df, x=x_col, y=y_col)
+
+# REPORTS & EXPORTS
+elif page == "Reports & Exports":
+    st.title("Reports & Exports")
+    st.caption(status_text(MODULES[page][0]))
+    df = get_dataset()
+    if df is not None:
+        st.write("Download the currently loaded data or available descriptive outputs.")
+        st.download_button(
+            "Download current dataset as CSV",
+            data=df.to_csv(index=False).encode("utf-8-sig"),
+            file_name="timan_dataset_export.csv",
+            mime="text/csv",
+            key="download_dataset_reports",
+        )
+        summary = numeric_summary(df)
+        st.download_button(
+            "Download numeric descriptive statistics",
+            data=summary.to_csv(index=False).encode("utf-8-sig"),
+            file_name="timan_descriptive_statistics.csv",
+            mime="text/csv",
+            key="download_summary_reports",
+        )
+        quality = pd.DataFrame({
+            "Variable": df.columns.astype(str),
+            "Data type": [str(dtype) for dtype in df.dtypes],
+            "Missing values": [int(value) for value in df.isna().sum().values],
+            "Unique values": [int(df[col].nunique(dropna=True)) for col in df.columns],
+        })
+        st.download_button(
+            "Download data-quality profile",
+            data=quality.to_csv(index=False).encode("utf-8-sig"),
+            file_name="timan_data_quality.csv",
+            mime="text/csv",
+            key="download_quality_reports",
+        )
+        st.info("Automated narrative report generation is under development.")
+    else:
+        st.info("Upload a dataset in Data Management to enable these exports.")
+
+# ABOUT
+elif page == "About":
+    st.title("About Timan Intelligence")
+    st.caption(status_text(MODULES[page][0]))
+    st.write("Timan Intelligence is an AI-powered statistical analytics platform being developed under Timan Analytics.")
+    st.write("Slogan: **Turning Data into Insights for Informed Decisions.**")
+    st.write("This prototype currently supports CSV/Excel import, basic data-quality checks, descriptive statistics, basic charts and CSV exports.")
+    st.warning("The presence of a module in navigation does not mean its analytical engine is implemented. Modules marked Under development are not operational.")
+
+# ALL OTHER MODULES
+else:
+    show_under_development(page, MODULES[page][1])
