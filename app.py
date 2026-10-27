@@ -94,7 +94,70 @@ def show_under_development(page, purpose):
 
 def clear_dataset():
     st.session_state.dataset = None
+    st.session_state.dataset_name = None
+    st.session_state.pop("dataset_uploader", None)
 
+
+if "dataset" not in st.session_state:
+    st.session_state.dataset = None
+if "dataset_name" not in st.session_state:
+    st.session_state.dataset_name = None
+
+# Company logo image is stored beside app.py in the GitHub repository.
+logo_path = Path(__file__).parent / "timan_analytics_logo.png"
+if logo_path.exists():
+    st.sidebar.image(str(logo_path), use_container_width=True)
+else:
+    st.sidebar.markdown(
+        """
+        <div style="text-align:center; padding:16px 6px; border:1px dashed #8aa1b8; border-radius:12px;">
+            <strong>Timan Analytics logo</strong><br/>
+            <small>Add timan_analytics_logo.png beside app.py</small>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+st.sidebar.markdown(
+    """
+    <div style="text-align:center; padding:4px 4px 8px;">
+        <div style="font-size:25px; font-weight:800; color:#174a7e; margin-top:4px;">
+            TimanStat
+        </div>
+        <div style="font-size:11px; font-weight:700; letter-spacing:.6px; color:#526579; margin-top:3px;">
+            STATISTICAL SUPPORT PLATFORM
+        </div>
+        <div style="font-size:12px; color:#526579; margin-top:7px;">
+            by Timan Analytics
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+st.sidebar.divider()
+if "navigation_page" not in st.session_state:
+    st.session_state.navigation_page = "Home"
+page = st.sidebar.radio(
+    "NAVIGATION",
+    list(MODULES.keys()),
+    key="navigation_page",
+)
+st.sidebar.divider()
+st.sidebar.caption("Statistical Expertise. Data-Driven Decisions.")
+
+if st.session_state.dataset is not None:
+    loaded = st.session_state.dataset
+    st.sidebar.success(f"Dataset: {st.session_state.dataset_name or 'Uploaded dataset'}")
+    st.sidebar.caption(f"{loaded.shape[0]:,} rows · {loaded.shape[1]:,} columns")
+    st.sidebar.button("Clear current dataset", on_click=clear_dataset)
+else:
+    st.sidebar.caption("No dataset loaded")
+
+# HOME
+if page == "Home":
+    st.markdown('<div class="brand">TIMANSTAT</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="subtitle">Turning Data into Insights for Informed Decisions.</div>',
         unsafe_allow_html=True,
     )
     st.write("")
@@ -185,6 +248,76 @@ elif page == "Data Management":
 # DATA QUALITY
 elif page == "Data Quality":
     st.title("Data Quality")
+    st.caption(status_text(MODULES[page][0]))
+    df = get_dataset()
+    if df is not None:
+        missing = df.isna().sum()
+        quality = pd.DataFrame({
+            "Variable": df.columns.astype(str),
+            "Data type": [str(dtype) for dtype in df.dtypes],
+            "Missing values": [int(missing[col]) for col in df.columns],
+            "Missing (%)": [
+                round(float(missing[col]) / len(df) * 100, 2) if len(df) else 0
+                for col in df.columns
+            ],
+            "Unique values": [int(df[col].nunique(dropna=True)) for col in df.columns],
+        })
+        a, b, c = st.columns(3)
+        a.metric("Rows", f"{len(df):,}")
+        b.metric("Duplicate rows", f"{int(df.duplicated().sum()):,}")
+        c.metric("Missing cells", f"{int(df.isna().sum().sum()):,}")
+        st.subheader("Variable-level quality profile")
+        st.dataframe(quality, hide_index=True, use_container_width=True)
+        st.caption("No rows are removed and no values are imputed or recoded by this report.")
+        st.download_button(
+            "Download data-quality profile",
+            data=quality.to_csv(index=False).encode("utf-8-sig"),
+            file_name="timan_data_quality.csv",
+            mime="text/csv",
+            key="download_quality",
+        )
+
+# DESCRIPTIVE STATISTICS
+elif page == "Descriptive Statistics":
+    st.title("Descriptive Statistics")
+    st.caption(status_text(MODULES[page][0]))
+    df = get_dataset()
+    if df is not None:
+        st.subheader("Numeric summary")
+        summary = numeric_summary(df)
+        if summary.empty:
+            st.info("No numeric columns were detected in this dataset.")
+        else:
+            st.dataframe(summary, hide_index=True, use_container_width=True)
+            st.download_button(
+                "Download numeric summary",
+                data=summary.to_csv(index=False).encode("utf-8-sig"),
+                file_name="timan_descriptive_statistics.csv",
+                mime="text/csv",
+                key="download_numeric_summary",
+            )
+
+        categorical_columns = [
+            col for col in df.columns
+            if not pd.api.types.is_numeric_dtype(df[col].dtype)
+        ]
+        if categorical_columns:
+            st.subheader("Categorical frequency table")
+            selected_col = st.selectbox(
+                "Select a categorical variable",
+                categorical_columns,
+                format_func=str,
+            )
+            include_missing = st.checkbox("Show missing values as a category", value=True)
+            series = df[selected_col].astype("object")
+            if include_missing:
+                series = series.where(series.notna(), "(Missing)")
+                counts = series.value_counts(dropna=False)
+                denominator = len(df)
+            else:
+                series = series.dropna()
+                counts = series.value_counts(dropna=True)
+                denominator = len(series)
             frequencies = counts.rename_axis("Category").reset_index(name="Frequency")
             frequencies["Percentage (%)"] = (
                 frequencies["Frequency"] / denominator * 100
@@ -313,3 +446,5 @@ elif page == "About":
     st.warning("The presence of a module in navigation does not mean its analytical engine is implemented. Modules marked Under development are not operational.")
 
 # ALL OTHER MODULES
+else:
+    show_under_development(page, MODULES[page][1])
