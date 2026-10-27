@@ -3,7 +3,7 @@ import io
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="Timan Intelligence", page_icon="📊", layout="wide")
+st.set_page_config(page_title="TimanStat", page_icon="📊", layout="wide")
 
 st.markdown(
     """
@@ -36,7 +36,7 @@ MODULES = {
     "AI Analyst": ("Under development", "Natural-language analysis is not connected yet."),
     "Reports & Exports": ("Available — data exports", "Download the current dataset and descriptive statistics."),
     "Settings & Governance": ("Under development", "Authentication, tenant isolation and audit controls are not implemented."),
-    "About": ("Available", "Learn about Timan Intelligence and its current limitations."),
+    "About": ("Available", "Learn about TimanStat and its current limitations."),
 }
 
 
@@ -102,8 +102,30 @@ if "dataset" not in st.session_state:
 if "dataset_name" not in st.session_state:
     st.session_state.dataset_name = None
 
-st.sidebar.markdown("## 🔷 TIMAN")
-st.sidebar.caption("INTELLIGENCE")
+st.sidebar.markdown(
+    """
+    <div style="text-align:center; padding:12px 6px 8px;">
+        <div style="
+            width:76px; height:76px; margin:0 auto 10px;
+            border:2px dashed #8aa1b8; border-radius:14px;
+            display:flex; align-items:center; justify-content:center;
+            color:#526579; font-size:11px; font-weight:700;
+            background:rgba(255,255,255,0.65);">
+            LOGO<br/>PLACEHOLDER
+        </div>
+        <div style="font-size:17px; font-weight:800; letter-spacing:1px; color:#174a7e;">
+            TIMAN ANALYTICS
+        </div>
+        <div style="font-size:25px; font-weight:800; color:#174a7e; margin-top:8px;">
+            TimanStat
+        </div>
+        <div style="font-size:11px; font-weight:700; letter-spacing:.6px; color:#526579; margin-top:3px;">
+            STATISTICAL SUPPORT PLATFORM
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 st.sidebar.divider()
 if "navigation_page" not in st.session_state:
     st.session_state.navigation_page = "Home"
@@ -113,7 +135,7 @@ page = st.sidebar.radio(
     key="navigation_page",
 )
 st.sidebar.divider()
-st.sidebar.caption("Turning Data into Insights for Informed Decisions.")
+st.sidebar.caption("Statistical Expertise. Data-Driven Decisions.")
 
 if st.session_state.dataset is not None:
     loaded = st.session_state.dataset
@@ -125,7 +147,7 @@ else:
 
 # HOME
 if page == "Home":
-    st.markdown('<div class="brand">TIMAN INTELLIGENCE</div>', unsafe_allow_html=True)
+    st.markdown('<div class="brand">TIMANSTAT</div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="subtitle">Turning Data into Insights for Informed Decisions.</div>',
         unsafe_allow_html=True,
@@ -408,9 +430,9 @@ elif page == "Reports & Exports":
 
 # ABOUT
 elif page == "About":
-    st.title("About Timan Intelligence")
+    st.title("About TimanStat")
     st.caption(status_text(MODULES[page][0]))
-    st.write("Timan Intelligence is an AI-powered statistical analytics platform being developed under Timan Analytics.")
+    st.write("TimanStat is a Statistical Support Platform being developed under Timan Analytics.")
     st.write("Slogan: **Turning Data into Insights for Informed Decisions.**")
     st.write("This prototype currently supports CSV/Excel import, basic data-quality checks, descriptive statistics, basic charts and CSV exports.")
     st.warning("The presence of a module in navigation does not mean its analytical engine is implemented. Modules marked Under development are not operational.")
