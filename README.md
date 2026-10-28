@@ -1,2 +1,2 @@
-# timan-intelligence
-AI-powered statistical analytics platform by Timan Analytics
+# timanStat
+AI-powered statistical support platform by Timan Analytics
