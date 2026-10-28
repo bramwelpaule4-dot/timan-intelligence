@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "timan-intelligence"
 version = "0.1.0"
-description = "A modular statistical analytics platform for research, NGOs, and businesses."
+description = "A modular statistical support platform for research, NGOs, and businesses."
 readme = "ARCHITECTURE.md"
 requires-python = ">=3.10"
 dependencies = [
