@@ -1,4 +1,4 @@
-```python
+python
 """Transparent classification of research objectives."""
 
 from dataclasses import dataclass
