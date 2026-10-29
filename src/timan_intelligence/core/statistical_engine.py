@@ -33,17 +33,17 @@ def run_descriptive_statistics(
         )
 
     series = df[variable]
+    non_missing = series.dropna()
+
+    # Check for an entirely missing column before checking its data type.
+    if non_missing.empty:
+        raise ValueError(
+            f"Variable '{variable}' contains no usable numeric observations."
+        )
 
     if not pd.api.types.is_numeric_dtype(series):
         raise TypeError(
             f"Variable '{variable}' must be numeric."
-        )
-
-    non_missing = series.dropna()
-
-    if non_missing.empty:
-        raise ValueError(
-            f"Variable '{variable}' contains no usable numeric observations."
         )
 
     values = non_missing.astype(float)
