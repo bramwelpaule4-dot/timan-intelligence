@@ -84,3 +84,71 @@ def test_descriptive_statistics_does_not_modify_original_data():
     run_descriptive_statistics(df, "income")
 
     pd.testing.assert_frame_equal(df, original)
+
+
+def test_descriptive_statistics_handles_empty_dataframe():
+    df = pd.DataFrame({"score": pd.Series(dtype="float64")})
+
+    with pytest.raises(ValueError, match="no usable numeric observations"):
+        run_descriptive_statistics(df, "score")
+
+
+def test_descriptive_statistics_handles_constant_values():
+    df = pd.DataFrame({"score": [5, 5, 5, 5]})
+
+    result = run_descriptive_statistics(df, "score")
+    summary = result.tables["summary"]
+
+    assert summary["observations"] == 4
+    assert summary["mean"] == pytest.approx(5.0)
+    assert summary["median"] == pytest.approx(5.0)
+    assert summary["standard_deviation"] == pytest.approx(0.0)
+    assert summary["minimum"] == pytest.approx(5.0)
+    assert summary["maximum"] == pytest.approx(5.0)
+
+
+def test_descriptive_statistics_handles_infinite_values():
+    df = pd.DataFrame(
+        {"score": [10.0, float("inf"), 20.0, float("-inf"), None]}
+    )
+
+    result = run_descriptive_statistics(df, "score")
+    summary = result.tables["summary"]
+
+    assert summary["observations"] == 2
+    assert summary["mean"] == pytest.approx(15.0)
+    assert summary["minimum"] == pytest.approx(10.0)
+    assert summary["maximum"] == pytest.approx(20.0)
+
+    # This assertion assumes the engine reports infinite values separately.
+    assert summary["infinite_values"] == 2
+    assert summary["missing_values"] == 1
+
+
+def test_descriptive_statistics_rejects_all_non_finite_values():
+    df = pd.DataFrame(
+        {"score": [float("inf"), float("-inf"), None]}
+    )
+
+    with pytest.raises(ValueError, match="no usable numeric observations"):
+        run_descriptive_statistics(df, "score")
+
+
+def test_descriptive_statistics_handles_zero_as_valid_data():
+    df = pd.DataFrame({"score": [0, 0, 10]})
+
+    result = run_descriptive_statistics(df, "score")
+    summary = result.tables["summary"]
+
+    assert summary["observations"] == 3
+    assert summary["mean"] == pytest.approx(10 / 3)
+    assert summary["minimum"] == pytest.approx(0.0)
+
+
+def test_descriptive_statistics_does_not_modify_data_with_infinities():
+    df = pd.DataFrame({"score": [10.0, float("inf"), 20.0]})
+    original = df.copy(deep=True)
+
+    run_descriptive_statistics(df, "score")
+
+    pd.testing.assert_frame_equal(df, original)
