@@ -47,8 +47,8 @@ def select_methods(
 ) -> list[MethodCandidate]:
     """Return candidate methods from the supplied objective and data types.
 
-    This function preserves the original recommendation interface.
-    It does not infer study design or execute statistical tests.
+    Recommendations are preliminary. Study design, data quality, assumptions,
+    sample size and method-specific requirements must still be reviewed.
     """
     candidates = []
 
@@ -57,13 +57,16 @@ def select_methods(
             candidates.append(
                 MethodCandidate(
                     method="Frequencies and proportions",
-                    rationale="Describe the distribution of a categorical outcome.",
+                    rationale=(
+                        "Describe the distribution of a categorical outcome."
+                    ),
                     checks=[
                         "Review missing and invalid category values.",
                         "Confirm whether survey weights are required.",
                     ],
                 )
             )
+
         elif outcome_type == "numeric":
             candidates.append(
                 MethodCandidate(
@@ -109,6 +112,43 @@ def select_methods(
                             "Interpret the result according to the outcome "
                             "distributions; it is not automatically a test "
                             "of medians.",
+                        ],
+                    ),
+                ]
+            )
+
+        elif (
+            outcome_type == "numeric"
+            and group_count is not None
+            and group_count >= 3
+            and independent_groups is True
+        ):
+            candidates.extend(
+                [
+                    MethodCandidate(
+                        method="One-way ANOVA",
+                        rationale=(
+                            "Compare mean values across three or more "
+                            "independent groups when the method's assumptions "
+                            "are reasonably satisfied."
+                        ),
+                        checks=[
+                            "Check independence of observations.",
+                            "Assess residual distribution and variance assumptions.",
+                            "Review outliers and consider appropriate post-hoc comparisons.",
+                        ],
+                    ),
+                    MethodCandidate(
+                        method="Kruskal–Wallis test",
+                        rationale=(
+                            "Compare three or more independent groups using "
+                            "a rank-based approach when appropriate."
+                        ),
+                        checks=[
+                            "Check independence of observations.",
+                            "Review group distributions and sample sizes.",
+                            "If results are significant, consider appropriate "
+                            "post-hoc comparisons with multiplicity control.",
                         ],
                     ),
                 ]
@@ -219,6 +259,7 @@ def select_methods(
                     ],
                 )
             )
+
         elif outcome_type == "numeric":
             candidates.append(
                 MethodCandidate(
@@ -247,11 +288,14 @@ def assess_preferred_method(
 ) -> MethodAssessment:
     """Assess a preferred method before suggesting alternatives.
 
-    This initial rule-based assessment identifies basic incompatibilities
-    and missing design information. It does not inspect a dataset or verify
-    statistical assumptions.
+    This rule-based assessment identifies basic incompatibilities and missing
+    design information. It does not inspect a dataset or verify assumptions.
     """
-    method = preferred_method.strip() if isinstance(preferred_method, str) else ""
+    method = (
+        preferred_method.strip()
+        if isinstance(preferred_method, str)
+        else ""
+    )
 
     if not method:
         return MethodAssessment(
@@ -324,11 +368,16 @@ def assess_preferred_method(
                 "the supplied objective or outcome type."
             )
         else:
-            reason = "The objective and numeric outcome are compatible with descriptive statistics."
+            reason = (
+                "The objective and numeric outcome are compatible with "
+                "descriptive statistics."
+            )
 
     elif method == "Frequencies and proportions":
         if objective_type != "description" or outcome_type not in {
-            "categorical", "binary", "ordinal"
+            "categorical",
+            "binary",
+            "ordinal",
         }:
             eligibility = INELIGIBLE
             reason = (
@@ -336,19 +385,26 @@ def assess_preferred_method(
                 "for this descriptive workflow."
             )
         else:
-            reason = "The objective and categorical outcome are compatible with frequencies and proportions."
+            reason = (
+                "The objective and categorical outcome are compatible with "
+                "frequencies and proportions."
+            )
 
     elif method in {"Independent-samples t-test", "Mann–Whitney U test"}:
         if objective_type != "comparison" or outcome_type != "numeric":
             eligibility = INELIGIBLE
-            reason = "This method requires a comparison objective with a numeric outcome."
+            reason = (
+                "This method requires a comparison objective with a numeric outcome."
+            )
         elif group_count is None or independent_groups is None:
             eligibility = INSUFFICIENT_INFORMATION
             reason = "The number of groups or their independence is unknown."
-            questions.extend([
-                "How many groups are being compared?",
-                "Are the groups independent, or are the same participants measured more than once?",
-            ])
+            questions.extend(
+                [
+                    "How many groups are being compared?",
+                    "Are the groups independent, or are the same participants measured more than once?",
+                ]
+            )
         elif group_count != 2 or independent_groups is not True:
             eligibility = INELIGIBLE
             reason = (
@@ -356,12 +412,17 @@ def assess_preferred_method(
                 "design does not meet that requirement."
             )
         else:
-            reason = "The supplied objective, numeric outcome and independent two-group design are compatible; assumptions still require review."
+            reason = (
+                "The supplied objective, numeric outcome and independent "
+                "two-group design are compatible; assumptions still require review."
+            )
 
     elif method in {"Paired-samples t-test", "Wilcoxon signed-rank test"}:
         if objective_type != "comparison" or outcome_type != "numeric":
             eligibility = INELIGIBLE
-            reason = "This method requires a comparison objective with a numeric outcome."
+            reason = (
+                "This method requires a comparison objective with a numeric outcome."
+            )
         elif independent_groups is True:
             eligibility = INELIGIBLE
             reason = "A paired method is not appropriate for independent groups."
@@ -372,55 +433,88 @@ def assess_preferred_method(
                 "Are these paired measurements, such as the same participants measured before and after an intervention?"
             )
         else:
-            reason = "The supplied design indicates paired observations; method-specific assumptions still require review."
+            reason = (
+                "The supplied design indicates paired observations; "
+                "method-specific assumptions still require review."
+            )
 
     elif method in {"One-way ANOVA", "Kruskal–Wallis test"}:
         if objective_type != "comparison" or outcome_type != "numeric":
             eligibility = INELIGIBLE
-            reason = "This method requires a comparison objective with a numeric outcome."
-        elif group_count is None:
+            reason = (
+                "This method requires a comparison objective with a numeric outcome."
+            )
+        elif group_count is None or independent_groups is None:
             eligibility = INSUFFICIENT_INFORMATION
-            reason = "The number of groups has not been supplied."
-            questions.append("How many independent groups are being compared?")
+            reason = (
+                "The number of groups or their independence has not been supplied."
+            )
+            questions.append(
+                "How many groups are being compared, and are the groups independent?"
+            )
         elif group_count < 3 or independent_groups is not True:
             eligibility = INELIGIBLE
-            reason = "This initial implementation requires at least three independent groups for these methods."
+            reason = (
+                "This initial implementation requires at least three "
+                "independent groups for these methods."
+            )
         else:
-            reason = "The supplied design is compatible with a multi-group comparison; assumptions and follow-up comparisons require review."
+            reason = (
+                "The supplied design is compatible with a multi-group comparison; "
+                "assumptions and follow-up comparisons require review."
+            )
 
     elif method in {
-        "Chi-square test of independence", "Fisher's exact test"
+        "Chi-square test of independence",
+        "Fisher's exact test",
     }:
-        if objective_type not in {"comparison", "association"} or outcome_type not in {
-            "categorical", "binary"
-        }:
+        if (
+            objective_type not in {"comparison", "association"}
+            or outcome_type not in {"categorical", "binary"}
+        ):
             eligibility = INELIGIBLE
-            reason = "This method requires a categorical association or comparison objective."
+            reason = (
+                "This method requires a categorical association or comparison objective."
+            )
         else:
             reason = (
                 "The objective and categorical outcome may be compatible. "
                 "The contingency-table structure and expected counts must be assessed."
             )
-            checks.extend([
-                "Inspect the observed and expected contingency-table counts.",
-                "Confirm table dimensions; the standard Fisher's exact test is for a 2 × 2 table.",
-            ])
+            checks.extend(
+                [
+                    "Inspect the observed and expected contingency-table counts.",
+                    "Confirm table dimensions; the standard Fisher's exact test is for a 2 × 2 table.",
+                ]
+            )
             questions.append(
                 "What are the two categorical variables, and how many categories does each have?"
             )
 
     elif method in {"Pearson correlation", "Spearman rank correlation"}:
-        if objective_type != "association" or outcome_type != "numeric" or predictor_type != "numeric":
+        if (
+            objective_type != "association"
+            or outcome_type != "numeric"
+            or predictor_type != "numeric"
+        ):
             eligibility = INELIGIBLE
-            reason = "This correlation workflow requires an association objective and two numeric variables."
+            reason = (
+                "This correlation workflow requires an association objective "
+                "and two numeric variables."
+            )
         else:
-            reason = "The two numeric variables are compatible with correlation analysis; inspect the relationship before choosing the correlation coefficient."
+            reason = (
+                "The two numeric variables are compatible with correlation "
+                "analysis; inspect the relationship before choosing the correlation coefficient."
+            )
 
     elif method in {"Logistic regression", "Linear regression"}:
         expected_type = "binary" if method == "Logistic regression" else "numeric"
         if objective_type != "prediction" or outcome_type != expected_type:
             eligibility = INELIGIBLE
-            reason = f"{method} does not match the supplied objective and outcome type."
+            reason = (
+                f"{method} does not match the supplied objective and outcome type."
+            )
         else:
             reason = (
                 "The objective and outcome type are compatible with this regression model. "
