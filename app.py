@@ -1,4 +1,3 @@
-
 import hashlib
 import io
 from pathlib import Path
@@ -240,29 +239,85 @@ def numeric_summary(df):
 
 
 def variable_quality_profile(df):
-    """Create a variable-level data-quality summary."""
-    missing = df.isna().sum()
+    """Create a detailed variable-level data-quality summary."""
     row_count = len(df)
+    records = []
 
-    return pd.DataFrame(
-        {
-            "Variable": df.columns.astype(str),
-            "Data type": [str(dtype) for dtype in df.dtypes],
-            "Missing values": [
-                int(missing[col]) for col in df.columns
-            ],
-            "Missing (%)": [
-                round(float(missing[col]) / row_count * 100, 2)
-                if row_count
-                else 0.0
-                for col in df.columns
-            ],
-            "Unique values": [
-                int(df[col].nunique(dropna=True))
-                for col in df.columns
-            ],
-        }
-    )
+    for col in df.columns:
+        series = df[col]
+        missing_count = int(series.isna().sum())
+        blank_count = 0
+
+        if (
+            pd.api.types.is_object_dtype(series.dtype)
+            or pd.api.types.is_string_dtype(series.dtype)
+        ):
+            text_values = series.dropna().astype(str)
+            blank_count = int(text_values.str.strip().eq("").sum())
+
+        total_missing_like = missing_count + blank_count
+        non_missing = row_count - missing_count
+        unique_count = int(series.nunique(dropna=True))
+
+        records.append(
+            {
+                "Variable": str(col),
+                "Data type": str(series.dtype),
+                "Records": row_count,
+                "Missing values": missing_count,
+                "Missing (%)": round(missing_count / row_count * 100, 2)
+                if row_count else 0.0,
+                "Blank strings": blank_count,
+                "Missing/blank (%)": round(
+                    total_missing_like / row_count * 100, 2
+                ) if row_count else 0.0,
+                "Non-missing values": non_missing,
+                "Unique values": unique_count,
+                "Unique (%)": round(
+                    unique_count / non_missing * 100, 2
+                ) if non_missing else 0.0,
+                "Constant column": "Yes"
+                if unique_count <= 1 and row_count > 0 else "No",
+            }
+        )
+
+    return pd.DataFrame(records)
+
+
+def numeric_outlier_profile(df):
+    """Flag potential IQR outliers without changing source values."""
+    numeric = df.select_dtypes(include="number")
+    records = []
+
+    for col in numeric.columns:
+        values = numeric[col].dropna()
+        if values.empty:
+            continue
+
+        q1 = values.quantile(0.25)
+        q3 = values.quantile(0.75)
+        iqr = q3 - q1
+        lower = q1 - 1.5 * iqr
+        upper = q3 + 1.5 * iqr
+        outliers = values[(values < lower) | (values > upper)]
+
+        records.append(
+            {
+                "Variable": str(col),
+                "Valid values": int(values.count()),
+                "Q1": q1,
+                "Q3": q3,
+                "IQR": iqr,
+                "Lower fence": lower,
+                "Upper fence": upper,
+                "Potential outliers": int(outliers.count()),
+                "Potential outliers (%)": round(
+                    outliers.count() / values.count() * 100, 2
+                ) if values.count() else 0.0,
+            }
+        )
+
+    return pd.DataFrame(records)
 
 
 def get_dataset():
@@ -666,44 +721,201 @@ elif page == "Data Management":
 elif page == "Data Quality":
     st.title("Data Quality")
     st.caption(status_text(MODULES[page][0]))
+    st.write(
+        "Assess completeness, uniqueness, consistency and potential "
+        "numeric anomalies before using the dataset for reporting or "
+        "statistical analysis. Checks flag issues for review; they do "
+        "not automatically change or delete source data."
+    )
 
     df = get_dataset()
 
     if df is not None:
-        quality = variable_quality_profile(df)
+        row_count, column_count = df.shape
+        missing_cells = int(df.isna().sum().sum())
+        total_cells = row_count * column_count
+        duplicate_rows = int(df.duplicated().sum())
+        blank_cells = 0
 
-        a, b, c = st.columns(3)
+        for col in df.columns:
+            if (
+                pd.api.types.is_object_dtype(df[col].dtype)
+                or pd.api.types.is_string_dtype(df[col].dtype)
+            ):
+                blank_cells += int(
+                    df[col].dropna().astype(str).str.strip().eq("").sum()
+                )
 
-        a.metric("Rows", f"{len(df):,}")
-        b.metric(
-            "Duplicate rows",
-            f"{int(df.duplicated().sum()):,}",
+        all_empty_columns = [
+            str(col) for col in df.columns
+            if df[col].isna().all()
+        ]
+        constant_columns = [
+            str(col) for col in df.columns
+            if df[col].nunique(dropna=True) <= 1
+        ]
+        completeness = (
+            (total_cells - missing_cells - blank_cells) / total_cells * 100
+            if total_cells else 0.0
         )
-        c.metric(
-            "Missing cells",
-            f"{int(df.isna().sum().sum()):,}",
-        )
 
-        st.subheader("Variable-level quality profile")
+        st.subheader("Dataset-level quality overview")
+        a, b, c, d = st.columns(4)
+        a.metric("Records", f"{row_count:,}")
+        b.metric("Variables", f"{column_count:,}")
+        c.metric("Exact duplicate rows", f"{duplicate_rows:,}")
+        d.metric("Overall completeness", f"{completeness:.1f}%")
 
-        st.dataframe(
-            quality,
-            hide_index=True,
-            use_container_width=True,
+        e, f, g = st.columns(3)
+        e.metric("Missing cells", f"{missing_cells:,}")
+        f.metric("Blank text cells", f"{blank_cells:,}")
+        g.metric(
+            "Potentially constant variables",
+            f"{len(constant_columns):,}",
         )
 
         st.caption(
-            "No rows are removed, and no values are imputed or "
-            "recoded by this report. Duplicate rows are flagged, "
-            "not automatically deleted."
+            "Overall completeness treats empty text strings as incomplete "
+            "in addition to explicitly missing values. Duplicate records "
+            "are exact row matches; they may or may not be errors depending "
+            "on the dataset's unit of analysis."
         )
 
+        st.subheader("Variable-level quality profile")
+        quality = variable_quality_profile(df)
+        st.dataframe(quality, hide_index=True, use_container_width=True)
         st.download_button(
-            "Download data-quality profile",
+            "Download variable quality profile",
             data=quality.to_csv(index=False).encode("utf-8-sig"),
-            file_name="timan_data_quality.csv",
+            file_name="timan_data_quality_profile.csv",
             mime="text/csv",
-            key="download_quality",
+            key="download_quality_profile",
+        )
+
+        st.subheader("Missingness by variable")
+        missing_by_variable = pd.DataFrame({
+            "Variable": [str(col) for col in df.columns],
+            "Missing values": [int(df[col].isna().sum()) for col in df.columns],
+            "Missing (%)": [
+                round(float(df[col].isna().mean() * 100), 2)
+                if row_count else 0.0
+                for col in df.columns
+            ],
+        })
+        missing_by_variable = missing_by_variable.sort_values(
+            "Missing (%)", ascending=False
+        )
+        if missing_by_variable["Missing values"].sum() == 0:
+            st.success("No explicitly missing values were detected.")
+        else:
+            st.bar_chart(
+                missing_by_variable.set_index("Variable")[["Missing (%)"]]
+            )
+            st.dataframe(
+                missing_by_variable,
+                hide_index=True,
+                use_container_width=True,
+            )
+        st.download_button(
+            "Download missingness report",
+            data=missing_by_variable.to_csv(index=False).encode("utf-8-sig"),
+            file_name="timan_missingness_report.csv",
+            mime="text/csv",
+            key="download_missingness_report",
+        )
+
+        st.subheader("Duplicate record review")
+        st.write(
+            "Exact duplicates are rows where every column matches another "
+            "row. Review them against the data collection process before "
+            "deciding whether they should be removed."
+        )
+        if duplicate_rows:
+            show_duplicates = st.checkbox(
+                "Show exact duplicate rows",
+                value=False,
+                key="show_duplicate_rows",
+            )
+            if show_duplicates:
+                duplicate_mask = df.duplicated(keep=False)
+                st.dataframe(
+                    df.loc[duplicate_mask],
+                    use_container_width=True,
+                )
+                st.download_button(
+                    "Download rows involved in exact duplicates",
+                    data=df.loc[duplicate_mask].to_csv(index=False).encode("utf-8-sig"),
+                    file_name="timan_duplicate_rows_review.csv",
+                    mime="text/csv",
+                    key="download_duplicate_rows",
+                )
+        else:
+            st.success("No exact duplicate rows were detected.")
+
+        st.subheader("Potential numeric outliers")
+        st.write(
+            "The 1.5 × IQR rule flags values outside the lower and upper "
+            "fences. These are review flags, not proof that a value is wrong."
+        )
+        outlier_profile = numeric_outlier_profile(df)
+        if outlier_profile.empty:
+            st.info("No numeric columns are available for IQR outlier checks.")
+        else:
+            st.dataframe(
+                outlier_profile,
+                hide_index=True,
+                use_container_width=True,
+            )
+            st.download_button(
+                "Download potential outlier summary",
+                data=outlier_profile.to_csv(index=False).encode("utf-8-sig"),
+                file_name="timan_potential_outliers.csv",
+                mime="text/csv",
+                key="download_outlier_profile",
+            )
+
+        st.subheader("Quality review notes")
+        notes = []
+        if missing_cells:
+            notes.append(
+                f"Review missing values in {int((df.isna().sum() > 0).sum())} "
+                "variable(s); determine whether missingness has a known reason."
+            )
+        if blank_cells:
+            notes.append(
+                f"Found {blank_cells:,} blank or whitespace-only text cell(s). "
+                "These may need to be standardised as missing values."
+            )
+        if duplicate_rows:
+            notes.append(
+                f"Review {duplicate_rows:,} exact duplicate row(s) against "
+                "the intended unit of analysis."
+            )
+        if all_empty_columns:
+            notes.append(
+                "Entirely empty variables: " + ", ".join(all_empty_columns) + "."
+            )
+        if constant_columns:
+            notes.append(
+                "Variables with one or zero observed unique values: "
+                + ", ".join(constant_columns)
+                + ". Confirm whether they are useful for analysis."
+            )
+        if notes:
+            for note in notes:
+                st.warning(note)
+        else:
+            st.success(
+                "These initial checks did not identify missing cells, blank "
+                "text cells, exact duplicate rows or constant variables. "
+                "This is not a guarantee that the dataset is error-free."
+            )
+
+        st.info(
+            "Scope limitation: these checks do not verify values against an "
+            "external source, questionnaire skip logic, valid ranges, unique "
+            "respondent IDs, or programme-specific indicator rules. Those "
+            "checks require context and validation rules for the dataset."
         )
 
 
@@ -714,108 +926,290 @@ elif page == "Data Quality":
 elif page == "Descriptive Statistics":
     st.title("Descriptive Statistics")
     st.caption(status_text(MODULES[page][0]))
+    st.write(
+        "Explore distributions, central tendency, variability and category "
+        "frequencies. Results describe the loaded data; they do not establish "
+        "causation or automatically account for survey weights or complex "
+        "sample designs."
+    )
 
     df = get_dataset()
 
     if df is not None:
-        st.subheader("Numeric summary")
+        numeric_cols = list(df.select_dtypes(include="number").columns)
+        categorical_cols = [
+            col for col in df.columns
+            if not pd.api.types.is_numeric_dtype(df[col].dtype)
+        ]
 
-        summary = numeric_summary(df)
+        st.subheader("Dataset profile")
+        a, b, c, d = st.columns(4)
+        a.metric("Records", f"{len(df):,}")
+        b.metric("Variables", f"{df.shape[1]:,}")
+        c.metric("Numeric variables", f"{len(numeric_cols):,}")
+        d.metric("Other variables", f"{len(categorical_cols):,}")
 
-        if summary.empty:
+        st.caption(
+            "Variable types follow the types assigned during import. A number "
+            "stored as text will not be included in numeric summaries until "
+            "it is appropriately converted in a future data-preparation step."
+        )
+
+        st.subheader("Numeric descriptive statistics")
+        if not numeric_cols:
             st.info(
-                "No numeric columns were detected. Check whether "
-                "numeric values were imported as text."
+                "No numeric columns were detected. Check whether numeric "
+                "values were imported as text."
             )
-
         else:
-            st.dataframe(
-                summary,
-                hide_index=True,
-                use_container_width=True,
-            )
+            numeric_records = []
+            for col in numeric_cols:
+                series = pd.to_numeric(df[col], errors="coerce")
+                valid = series.dropna()
+                count = int(valid.count())
+                mean = valid.mean() if count else float("nan")
+                median = valid.median() if count else float("nan")
+                std = valid.std() if count > 1 else float("nan")
+                q1 = valid.quantile(0.25) if count else float("nan")
+                q3 = valid.quantile(0.75) if count else float("nan")
+                minimum = valid.min() if count else float("nan")
+                maximum = valid.max() if count else float("nan")
+                numeric_records.append({
+                    "Variable": str(col),
+                    "Valid n": count,
+                    "Missing n": int(series.isna().sum()),
+                    "Missing (%)": round(float(series.isna().mean() * 100), 2),
+                    "Mean": mean,
+                    "Median": median,
+                    "Standard deviation": std,
+                    "Variance": valid.var() if count > 1 else float("nan"),
+                    "Minimum": minimum,
+                    "Q1 (25%)": q1,
+                    "Q3 (75%)": q3,
+                    "Maximum": maximum,
+                    "Range": maximum - minimum if count else float("nan"),
+                    "IQR": q3 - q1 if count else float("nan"),
+                    "Skewness": valid.skew() if count > 2 else float("nan"),
+                    "Excess kurtosis": valid.kurt() if count > 3 else float("nan"),
+                    "Coefficient of variation (%)": (
+                        std / abs(mean) * 100
+                        if count > 1 and pd.notna(mean) and mean != 0
+                        else float("nan")
+                    ),
+                })
 
+            summary = pd.DataFrame(numeric_records)
+            st.dataframe(summary, hide_index=True, use_container_width=True)
             st.download_button(
-                "Download numeric summary",
+                "Download full numeric summary",
                 data=summary.to_csv(index=False).encode("utf-8-sig"),
                 file_name="timan_descriptive_statistics.csv",
                 mime="text/csv",
                 key="download_numeric_summary",
             )
 
-        categorical_columns = [
-            col
-            for col in df.columns
-            if not pd.api.types.is_numeric_dtype(df[col].dtype)
-        ]
+            st.caption(
+                "Interpretation guide: the mean is sensitive to extreme values; "
+                "the median is more resistant. Standard deviation describes "
+                "spread around the mean; IQR describes the middle 50% of values. "
+                "Skewness and excess kurtosis are exploratory distribution "
+                "indicators and should be interpreted with sample size and plots."
+            )
 
-        if categorical_columns:
-            st.subheader("Categorical frequency table")
+            st.subheader("Explore one numeric variable")
+            selected_numeric = st.selectbox(
+                "Choose a numeric variable",
+                numeric_cols,
+                key="descriptive_numeric_variable",
+            )
+            values = pd.to_numeric(
+                df[selected_numeric], errors="coerce"
+            ).dropna()
+            if values.empty:
+                st.info("This variable has no valid numeric observations.")
+            else:
+                left, right = st.columns(2)
+                with left:
+                    st.markdown("**Distribution summary**")
+                    st.write({
+                        "Valid observations": int(values.count()),
+                        "Mean": round(float(values.mean()), 4),
+                        "Median": round(float(values.median()), 4),
+                        "Mode(s)": [
+                            str(value) for value in values.mode().head(5).tolist()
+                        ],
+                        "Minimum": float(values.min()),
+                        "Maximum": float(values.max()),
+                    })
+                with right:
+                    st.markdown("**Selected quantiles**")
+                    quantiles = values.quantile(
+                        [0.01, 0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95, 0.99]
+                    ).rename_axis("Quantile").reset_index(name="Value")
+                    quantiles["Quantile"] = (
+                        quantiles["Quantile"] * 100
+                    ).map(lambda value: f"P{value:g}")
+                    st.dataframe(
+                        quantiles,
+                        hide_index=True,
+                        use_container_width=True,
+                    )
 
+                st.markdown("**Distribution by value range**")
+                if values.nunique() > 1:
+                    bins = st.slider(
+                        "Number of histogram bins",
+                        min_value=5,
+                        max_value=40,
+                        value=15,
+                        key="descriptive_histogram_bins",
+                    )
+                    hist, edges = np.histogram(values, bins=bins)
+                    hist_df = pd.DataFrame({
+                        "Value range": [
+                            f"{edges[i]:.4g} – {edges[i + 1]:.4g}"
+                            for i in range(len(hist))
+                        ],
+                        "Frequency": hist,
+                    }).set_index("Value range")
+                    st.bar_chart(hist_df)
+                else:
+                    st.info(
+                        "All valid observations have the same value; a histogram "
+                        "would not show a meaningful distribution."
+                    )
+
+        st.divider()
+        st.subheader("Categorical frequency analysis")
+        if not categorical_cols:
+            st.info("No non-numeric variables were detected.")
+        else:
             selected_col = st.selectbox(
                 "Select a categorical variable",
-                categorical_columns,
+                categorical_cols,
                 format_func=str,
+                key="descriptive_categorical_variable",
             )
-
             include_missing = st.checkbox(
-                "Show missing values as a category",
+                "Include missing and blank values in the frequency table",
                 value=True,
+                key="descriptive_include_missing",
             )
-
             series = df[selected_col].astype("object")
-
+            blank_mask = series.notna() & series.astype(str).str.strip().eq("")
+            series = series.mask(blank_mask, "(Blank text)")
             if include_missing:
-                series = series.where(
-                    series.notna(),
-                    "(Missing)",
-                )
-                counts = series.value_counts(dropna=False)
-                denominator = len(df)
-
-            else:
-                series = series.dropna()
-                counts = series.value_counts(dropna=True)
+                series = series.where(series.notna(), "(Missing)")
                 denominator = len(series)
+                counts = series.value_counts(dropna=False)
+            else:
+                series = series[series.notna() & ~blank_mask]
+                denominator = len(series)
+                counts = series.value_counts(dropna=True)
 
-            frequencies = (
-                counts.rename_axis("Category")
-                .reset_index(name="Frequency")
+            frequencies = counts.rename_axis("Category").reset_index(
+                name="Frequency"
             )
-
             frequencies["Percentage (%)"] = (
                 (frequencies["Frequency"] / denominator * 100).round(2)
-                if denominator
-                else 0.0
+                if denominator else 0.0
             )
-
+            frequencies["Cumulative (%)"] = (
+                frequencies["Percentage (%)"].cumsum().round(2)
+            )
             st.dataframe(
                 frequencies,
                 hide_index=True,
                 use_container_width=True,
             )
-
             st.caption(
-                f"Percentage denominator: {denominator:,} records"
-                + (
-                    " (including missing values)."
-                    if include_missing
-                    else " (non-missing records only)."
-                )
+                f"Percentage denominator: {denominator:,} records. "
+                "Cumulative percentages follow the displayed frequency order. "
+                "If the variable has many unique values, the table may be long."
             )
-
             st.download_button(
-                "Download frequency table",
+                "Download categorical frequency table",
                 data=frequencies.to_csv(index=False).encode("utf-8-sig"),
                 file_name="timan_frequency_table.csv",
                 mime="text/csv",
                 key="download_frequency_table",
             )
 
+        st.divider()
+        st.subheader("Grouped numeric summaries")
+        if numeric_cols and categorical_cols:
+            group_col = st.selectbox(
+                "Group records by",
+                categorical_cols,
+                key="descriptive_group_column",
+            )
+            measure_col = st.selectbox(
+                "Summarise numeric variable",
+                numeric_cols,
+                key="descriptive_group_measure",
+            )
+            group_df = pd.DataFrame({
+                "Group": df[group_col].astype("object").where(
+                    df[group_col].notna(), "(Missing)"
+                ).astype(str),
+                "Value": pd.to_numeric(df[measure_col], errors="coerce"),
+            })
+            grouped = group_df.groupby("Group", dropna=False)["Value"].agg(
+                ["count", "mean", "median", "std", "min", "max"]
+            ).reset_index()
+            grouped = grouped.rename(columns={
+                "count": "Valid n",
+                "mean": "Mean",
+                "median": "Median",
+                "std": "Standard deviation",
+                "min": "Minimum",
+                "max": "Maximum",
+            })
+            st.dataframe(grouped, hide_index=True, use_container_width=True)
+            st.caption(
+                "Grouped summaries are descriptive comparisons only. Differences "
+                "between groups do not, by themselves, demonstrate that group "
+                "membership caused the observed outcome."
+            )
+            st.download_button(
+                "Download grouped summary",
+                data=grouped.to_csv(index=False).encode("utf-8-sig"),
+                file_name="timan_grouped_descriptive_summary.csv",
+                mime="text/csv",
+                key="download_grouped_summary",
+            )
         else:
             st.info(
-                "No non-numeric columns were detected for "
-                "categorical frequency tables."
+                "Grouped summaries require at least one numeric variable and "
+                "one non-numeric grouping variable."
+            )
+
+        st.divider()
+        st.subheader("Exploratory correlation matrix")
+        if len(numeric_cols) >= 2:
+            corr_method = st.selectbox(
+                "Correlation method",
+                ["Pearson", "Spearman", "Kendall"],
+                key="descriptive_correlation_method",
+            )
+            corr = df[numeric_cols].corr(method=corr_method.lower())
+            st.dataframe(corr.round(3), use_container_width=True)
+            st.caption(
+                "Correlation describes the strength and direction of association "
+                "between numeric variables. It does not establish causation; "
+                "Pearson measures linear association, while Spearman and Kendall "
+                "are rank-based measures."
+            )
+            st.download_button(
+                "Download correlation matrix",
+                data=corr.to_csv().encode("utf-8-sig"),
+                file_name="timan_correlation_matrix.csv",
+                mime="text/csv",
+                key="download_correlation_matrix",
+            )
+        else:
+            st.info(
+                "A correlation matrix requires at least two numeric variables."
             )
 
 
