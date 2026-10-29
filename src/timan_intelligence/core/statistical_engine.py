@@ -1,3 +1,4 @@
+
 """Safe, deterministic statistical calculations for TimanStat.
 
 This initial execution engine provides descriptive statistics only.
@@ -17,9 +18,8 @@ def run_descriptive_statistics(
 ) -> AnalysisResult:
     """Calculate descriptive statistics for one numeric variable.
 
-    Missing values and infinite values are excluded from calculations.
-    Missing and infinite values are counted separately.
-    The original DataFrame is not modified.
+    Missing and infinite values are excluded from calculations and
+    counted separately. The original DataFrame is not modified.
     """
     if not isinstance(df, pd.DataFrame):
         raise TypeError("Expected a pandas DataFrame.")
@@ -34,6 +34,12 @@ def run_descriptive_statistics(
 
     series = df[variable]
 
+    # Check entirely missing columns before validating their inferred dtype.
+    if series.isna().all():
+        raise ValueError(
+            f"Variable '{variable}' contains no usable numeric observations."
+        )
+
     if not pd.api.types.is_numeric_dtype(series):
         raise TypeError(
             f"Variable '{variable}' must be numeric."
@@ -41,14 +47,14 @@ def run_descriptive_statistics(
 
     missing_values = int(series.isna().sum())
 
-    # Remove missing values before checking finite numeric observations.
+    # Remove missing values, then identify positive and negative infinity.
     non_missing = series.dropna().astype(float)
-
-    # Identify positive and negative infinity separately from missing data.
-    infinite_mask = non_missing.isin([float("inf"), float("-inf")])
+    infinite_mask = non_missing.isin(
+        [float("inf"), float("-inf")]
+    )
     infinite_values = int(infinite_mask.sum())
 
-    # Only finite values are valid for the descriptive calculations.
+    # Retain only finite observations for statistical calculations.
     values = non_missing[~infinite_mask]
 
     if values.empty:
@@ -60,6 +66,12 @@ def run_descriptive_statistics(
     mean = float(values.mean())
     median = float(values.median())
 
+    standard_deviation = (
+        float(values.std(ddof=1))
+        if observations > 1
+        else None
+    )
+
     summary: dict[str, Any] = {
         "variable": variable,
         "observations": observations,
@@ -67,11 +79,7 @@ def run_descriptive_statistics(
         "infinite_values": infinite_values,
         "mean": mean,
         "median": median,
-        "standard_deviation": (
-            float(values.std(ddof=1))
-            if observations > 1
-            else None
-        ),
+        "standard_deviation": standard_deviation,
         "minimum": float(values.min()),
         "maximum": float(values.max()),
         "q1": float(values.quantile(0.25)),
