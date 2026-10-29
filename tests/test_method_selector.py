@@ -133,3 +133,94 @@ def test_unknown_objective_is_not_silently_treated_as_valid():
     )
 
     assert methods == []
+
+from timan_intelligence.core.method_selector import (
+    ELIGIBLE,
+    CONDITIONALLY_ELIGIBLE,
+    INSUFFICIENT_INFORMATION,
+    INELIGIBLE,
+    assess_preferred_method,
+)
+
+
+def test_preferred_method_requests_missing_group_information():
+    result = assess_preferred_method(
+        preferred_method="Independent-samples t-test",
+        objective_type="comparison",
+        outcome_type="numeric",
+    )
+
+    assert result.eligibility == INSUFFICIENT_INFORMATION
+    assert result.clarification_questions
+    assert result.alternatives == []
+
+
+def test_preferred_method_identifies_incompatible_design():
+    result = assess_preferred_method(
+        preferred_method="Independent-samples t-test",
+        objective_type="comparison",
+        outcome_type="numeric",
+        group_count=2,
+        independent_groups=False,
+    )
+
+    assert result.eligibility == INELIGIBLE
+    assert result.rationale
+    assert result.alternatives == []
+
+
+def test_preferred_method_can_be_conditionally_eligible():
+    result = assess_preferred_method(
+        preferred_method="Independent-samples t-test",
+        objective_type="comparison",
+        outcome_type="numeric",
+        group_count=2,
+        independent_groups=True,
+    )
+
+    assert result.eligibility == CONDITIONALLY_ELIGIBLE
+    assert result.checks
+
+
+def test_preferred_method_returns_alternatives_when_available():
+    result = assess_preferred_method(
+        preferred_method="Independent-samples t-test",
+        objective_type="comparison",
+        outcome_type="numeric",
+        group_count=3,
+        independent_groups=True,
+    )
+
+    assert result.eligibility == INELIGIBLE
+    assert result.alternatives
+    assert all(
+        candidate.method != "Independent-samples t-test"
+        for candidate in result.alternatives
+    )
+
+
+def test_unknown_preferred_method_requests_clarification():
+    result = assess_preferred_method(
+        preferred_method="Unknown statistical method",
+        objective_type="description",
+        outcome_type="numeric",
+    )
+
+    assert result.eligibility == INSUFFICIENT_INFORMATION
+    assert result.clarification_questions
+
+
+def test_assessment_discloses_unverified_assumptions():
+    result = assess_preferred_method(
+        preferred_method="Pearson correlation",
+        objective_type="association",
+        outcome_type="numeric",
+        predictor_type="numeric",
+    )
+
+    assert result.eligibility == CONDITIONALLY_ELIGIBLE
+    assert any(
+        "assumptions" in check.lower()
+        or "inspect" in check.lower()
+        for check in result.checks
+    )
