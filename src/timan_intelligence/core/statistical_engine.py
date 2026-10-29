@@ -1,4 +1,3 @@
-
 """Safe, deterministic statistical calculations for TimanStat.
 
 This initial execution engine provides descriptive statistics only.
@@ -125,4 +124,3 @@ def run_descriptive_statistics(
             "infinite_values": infinite_values,
         },
     )
-```
