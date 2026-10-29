@@ -12,6 +12,7 @@ import pandas as pd
 
 from timan_intelligence.core.contracts import AnalysisRequest
 from timan_intelligence.core.data_quality import profile_dataframe
+from timan_intelligence.core.objective_classifier import classify_objective
 
 
 @dataclass
@@ -24,13 +25,16 @@ class AnalysisPlan:
     information_needed: list[str] = field(default_factory=list)
     data_profile: dict[str, Any] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
+    objective_type: str = "unknown"
+    objective_confidence: str = "low"
+    objective_explanation: str = ""
 
 
 def plan_analysis(
     df: pd.DataFrame,
     request: AnalysisRequest,
 ) -> AnalysisPlan:
-    """Recommend candidate analyses from the question and dataset structure."""
+    """Recommend candidate analyses using the objective and dataset structure."""
     if not isinstance(df, pd.DataFrame):
         raise TypeError("Expected a pandas DataFrame.")
 
@@ -57,6 +61,19 @@ def plan_analysis(
             "Provide a research question or analytical objective."
         )
         return plan
+
+    objective = classify_objective(question)
+    plan.objective_type = objective.objective_type
+    plan.objective_confidence = objective.confidence
+    plan.objective_explanation = objective.explanation
+
+    if objective.objective_type in {"unknown", "ambiguous"}:
+        plan.information_needed.append(
+            "Clarify the primary research objective before selecting an analysis."
+        )
+        plan.warnings.append(
+            "The objective classification is tentative and uses keyword rules."
+        )
 
     if df.empty or len(df.columns) == 0:
         plan.information_needed.append(
@@ -114,7 +131,24 @@ def plan_analysis(
                 ],
             })
 
-    if len(variables) >= 2:
+    if objective.objective_type == "comparison":
+        plan.information_needed.append(
+            "Identify the outcome variable and the groups to compare."
+        )
+    elif objective.objective_type == "association":
+        plan.information_needed.append(
+            "Identify the two variables whose relationship you want to assess."
+        )
+    elif objective.objective_type == "prediction":
+        plan.information_needed.append(
+            "Identify the outcome to predict and the candidate predictor variables."
+        )
+    elif objective.objective_type == "description":
+        plan.information_needed.append(
+            "Identify the variable or indicator to describe and the required "
+            "summary, such as a count, proportion, or mean."
+        )
+    elif len(variables) >= 2:
         plan.information_needed.append(
             "Specify the outcome variable and the explanatory or grouping "
             "variable if you want a comparison or association analysis."
@@ -131,5 +165,8 @@ def plan_analysis(
         plan.information_needed.append(
             "No candidate analysis could be suggested from the available variables."
         )
+
+    if objective.objective_type in {"unknown", "ambiguous"}:
+        plan.status = "needs_input"
 
     return plan
