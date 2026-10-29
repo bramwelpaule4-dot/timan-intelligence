@@ -1,3 +1,4 @@
+
 from timan_intelligence.core.method_selector import select_methods
 
 
@@ -78,7 +79,19 @@ def test_suggests_logistic_regression_for_binary_prediction():
     )
 
 
-def test_returns_no_methods_when_information_is_insufficient():
+def test_suggests_linear_regression_for_numeric_prediction():
+    methods = select_methods(
+        objective_type="prediction",
+        outcome_type="numeric",
+    )
+
+    assert any(
+        item.method == "Linear regression"
+        for item in methods
+    )
+
+
+def test_returns_no_methods_when_comparison_design_is_incomplete():
     methods = select_methods(
         objective_type="comparison",
         outcome_type="numeric",
@@ -94,4 +107,29 @@ def test_candidates_require_review():
     )
 
     assert methods
-    assert all(item.status == "review_required" for item in methods)
+    assert all(
+        item.status == "review_required"
+        for item in methods
+    )
+
+
+def test_candidates_include_rationale_and_checks():
+    methods = select_methods(
+        objective_type="description",
+        outcome_type="numeric",
+    )
+
+    assert methods
+
+    for item in methods:
+        assert item.rationale.strip()
+        assert item.checks
+
+
+def test_unknown_objective_is_not_silently_treated_as_valid():
+    methods = select_methods(
+        objective_type="unsupported_objective",
+        outcome_type="numeric",
+    )
+
+    assert methods == []
