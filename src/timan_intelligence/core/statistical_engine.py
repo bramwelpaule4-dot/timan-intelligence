@@ -1,4 +1,4 @@
-
+python
 """Safe, deterministic statistical calculations for TimanStat.
 
 This initial execution engine provides descriptive statistics only.
@@ -18,7 +18,8 @@ def run_descriptive_statistics(
 ) -> AnalysisResult:
     """Calculate descriptive statistics for one numeric variable.
 
-    Missing values are excluded from the calculations and reported.
+    Missing values and infinite values are excluded from calculations.
+    Missing and infinite values are counted separately.
     The original DataFrame is not modified.
     """
     if not isinstance(df, pd.DataFrame):
@@ -33,30 +34,43 @@ def run_descriptive_statistics(
         )
 
     series = df[variable]
-    non_missing = series.dropna()
-
-    # Check for an entirely missing column before checking its data type.
-    if non_missing.empty:
-        raise ValueError(
-            f"Variable '{variable}' contains no usable numeric observations."
-        )
 
     if not pd.api.types.is_numeric_dtype(series):
         raise TypeError(
             f"Variable '{variable}' must be numeric."
         )
 
-    values = non_missing.astype(float)
+    missing_values = int(series.isna().sum())
+
+    # Remove missing values before checking finite numeric observations.
+    non_missing = series.dropna().astype(float)
+
+    # Identify positive and negative infinity separately from missing data.
+    infinite_mask = non_missing.isin([float("inf"), float("-inf")])
+    infinite_values = int(infinite_mask.sum())
+
+    # Only finite values are valid for the descriptive calculations.
+    values = non_missing[~infinite_mask]
+
+    if values.empty:
+        raise ValueError(
+            f"Variable '{variable}' contains no usable numeric observations."
+        )
+
+    observations = int(values.count())
+    mean = float(values.mean())
+    median = float(values.median())
 
     summary: dict[str, Any] = {
         "variable": variable,
-        "observations": int(values.count()),
-        "missing_values": int(series.isna().sum()),
-        "mean": float(values.mean()),
-        "median": float(values.median()),
+        "observations": observations,
+        "missing_values": missing_values,
+        "infinite_values": infinite_values,
+        "mean": mean,
+        "median": median,
         "standard_deviation": (
             float(values.std(ddof=1))
-            if len(values) > 1
+            if observations > 1
             else None
         ),
         "minimum": float(values.min()),
@@ -67,16 +81,33 @@ def run_descriptive_statistics(
 
     assumptions = [
         "Missing values were excluded from the calculations.",
+        "Infinite values were excluded from the calculations.",
         "The standard deviation is the sample standard deviation.",
         "Descriptive statistics do not establish causation.",
     ]
 
     limitations = []
 
-    if len(values) == 1:
+    if infinite_values > 0:
+        limitations.append(
+            f"{infinite_values} infinite value(s) were excluded "
+            "from the calculations."
+        )
+
+    if observations == 1:
         limitations.append(
             "Only one usable observation is available; "
             "sample standard deviation cannot be calculated."
+        )
+
+    findings = [
+        f"{variable} has {observations} usable numeric observations.",
+        f"The mean is {mean:.4g} and the median is {median:.4g}.",
+    ]
+
+    if infinite_values > 0:
+        findings.append(
+            f"{infinite_values} infinite value(s) were excluded."
         )
 
     return AnalysisResult(
@@ -84,16 +115,14 @@ def run_descriptive_statistics(
         method="Descriptive statistics",
         status="success",
         tables={"summary": summary},
-        findings=[
-            f"{variable} has {len(values)} usable numeric observations.",
-            f"The mean is {values.mean():.4g} and the median is "
-            f"{values.median():.4g}.",
-        ],
+        findings=findings,
         assumptions=assumptions,
         limitations=limitations,
         metadata={
             "variable": variable,
-            "observations": int(values.count()),
-            "missing_values": int(series.isna().sum()),
+            "observations": observations,
+            "missing_values": missing_values,
+            "infinite_values": infinite_values,
         },
     )
+```
