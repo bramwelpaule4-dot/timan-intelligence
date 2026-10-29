@@ -1,4 +1,4 @@
-python
+
 """Safe, deterministic statistical calculations for TimanStat.
 
 This initial execution engine provides descriptive statistics only.
