@@ -16,6 +16,7 @@ def test_planner_recommends_descriptive_statistics_for_numeric_data():
     plan = plan_analysis(df, request)
 
     assert plan.status == "review_required"
+    assert plan.objective_type == "description"
     assert any(
         item["method"] == "Descriptive statistics"
         for item in plan.recommendations
@@ -31,6 +32,7 @@ def test_planner_recommends_frequency_distribution_for_categories():
 
     plan = plan_analysis(df, request)
 
+    assert plan.objective_type == "description"
     assert any(
         item["method"] == "Frequency distribution"
         for item in plan.recommendations
@@ -82,3 +84,97 @@ def test_planner_rejects_non_dataframe_input():
 
     with pytest.raises(TypeError):
         plan_analysis([10, 20, 30], request)
+
+
+def test_comparison_objective_requests_outcome_and_groups():
+    df = pd.DataFrame({
+        "water_access": ["Yes", "No", "Yes"],
+        "household_head_gender": ["Male", "Female", "Male"],
+    })
+    request = AnalysisRequest(
+        question="Does water access differ between male-headed "
+        "and female-headed households?",
+        selected_variables=["water_access", "household_head_gender"],
+    )
+
+    plan = plan_analysis(df, request)
+
+    assert plan.objective_type == "comparison"
+    assert any(
+        "outcome variable" in item.lower()
+        and "groups" in item.lower()
+        for item in plan.information_needed
+    )
+
+
+def test_association_objective_requests_relationship_variables():
+    df = pd.DataFrame({
+        "income": [10, 20, 30],
+        "education": ["Primary", "Secondary", "Tertiary"],
+    })
+    request = AnalysisRequest(
+        question="Is household income associated with education level?",
+        selected_variables=["income", "education"],
+    )
+
+    plan = plan_analysis(df, request)
+
+    assert plan.objective_type == "association"
+    assert any(
+        "two variables" in item.lower()
+        for item in plan.information_needed
+    )
+
+
+def test_prediction_objective_requests_outcome_and_predictors():
+    df = pd.DataFrame({
+        "food_security": ["Secure", "Insecure", "Secure"],
+        "income": [100, 50, 120],
+    })
+    request = AnalysisRequest(
+        question="Can household income predict food security?",
+        selected_variables=["food_security", "income"],
+    )
+
+    plan = plan_analysis(df, request)
+
+    assert plan.objective_type == "prediction"
+    assert any(
+        "predict" in item.lower()
+        and "outcome" in item.lower()
+        for item in plan.information_needed
+    )
+
+
+def test_ambiguous_objective_requires_clarification():
+    df = pd.DataFrame({"age": [20, 30, 40], "income": [10, 20, 30]})
+    request = AnalysisRequest(
+        question="Compare the relationship between age and income.",
+        selected_variables=["age", "income"],
+    )
+
+    plan = plan_analysis(df, request)
+
+    assert plan.objective_type == "ambiguous"
+    assert plan.status == "needs_input"
+    assert any(
+        "clarify the primary research objective" in item.lower()
+        for item in plan.information_needed
+    )
+
+
+def test_unrecognised_objective_requires_clarification():
+    df = pd.DataFrame({"food_insecurity": ["High", "Low", "Medium"]})
+    request = AnalysisRequest(
+        question="What factors explain household food insecurity?",
+        selected_variables=["food_insecurity"],
+    )
+
+    plan = plan_analysis(df, request)
+
+    assert plan.objective_type == "unknown"
+    assert plan.status == "needs_input"
+    assert any(
+        "clarify the primary research objective" in item.lower()
+        for item in plan.information_needed
+    )
