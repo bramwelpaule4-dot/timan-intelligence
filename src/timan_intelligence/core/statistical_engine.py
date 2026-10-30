@@ -9,7 +9,7 @@ or make automatic scientific decisions.
 from typing import Any
 
 import pandas as pd
-from scipy.stats import ttest_ind
+from scipy.stats import f_oneway, ttest_ind
 
 from timan_intelligence.core.contracts import AnalysisResult
 
@@ -333,5 +333,175 @@ def run_independent_samples_t_test(
             "group_variable": group_variable,
             "group_1_label": str(group_1_label),
             "group_2_label": str(group_2_label),
+        },
+    )
+
+
+def run_one_way_anova(
+    df: pd.DataFrame,
+    outcome_variable: str,
+    group_variable: str,
+) -> AnalysisResult:
+    """Run a one-way independent-groups ANOVA.
+
+    Compares the means of a numeric outcome across two or more
+    independent groups.
+
+    Missing and infinite outcome values are excluded and counted.
+    Each group must have at least two usable observations.
+    The original DataFrame is not modified.
+    """
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Expected a pandas DataFrame.")
+
+    if outcome_variable not in df.columns:
+        raise ValueError(
+            f"Outcome variable '{outcome_variable}' was not found."
+        )
+
+    if group_variable not in df.columns:
+        raise ValueError(
+            f"Group variable '{group_variable}' was not found."
+        )
+
+    outcome = df[outcome_variable]
+    groups = df[group_variable]
+
+    if not pd.api.types.is_numeric_dtype(outcome):
+        raise TypeError(
+            f"Outcome variable '{outcome_variable}' must be numeric."
+        )
+
+    if groups.isna().any():
+        raise ValueError(
+            f"Group variable '{group_variable}' contains missing group labels."
+        )
+
+    missing_outcomes = int(outcome.isna().sum())
+
+    non_missing = outcome.dropna().astype(float)
+    infinite_mask = non_missing.isin(
+        [float("inf"), float("-inf")]
+    )
+    infinite_outcomes = int(infinite_mask.sum())
+
+    finite_mask = outcome.notna() & ~outcome.isin(
+        [float("inf"), float("-inf")]
+    )
+
+    valid_data = df.loc[
+        finite_mask,
+        [group_variable, outcome_variable],
+    ].copy()
+
+    unique_groups = list(pd.unique(valid_data[group_variable]))
+
+    if len(unique_groups) < 2:
+        raise ValueError(
+            "One-way ANOVA requires at least two groups."
+        )
+
+    group_values = []
+
+    for group_label in unique_groups:
+        values = valid_data.loc[
+            valid_data[group_variable] == group_label,
+            outcome_variable,
+        ].astype(float)
+
+        if len(values) < 2:
+            raise ValueError(
+                "One-way ANOVA requires at least two usable observations "
+                "in each group."
+            )
+
+        group_values.append(values)
+
+    observations = int(sum(len(values) for values in group_values))
+    number_of_groups = len(group_values)
+
+    test_result = f_oneway(*group_values)
+
+    f_statistic = float(test_result.statistic)
+    p_value = float(test_result.pvalue)
+
+    degrees_of_freedom_between = number_of_groups - 1
+    degrees_of_freedom_within = observations - number_of_groups
+
+    summary: dict[str, Any] = {
+        "groups": number_of_groups,
+        "observations": observations,
+        "f_statistic": f_statistic,
+        "p_value": p_value,
+        "degrees_of_freedom_between": degrees_of_freedom_between,
+        "degrees_of_freedom_within": degrees_of_freedom_within,
+        "missing_outcomes": missing_outcomes,
+        "infinite_outcomes": infinite_outcomes,
+    }
+
+    assumptions = [
+        "The outcome variable is numeric.",
+        "The groups are independent.",
+        "Observations are independent within and between groups.",
+        "The outcome is approximately normally distributed within each group.",
+        "Population variances are assumed to be approximately equal.",
+        "Missing outcome values were excluded.",
+        "Infinite outcome values were excluded.",
+        "The test evaluates whether all group population means are equal.",
+    ]
+
+    limitations = []
+
+    if missing_outcomes > 0:
+        limitations.append(
+            f"{missing_outcomes} missing outcome value(s) were excluded."
+        )
+
+    if infinite_outcomes > 0:
+        limitations.append(
+            f"{infinite_outcomes} infinite outcome value(s) were excluded."
+        )
+
+    findings = [
+        (
+            f"One-way ANOVA compared {number_of_groups} groups "
+            f"using {observations} usable observations."
+        ),
+        (
+            f"The F-statistic is {f_statistic:.4g}, "
+            f"with p-value {p_value:.4g}."
+        ),
+    ]
+
+    if p_value < 0.05:
+        findings.append(
+            "There is evidence of a statistically significant difference "
+            "among the group means at the 0.05 level."
+        )
+    else:
+        findings.append(
+            "There is insufficient evidence of a statistically significant "
+            "difference among the group means at the 0.05 level."
+        )
+
+    findings.append(
+        "A significant ANOVA result does not identify which specific "
+        "groups differ; post-hoc comparisons are needed for that."
+    )
+
+    return AnalysisResult(
+        title=(
+            f"One-way ANOVA: {outcome_variable} by {group_variable}"
+        ),
+        method="One-way ANOVA",
+        status="success",
+        tables={"summary": summary},
+        findings=findings,
+        assumptions=assumptions,
+        limitations=limitations,
+        metadata={
+            "outcome_variable": outcome_variable,
+            "group_variable": group_variable,
+            "group_labels": [str(label) for label in unique_groups],
         },
     )
