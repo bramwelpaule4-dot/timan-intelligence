@@ -1,7 +1,7 @@
 # TIMANSTAT STATISTICAL METHODS CATALOGUE
 
 **Version:** 2.1  
-**Status:** Proposed comprehensive statistical knowledge and methodology blueprint  
+**Status:** Revised comprehensive statistical knowledge blueprint  
 **Product:** TimanStat  
 **Organisation:** Timan Analytics  
 **Supersedes:** Version 2.0
@@ -12,3393 +12,2308 @@
 
 ## 1.1 Purpose
 
-This catalogue defines the statistical knowledge, methods, models, research designs, diagnostics, computational procedures and reporting capabilities that TimanStat should recognise and eventually support.
+This catalogue defines the statistical knowledge, methods, models, research designs, computational procedures, diagnostics and reporting capabilities that TimanStat should recognise and progressively support.
 
-TimanStat is intended to operate as an intelligent statistical analysis platform. It should not merely execute isolated statistical tests. It should understand research objectives, identify the appropriate analytical approach, examine data suitability, formulate statistical models, validate analytical specifications, execute appropriate computations and communicate results responsibly.
+TimanStat is intended to serve as a general statistical analysis platform for research and applied work across:
 
-The catalogue therefore establishes the methodological knowledge base from which TimanStat's analysis-selection and statistical-execution capabilities will be developed.
+- General quantitative research
+- Mathematics and mathematical statistics
+- Biostatistics and biomedical research
+- Epidemiology and public health
+- Agriculture and environmental sciences
+- Economics and econometrics
+- Education and social sciences
+- Business and management
+- Psychology and measurement
+- Engineering and quality control
+- Government, development and humanitarian programming
 
-## 1.2 Application scope
+The catalogue is a knowledge blueprint, not an implementation claim. Inclusion of an item does not mean that TimanStat can currently execute it.
 
-The catalogue is intended to support quantitative analysis across:
+## 1.2 Core objectives
 
-- General research and applied statistics.
-- Mathematics and mathematical statistics.
-- Biostatistics and biomedical research.
-- Epidemiology and public health.
-- Clinical research and clinical trials.
-- Agriculture and agricultural research.
-- Economics and econometrics.
-- Education and educational assessment.
-- Business and management.
-- Social sciences and behavioural research.
-- Environmental and ecological research.
-- Engineering and industrial research.
-- Demography and population studies.
-- Survey research and development programmes.
-- Data science and statistical learning.
+TimanStat should progressively be able to:
 
-## 1.3 Scope of statistical capabilities
+1. Understand a user's research objective or analytical question.
+2. Identify the relevant statistical purpose and knowledge area.
+3. Inspect the dataset's structure, variables, measurement scales and quality.
+4. Identify suitable statistical methods and explain their selection.
+5. Identify the target quantity or estimand where applicable.
+6. Specify the statistical model or analytical procedure.
+7. Check whether the data and study design support the proposed analysis.
+8. Evaluate relevant assumptions and diagnostics.
+9. Execute validated statistical computations.
+10. Interpret results, uncertainty and limitations.
+11. Produce appropriate tables, visualisations and reports.
+12. Explain when a proposed analysis is unsuitable or unsupported.
 
-TimanStat should progressively recognise and support:
+## 1.3 Scope and classification principle
 
-1. Descriptive statistics and exploratory data analysis.
-2. Probability theory and probability distributions.
-3. Mathematical statistics and statistical inference.
-4. Frequentist and Bayesian inference.
-5. Regression and generalised linear models.
-6. Experimental design and design of experiments.
-7. Sampling and survey statistics.
-8. Multivariate statistics.
-9. Non-parametric and distribution-free statistics.
-10. Time-series analysis and forecasting.
-11. Survival and event-history analysis.
-12. Spatial and spatiotemporal statistics.
-13. Causal inference.
-14. Stochastic processes.
-15. Reliability and quality statistics.
-16. Epidemiological and biostatistical methods.
-17. Psychometrics and measurement theory.
-18. Longitudinal and repeated-measures analysis.
-19. Statistical learning and predictive modelling.
-20. Functional and compositional data analysis.
-21. Extreme-value and directional statistics.
-22. Network statistics.
-23. Missing-data statistics.
-24. Meta-analysis and evidence synthesis.
-25. Statistical computing, simulation and numerical methods.
-26. Statistical reporting and visualisation.
+The catalogue distinguishes seven different kinds of statistical knowledge:
 
-## 1.4 Catalogue inclusion versus implementation
+- **Statistical purposes:** what the analysis is intended to accomplish.
+- **Knowledge areas:** the broad disciplines and bodies of statistical theory.
+- **Method families:** groups of related analytical procedures.
+- **Statistical entities:** methods, models, designs, diagnostics, algorithms, measures and visualisations.
+- **Inference paradigms:** approaches such as frequentist, Bayesian and randomisation-based inference.
+- **Application domains:** fields in which statistical methods are used.
+- **Computational procedures:** numerical and algorithmic techniques used to obtain results.
 
-This catalogue describes the intended methodological scope of TimanStat.
-
-It does not imply that every listed method is currently implemented, tested, validated or available to users.
-
-The catalogue must distinguish:
-
-- What TimanStat knows about.
-- What TimanStat can recommend.
-- What TimanStat can specify as an analytical model.
-- What TimanStat can execute.
-- What TimanStat can validate.
-- What TimanStat can interpret and report.
-
-A method may be recognised and recommended while its computational implementation remains unavailable.
+These dimensions are related but must not be collapsed into a single classification.
 
 ---
 
-# PART I: CLASSIFICATION AND STATISTICAL KNOWLEDGE ARCHITECTURE
+# PART I — STATISTICAL PURPOSES AND FOUNDATIONS
 
-# 2. STATISTICAL CLASSIFICATION FRAMEWORK
+# 2. STATISTICAL PURPOSES
 
-## 2.1 Analytical purpose
+Statistical purpose describes the principal objective of an analysis. A method may serve more than one purpose depending on how it is used.
 
-Every analytical procedure should be classified according to its primary purpose. The purposes are not necessarily mutually exclusive.
-
-### 2.1.1 Descriptive analysis
+## 2.1 Descriptive statistics
 
 Organises, summarises and presents observed data.
 
-Examples:
+Typical questions:
+- What does the observed dataset contain?
+- What is the distribution of a variable?
+- What are the characteristics of the study population or sample?
+- How do observed groups differ?
 
-- Frequencies and percentages.
-- Measures of central tendency.
-- Measures of dispersion.
-- Skewness and kurtosis.
-- Cross-tabulations.
-- Descriptive correlation.
-- Graphical summaries.
+## 2.2 Inferential statistics
 
-### 2.1.2 Exploratory analysis
+Uses sample information and a statistical model or sampling framework to make statements about a broader population or data-generating process.
 
-Investigates patterns, relationships, unusual observations and potential structures in data without necessarily beginning with a formal confirmatory hypothesis.
+Typical questions:
+- Is there evidence of a population difference?
+- What is the uncertainty around an estimate?
+- Is an observed association compatible with a specified null hypothesis?
+- What population parameter can be estimated from the sample?
 
-Examples:
+## 2.3 Predictive statistics
 
-- Exploratory data analysis.
-- Distribution exploration.
-- Outlier identification.
-- Correlation exploration.
-- Principal component exploration.
-- Cluster exploration.
+Uses observed information to predict unknown or future outcomes.
 
-### 2.1.3 Inferential analysis
+Typical questions:
+- What outcome is expected for a new observation?
+- Which individuals or units are at higher predicted risk?
+- How accurately can future values be forecast?
 
-Uses sample information, probability models or other justified inferential frameworks to make statements about a population or an underlying data-generating process.
+## 2.4 Causal analysis
 
-Examples:
+Estimates or evaluates the effects of interventions, exposures or treatments under explicit causal assumptions.
 
-- Estimation.
-- Confidence intervals.
-- Hypothesis testing.
-- Regression inference.
-- Bayesian posterior inference.
-- Randomisation inference.
+Typical questions:
+- What is the effect of an intervention?
+- What would have happened to the same population under an alternative exposure?
+- Which causal pathways may explain an observed effect?
 
-### 2.1.4 Predictive analysis
+## 2.5 Exploratory analysis
 
-Develops and evaluates models intended to predict unknown or future outcomes.
+Investigates data structure, patterns, anomalies, relationships and possible hypotheses without necessarily beginning with a formal confirmatory hypothesis.
 
-Examples:
+## 2.6 Decision and optimisation analysis
 
-- Regression prediction.
-- Classification.
-- Time-series forecasting.
-- Survival prediction.
-- Machine learning.
+Uses statistical estimates, uncertainty and decision criteria to support choices, resource allocation, treatment decisions or operational optimisation.
 
-### 2.1.5 Causal analysis
-
-Estimates causal effects or evaluates what would happen under specified interventions, subject to identification assumptions.
-
-Examples:
-
-- Randomised experiments.
-- Difference-in-differences.
-- Instrumental-variable estimation.
-- Regression discontinuity.
-- Propensity-score methods.
-
-### 2.1.6 Decision and optimisation analysis
-
-Uses statistical information to support decisions under uncertainty.
-
-Examples:
-
-- Bayesian decision theory.
-- Decision analysis.
-- Optimal experimental design.
-- Statistical decision rules.
-- Expected-loss analysis.
-
-## 2.2 Statistical knowledge areas
-
-Knowledge areas organise related statistical concepts and procedures.
-
-The primary knowledge areas include:
-
-- Descriptive statistics.
-- Probability theory.
-- Mathematical statistics.
-- Frequentist inference.
-- Bayesian statistics.
-- Regression and generalised linear modelling.
-- Experimental design.
-- Sampling and survey statistics.
-- Multivariate statistics.
-- Non-parametric statistics.
-- Time-series analysis.
-- Survival analysis.
-- Spatial statistics.
-- Causal inference.
-- Stochastic processes.
-- Reliability and quality statistics.
-- Epidemiology and biostatistics.
-- Psychometrics.
-- Longitudinal data analysis.
-- Statistical learning.
-- Computational statistics.
-- Meta-analysis.
-- Missing-data statistics.
-
-A method may belong to more than one knowledge area through explicit relationships and tags.
-
-## 2.3 Method families
-
-Method families group procedures according to their statistical function.
-
-Examples include:
-
-- Frequency estimation.
-- Distribution summarisation.
-- Location estimation.
-- Dispersion estimation.
-- Difference testing.
-- Association analysis.
-- Goodness-of-fit testing.
-- Regression modelling.
-- Classification.
-- Clustering.
-- Dimension reduction.
-- Survival modelling.
-- Forecasting.
-- Causal effect estimation.
-- Variance estimation.
-- Resampling inference.
-
-## 2.4 Statistical inference paradigms
-
-The inference paradigm identifies the framework used to reason about uncertainty.
-
-### 2.4.1 Frequentist inference
-
-Uses repeated-sampling properties and sampling distributions.
-
-### 2.4.2 Bayesian inference
-
-Combines prior information and likelihood information to obtain posterior distributions.
-
-### 2.4.3 Randomisation-based inference
-
-Uses a randomisation mechanism or permutation distribution to evaluate hypotheses or treatment effects.
-
-### 2.4.4 Likelihood-based inference
-
-Uses likelihood functions and likelihood-based procedures for estimation, comparison and uncertainty assessment.
-
-These paradigms should not be treated as mutually exclusive knowledge areas. A statistical model or analytical question may support more than one inferential approach.
-
-## 2.5 Statistical entity types
-
-Every catalogue record must have an explicit entity type.
-
-### 2.5.1 Method
-
-A defined analytical procedure.
-
-Examples: Welch's t-test, Mann–Whitney U test, Kaplan–Meier estimation.
-
-### 2.5.2 Model
-
-A mathematical or probabilistic representation of a data-generating process or relationship.
-
-Examples: linear regression model, logistic regression model, Cox proportional hazards model.
-
-### 2.5.3 Study design
-
-A structure governing how observations, treatments, exposures or measurements are organised and obtained.
-
-Examples: randomised complete block design, cohort study, crossover trial.
-
-### 2.5.4 Diagnostic
-
-A procedure or measure used to assess data, assumptions, model fit or analytical reliability.
-
-Examples: Shapiro–Wilk test, variance inflation factor, Cook's distance.
-
-### 2.5.5 Computational algorithm
-
-A numerical or simulation-based procedure used to estimate, approximate or execute statistical computations.
-
-Examples: Gibbs sampling, Hamiltonian Monte Carlo, bootstrap resampling.
-
-### 2.5.6 Statistical measure
-
-A quantity used to describe data, association, uncertainty or effect magnitude.
-
-Examples: standard deviation, odds ratio, Cohen's d, hazard ratio.
-
-### 2.5.7 Visualisation
-
-A graphical representation of data, estimates, model behaviour or uncertainty.
-
-Examples: histogram, Q–Q plot, forest plot, Kaplan–Meier curve.
-
-### 2.5.8 Statistical principle or theory
-
-A foundational concept governing statistical reasoning.
-
-Examples: Central Limit Theorem, randomisation, sufficiency, likelihood theory.
-
-### 2.5.9 Reporting procedure
-
-A procedure for presenting, interpreting or communicating statistical findings.
-
-Examples: structured hypothesis-test reporting, model-performance reporting.
-
-## 2.6 Canonical classification principle
-
-Each entity must have one canonical record and one unique identifier.
-
-The same method must not be independently registered in multiple catalogue sections.
-
-Where a method applies to multiple domains or purposes, the catalogue should use:
-
-- One canonical record.
-- Multiple classification tags.
-- Parent-child relationships where appropriate.
-- Cross-references to related methods and models.
-
-For example, Spearman correlation may be relevant to descriptive association, non-parametric statistics and inferential association analysis. It should have one canonical method record, not three independent definitions.
+**Classification rule:** Descriptive and inferential statistics remain fundamental analytical purposes, but predictive, causal, exploratory and decision-oriented analyses must also be represented. Not every statistical discipline belongs exclusively to one purpose.
 
 ---
 
-# PART II: FOUNDATIONAL STATISTICS
-
-# 3. DESCRIPTIVE STATISTICS
-
-Descriptive statistics organise, summarise and present observed data.
-
-## 3.1 Frequency and distribution analysis
-
-- Frequency distribution.
-- Absolute frequency.
-- Relative frequency.
-- Cumulative frequency.
-- Cumulative relative frequency.
-- Proportions.
-- Percentages.
-- Grouped frequency distribution.
-- Frequency density.
-- Cross-tabulation.
-- Contingency tables.
-- Joint frequency distributions.
-- Marginal frequency distributions.
-- Conditional frequency distributions.
-- Two-way frequency tables.
-- Multi-way frequency tables.
-- Weighted frequency distributions.
-
-## 3.2 Measures of central tendency
-
-- Arithmetic mean.
-- Weighted arithmetic mean.
-- Geometric mean.
-- Harmonic mean.
-- Median.
-- Mode.
-- Trimmed mean.
-- Winsorised mean.
-- Midrange.
-- Trimean.
-- Geometric median.
-- Robust location estimators.
-
-## 3.3 Measures of dispersion
-
-- Minimum and maximum.
-- Range.
-- Interquartile range.
-- Quartile deviation.
-- Mean absolute deviation.
-- Median absolute deviation.
-- Population variance.
-- Sample variance.
-- Population standard deviation.
-- Sample standard deviation.
-- Coefficient of variation.
-- Relative dispersion measures.
-- Average absolute deviation.
-- Interdecile range.
-- Robust scale estimators.
-
-## 3.4 Measures of position
-
-- Quartiles.
-- Deciles.
-- Percentiles.
-- Quantiles.
-- Quintiles.
-- Z-scores.
-- Standard scores.
-- Percentile ranks.
-- Rank statistics.
-- Standardised values.
-- Studentised values.
-
-## 3.5 Measures of distribution shape
-
-- Skewness.
-- Positive skewness.
-- Negative skewness.
-- Symmetry assessment.
-- Kurtosis.
-- Excess kurtosis.
-- Mesokurtic distribution.
-- Leptokurtic distribution.
-- Platykurtic distribution.
-- Higher-order moments.
-- L-moments.
-- Robust measures of skewness.
-- Robust measures of kurtosis.
-
-## 3.6 Descriptive association and relationship measures
-
-- Covariance.
-- Pearson correlation coefficient.
-- Spearman rank correlation coefficient.
-- Kendall's tau.
-- Phi coefficient.
-- Cramér's V.
-- Contingency coefficient.
-- Point-biserial correlation coefficient.
-- Rank-biserial correlation coefficient.
-- Polychoric correlation.
-- Tetrachoric correlation.
-- Polyserial correlation.
-- Distance correlation.
-- Mutual information.
-- Intraclass correlation coefficient.
-
-The descriptive association coefficient must be distinguished from a corresponding inferential significance test or interval estimate.
-
-## 3.7 Graphical descriptive methods
-
-### Categorical data
-
-- Bar chart.
-- Grouped bar chart.
-- Stacked bar chart.
-- Pie chart.
-- Mosaic plot.
-- Pareto chart.
-- Population pyramid.
-
-### Numerical data
-
-- Histogram.
-- Frequency polygon.
-- Ogive.
-- Box plot.
-- Violin plot.
-- Dot plot.
-- Stem-and-leaf plot.
-- Density plot.
-- Empirical cumulative distribution plot.
-- Strip plot.
-- Beeswarm plot.
-
-### Relationship visualisations
-
-- Scatter plot.
-- Bubble plot.
-- Line graph.
-- Heatmap.
-- Pair plot.
-- Correlogram.
-- Parallel-coordinate plot.
-- Radar chart.
-
-### Distribution diagnostics and comparisons
-
-- Q–Q plot.
-- P–P plot.
-- Error-bar plot.
-- Ridgeline plot.
-
-## 3.8 Exploratory data analysis
-
-- Univariate analysis.
-- Bivariate analysis.
-- Multivariate exploratory analysis.
-- Distribution exploration.
-- Outlier identification.
-- Missing-data exploration.
-- Duplicate-record analysis.
-- Grouped descriptive analysis.
-- Stratified descriptive analysis.
-- Robust exploratory summaries.
-- Relationship exploration.
-- Pattern detection.
-- Data transformation exploration.
-- Exploratory dimension reduction.
-
----
-
-# 4. PROBABILITY THEORY AND DISTRIBUTIONS
+# 3. PROBABILITY THEORY AND DISTRIBUTIONS
 
 Probability theory provides the mathematical foundation for statistical modelling and inference.
 
-## 4.1 Probability fundamentals
+## 3.1 Probability fundamentals
 
-- Classical probability.
-- Empirical probability.
-- Axiomatic probability.
-- Conditional probability.
-- Joint probability.
-- Marginal probability.
-- Independence of events.
-- Mutually exclusive events.
-- Bayes' theorem.
-- Law of total probability.
-- Combinatorics.
-- Permutations and combinations.
-- Conditional independence.
-- Probability spaces.
-- Events and sigma-algebras.
-- Probability measures.
+- Classical probability
+- Empirical probability
+- Axiomatic probability
+- Conditional probability
+- Joint probability
+- Marginal probability
+- Independence of events
+- Conditional independence
+- Mutually exclusive events
+- Bayes' theorem
+- Law of total probability
+- Combinatorics
+- Permutations and combinations
+- Inclusion–exclusion principle
 
-## 4.2 Random variables
+## 3.2 Random variables and distributions
 
-- Discrete random variables.
-- Continuous random variables.
-- Mixed random variables.
-- Probability mass functions.
-- Probability density functions.
-- Cumulative distribution functions.
-- Joint distributions.
-- Marginal distributions.
-- Conditional distributions.
-- Transformations of random variables.
-- Order statistics.
-- Random vectors.
+- Discrete random variables
+- Continuous random variables
+- Mixed random variables
+- Probability mass functions
+- Probability density functions
+- Cumulative distribution functions
+- Joint distributions
+- Marginal distributions
+- Conditional distributions
+- Transformations of random variables
+- Order statistics
+- Quantile functions
 
-## 4.3 Probability moments and properties
+## 3.3 Probability moments and properties
 
-- Mathematical expectation.
-- Variance.
-- Standard deviation.
-- Covariance.
-- Correlation.
-- Conditional expectation.
-- Moment-generating functions.
-- Characteristic functions.
-- Probability-generating functions.
-- Higher-order moments.
-- Conditional variance.
-- Jensen's inequality.
-- Markov's inequality.
-- Chebyshev's inequality.
+- Mathematical expectation
+- Variance
+- Standard deviation
+- Covariance
+- Correlation
+- Conditional expectation
+- Conditional variance
+- Moment-generating functions
+- Characteristic functions
+- Probability-generating functions
+- Higher-order moments
+- Skewness
+- Kurtosis
 
-## 4.4 Discrete probability distributions
+## 3.4 Discrete probability distributions
 
-- Bernoulli distribution.
-- Binomial distribution.
-- Geometric distribution.
-- Negative binomial distribution.
-- Hypergeometric distribution.
-- Poisson distribution.
-- Discrete uniform distribution.
-- Multinomial distribution.
-- Beta-binomial distribution.
-- Discrete Laplace distribution.
-- Zipf distribution.
-- Zero-truncated distributions.
+- Bernoulli
+- Binomial
+- Geometric
+- Negative binomial
+- Hypergeometric
+- Poisson
+- Discrete uniform
+- Multinomial
+- Beta-binomial
+- Zero-truncated count distributions
+- Conway–Maxwell–Poisson
 
-## 4.5 Continuous probability distributions
+## 3.5 Continuous probability distributions
 
-- Uniform distribution.
-- Normal distribution.
-- Standard normal distribution.
-- Exponential distribution.
-- Gamma distribution.
-- Beta distribution.
-- Chi-square distribution.
-- Student's t-distribution.
-- F-distribution.
-- Weibull distribution.
-- Log-normal distribution.
-- Logistic distribution.
-- Cauchy distribution.
-- Pareto distribution.
-- Laplace distribution.
-- Rayleigh distribution.
-- Gumbel distribution.
-- Inverse Gaussian distribution.
-- Generalised extreme-value distribution.
-- Generalised Pareto distribution.
-- Student's t multivariate distribution.
-- Dirichlet distribution.
-- Multivariate normal distribution.
-- Multivariate t-distribution.
+- Uniform
+- Normal
+- Standard normal
+- Exponential
+- Gamma
+- Beta
+- Chi-square
+- Student's t
+- F
+- Weibull
+- Log-normal
+- Logistic
+- Cauchy
+- Pareto
+- Laplace
+- Rayleigh
+- Gumbel
+- Inverse Gaussian
+- Generalised extreme-value
+- Generalised Pareto
+- Multivariate normal
+- Multivariate t
+- Dirichlet
+- Wishart
+- Inverse-Wishart
+- von Mises
+- Other directional distributions
 
-## 4.6 Sampling distributions and limit theorems
+## 3.6 Sampling distributions and limit theorems
 
-- Sampling distributions.
-- Central Limit Theorem.
-- Law of Large Numbers.
-- Distribution of sample means.
-- Distribution of sample proportions.
-- Distribution of sample variance.
-- Standard error distributions.
-- Order-statistic distributions.
-- Asymptotic distributions.
-- Delta method.
-- Slutsky's theorem.
-- Continuous mapping theorem.
-- Weak convergence.
-- Almost-sure convergence.
-- Convergence in probability.
-- Convergence in distribution.
+- Sampling distributions
+- Sampling distribution of the mean
+- Sampling distribution of a proportion
+- Sampling distribution of variance
+- Standard error distributions
+- Central Limit Theorem
+- Weak Law of Large Numbers
+- Strong Law of Large Numbers
+- Slutsky's theorem
+- Delta method
+- Continuous mapping theorem
+- Asymptotic normality
+- Order-statistic distributions
 
 ---
 
-# PART III: MATHEMATICAL STATISTICS AND INFERENTIAL ANALYSIS
+# PART II — DESCRIPTIVE STATISTICS AND EXPLORATORY ANALYSIS
 
-# 5. MATHEMATICAL STATISTICS
+# 4. DESCRIPTIVE STATISTICS
 
-Mathematical statistics provides the theoretical foundation for estimation, inference and statistical decision-making.
+Descriptive statistics organise, summarise and present observed data. They do not, by themselves, establish population-level statistical significance or causation.
 
-## 5.1 Statistical foundations
+## 4.1 Frequency and distribution analysis
 
-- Population and sample theory.
-- Statistical models.
-- Parametric statistical models.
-- Non-parametric statistical models.
-- Semiparametric statistical models.
-- Likelihood functions.
-- Sampling theory.
-- Statistical sufficiency.
-- Ancillary statistics.
-- Completeness.
-- Minimal sufficiency.
-- Factorisation theorem.
+- Frequency distribution
+- Absolute frequency
+- Relative frequency
+- Cumulative frequency
+- Cumulative relative frequency
+- Proportions
+- Percentages
+- Grouped frequency distribution
+- Frequency density
+- Cross-tabulation
+- Contingency tables
+- Joint frequency distributions
+- Marginal frequency distributions
+- Conditional frequency distributions
+- Weighted frequencies
 
-## 5.2 Estimation theory
+## 4.2 Measures of central tendency
 
-- Point estimation.
-- Interval estimation.
-- Method of moments estimation.
-- Maximum likelihood estimation.
-- Least squares estimation.
-- Minimum variance estimation.
-- Unbiased estimation.
-- Consistent estimation.
-- Efficient estimation.
-- Minimum variance unbiased estimation.
-- Generalised method of moments.
-- Bayesian estimation.
-- Empirical Bayes estimation.
+- Arithmetic mean
+- Weighted arithmetic mean
+- Geometric mean
+- Harmonic mean
+- Median
+- Mode
+- Trimmed mean
+- Winsorised mean
+- Midrange
+- Trimean
+- Geometric and harmonic summaries where appropriate
 
-## 5.3 Likelihood theory
+## 4.3 Measures of dispersion
 
-- Likelihood functions.
-- Log-likelihood.
-- Score functions.
-- Fisher information.
-- Observed information.
-- Expected information.
-- Likelihood-ratio tests.
-- Profile likelihood.
-- Wald tests.
-- Score tests.
-- Likelihood-based confidence intervals.
-- Asymptotic likelihood theory.
+- Minimum and maximum
+- Range
+- Interquartile range
+- Quartile deviation
+- Mean absolute deviation
+- Median absolute deviation
+- Population variance
+- Sample variance
+- Population standard deviation
+- Sample standard deviation
+- Coefficient of variation
+- Relative dispersion measures
+- Average absolute deviation
+- Robust dispersion measures
 
-## 5.4 Statistical decision theory
+## 4.4 Measures of position
 
-- Decision rules.
-- Loss functions.
-- Risk functions.
-- Bayes risk.
-- Minimax decision rules.
-- Admissibility.
-- Complete-class principles.
-- Optimal decision rules.
-- Statistical utility.
-- Expected loss.
-- Decision-making under uncertainty.
+- Quartiles
+- Deciles
+- Percentiles
+- Quantiles
+- Quintiles
+- Z-scores
+- Standard scores
+- Percentile ranks
+- Rank statistics
+- Standardised values
 
-## 5.5 Hypothesis-testing theory
+## 4.5 Measures of distribution shape
 
-- Simple and composite hypotheses.
-- Null and alternative hypotheses.
-- Neyman–Pearson lemma.
-- Uniformly most powerful tests.
-- Likelihood-ratio testing theory.
-- Type I error.
-- Type II error.
-- Power functions.
-- Most powerful tests.
-- Unbiased tests.
-- Multiple-testing theory.
+- Skewness
+- Positive skewness
+- Negative skewness
+- Symmetry assessment
+- Kurtosis
+- Excess kurtosis
+- Mesokurtic distribution
+- Leptokurtic distribution
+- Platykurtic distribution
+- Higher-order moments
+- Tail weight
+- Empirical distribution shape
 
----
+## 4.6 Descriptive association and relationship measures
 
-# 6. CLASSICAL AND FREQUENTIST INFERENCE
+- Covariance
+- Pearson correlation coefficient
+- Spearman rank correlation coefficient
+- Kendall's tau
+- Phi coefficient
+- Cramér's V
+- Contingency coefficient
+- Point-biserial correlation coefficient
+- Rank-biserial correlation coefficient
+- Correlation ratios
+- Distance correlation
+- Mutual information
+- Theil's U
 
-## 6.1 Statistical estimation
+A descriptive association coefficient summarises the observed data. Its confidence interval or significance test is a separate inferential procedure.
 
-- Point estimation.
-- Interval estimation.
-- Method of moments estimation.
-- Maximum likelihood estimation.
-- Least squares estimation.
-- Minimum variance estimation.
-- Unbiased estimation.
-- Consistent estimation.
-- Efficient estimation.
-- Sufficient statistics.
-- Fisher information.
-- Standard errors.
-- Margin of error.
-- Generalised estimating equations where applicable.
+## 4.7 Graphical descriptive methods
 
-## 6.2 Confidence intervals
+- Bar chart
+- Grouped bar chart
+- Stacked bar chart
+- Pie chart
+- Histogram
+- Frequency polygon
+- Ogive
+- Box plot
+- Violin plot
+- Dot plot
+- Stem-and-leaf plot
+- Scatter plot
+- Bubble plot
+- Line graph
+- Density plot
+- Empirical cumulative distribution plot
+- Q–Q plot
+- P–P plot
+- Heatmap
+- Mosaic plot
+- Error-bar plot
+- Population pyramid
+- Pareto chart
+- Radar chart
+- Ridgeline plot
+- Hexbin plot
+- Pair plot
+- Correlogram
 
-- Confidence interval for a population mean.
-- Confidence interval for a population proportion.
-- Confidence interval for a variance.
-- Confidence interval for a difference between means.
-- Confidence interval for a difference between proportions.
-- Confidence interval for correlation.
-- Confidence interval for regression coefficients.
-- Confidence interval for odds ratios.
-- Confidence interval for risk ratios.
-- Confidence interval for rate ratios.
-- Confidence interval for effect sizes.
-- Bootstrap confidence intervals.
-- Profile likelihood confidence intervals.
-- Exact confidence intervals.
-- Simultaneous confidence intervals.
-- Prediction intervals.
-- Tolerance intervals.
+## 4.8 Exploratory data analysis
 
-## 6.3 Hypothesis testing
-
-- Null and alternative hypotheses.
-- Simple and composite hypotheses.
-- One-tailed testing.
-- Two-tailed testing.
-- Significance levels.
-- P-values.
-- Critical-value methods.
-- Type I error.
-- Type II error.
-- Statistical power.
-- Minimum detectable effect.
-- Multiple-testing correction.
-- Family-wise error rate.
-- False discovery rate.
-- Bonferroni correction.
-- Holm correction.
-- Benjamini–Hochberg procedure.
-- Benjamini–Yekutieli procedure.
-- Permutation-based testing.
-- Equivalence testing.
-- Non-inferiority testing.
-- Sequential hypothesis testing.
-
-## 6.4 Tests of means and differences
-
-### Parametric tests
-
-- One-sample t-test.
-- Independent-samples Student's t-test.
-- Welch's independent-samples t-test.
-- Paired-samples t-test.
-- One-way ANOVA.
-- Two-way ANOVA.
-- Factorial ANOVA.
-- N-way ANOVA.
-- Repeated-measures ANOVA.
-- Mixed-design ANOVA.
-- Analysis of covariance (ANCOVA).
-- Multivariate analysis of variance (MANOVA).
-- Multivariate analysis of covariance (MANCOVA).
-- General linear model comparisons.
-
-### Non-parametric alternatives
-
-- One-sample sign test.
-- Two-sample sign test.
-- Mann–Whitney U test.
-- Wilcoxon signed-rank test.
-- Kruskal–Wallis test.
-- Friedman test.
-- Mood's median test.
-- Jonckheere–Terpstra test.
-- Fligner–Policello test.
-- Brunner–Munzel test.
-- Aligned rank transform procedures.
-
-## 6.5 Tests of categorical data
-
-- Chi-square goodness-of-fit test.
-- Chi-square test of independence.
-- Chi-square test of homogeneity.
-- Fisher's exact test.
-- McNemar's test.
-- Cochran's Q test.
-- Binomial test.
-- Multinomial test.
-- One-proportion z-test.
-- Two-proportion z-test.
-- Exact tests for contingency tables.
-- Mantel–Haenszel test.
-- Cochran–Mantel–Haenszel procedures.
-- Trend tests for ordered categories.
-- Exact conditional inference.
-
-## 6.6 Correlation and association inference
-
-- Pearson correlation significance test.
-- Spearman correlation significance test.
-- Kendall's tau significance test.
-- Partial correlation test.
-- Semi-partial correlation.
-- Point-biserial correlation test.
-- Rank correlation tests.
-- Tests for equality of correlation coefficients.
-- Tests of partial correlations.
-- Confidence intervals for correlation coefficients.
-
-## 6.7 Goodness-of-fit and distribution tests
-
-- Chi-square goodness-of-fit.
-- Kolmogorov–Smirnov test.
-- Shapiro–Wilk test.
-- Anderson–Darling test.
-- Cramér–von Mises test.
-- Jarque–Bera test.
-- Lilliefors test.
-- D'Agostino's K-squared test.
-- Levene's test.
-- Brown–Forsythe test.
-- Bartlett's test.
-- Fligner–Killeen test.
-
-These procedures must be classified according to what they test. Distributional tests, variance-homogeneity tests and general model diagnostics must not be treated as interchangeable.
+- Univariate analysis
+- Bivariate analysis
+- Multivariate exploratory analysis
+- Distribution exploration
+- Outlier identification
+- Missing-data exploration
+- Duplicate-record analysis
+- Grouped descriptive analysis
+- Stratified descriptive analysis
+- Robust exploratory summaries
+- Pattern and anomaly exploration
+- Data transformation exploration
+- Preliminary relationship assessment
 
 ---
 
-# PART IV: MODELLING AND ADVANCED INFERENCE
+# PART III — CLASSICAL AND BAYESIAN INFERENCE
+
+# 5. CLASSICAL AND FREQUENTIST INFERENCE
+
+Frequentist inference evaluates procedures through their repeated-sampling properties. It includes estimation, confidence intervals, hypothesis testing and model-based inference.
+
+## 5.1 Statistical estimation
+
+- Point estimation
+- Interval estimation
+- Method of moments estimation
+- Maximum likelihood estimation
+- Least squares estimation
+- Generalised least squares estimation
+- Minimum variance estimation
+- Unbiased estimation
+- Consistent estimation
+- Efficient estimation
+- Sufficient statistics
+- Complete statistics
+- Fisher information
+- Standard errors
+- Margin of error
+- Profile likelihood estimation
+- Restricted maximum likelihood
+- Generalised method of moments
+
+## 5.2 Confidence intervals
+
+- Confidence interval for a population mean
+- Confidence interval for a population proportion
+- Confidence interval for a variance
+- Confidence interval for a difference between means
+- Confidence interval for a difference between proportions
+- Confidence interval for correlation
+- Confidence interval for regression coefficients
+- Confidence interval for odds ratios
+- Confidence interval for risk ratios
+- Confidence interval for rate ratios
+- Confidence interval for hazard ratios
+- Confidence interval for effect sizes
+- Bootstrap confidence intervals
+- Profile likelihood confidence intervals
+- Exact confidence intervals
+- Simultaneous confidence intervals
+- Prediction intervals
+- Tolerance intervals
+
+## 5.3 Hypothesis testing
+
+- Null and alternative hypotheses
+- Simple and composite hypotheses
+- One-tailed testing
+- Two-tailed testing
+- Significance levels
+- P-values
+- Critical-value methods
+- Type I error
+- Type II error
+- Statistical power
+- Minimum detectable effect
+- Multiple-testing correction
+- Family-wise error rate
+- False discovery rate
+- Bonferroni correction
+- Holm correction
+- Benjamini–Hochberg procedure
+- Benjamini–Yekutieli procedure
+- Permutation-based tests
+- Equivalence testing
+- Non-inferiority testing
+- Sequential testing
+
+## 5.4 Tests of means and differences
+
+**Parametric procedures**
+
+- One-sample t-test
+- Independent-samples Student's t-test
+- Welch's independent-samples t-test
+- Paired-samples t-test
+- One-way ANOVA
+- Two-way ANOVA
+- Factorial ANOVA
+- N-way ANOVA
+- Repeated-measures ANOVA
+- Mixed-design ANOVA
+- Analysis of covariance (ANCOVA)
+- Multivariate analysis of variance (MANOVA)
+- Multivariate analysis of covariance (MANCOVA)
+- Planned contrasts
+- Post-hoc comparisons
+- Multiple-comparison procedures
+
+**Non-parametric or distribution-free procedures**
+
+- One-sample sign test
+- Two-sample sign test
+- Mann–Whitney U test
+- Wilcoxon signed-rank test
+- Kruskal–Wallis test
+- Friedman test
+- Mood's median test
+- Jonckheere–Terpstra test
+- Fligner–Policello test
+- Brunner–Munzel test
+
+The catalogue must distinguish a test's mathematical assumptions from the simplistic label "parametric" or "non-parametric". For example, rank tests may target different distributional quantities from tests of means.
+
+## 5.5 Tests of categorical data
+
+- Chi-square goodness-of-fit test
+- Chi-square test of independence
+- Chi-square test of homogeneity
+- Fisher's exact test
+- McNemar's test
+- Cochran's Q test
+- Binomial test
+- Multinomial test
+- One-proportion z-test
+- Two-proportion z-test
+- Exact tests for contingency tables
+- Mantel–Haenszel test
+- Tests for paired categorical data
+- Tests for trend in proportions
+- Exact conditional tests
+
+## 5.6 Correlation and association inference
+
+- Pearson correlation significance test
+- Spearman correlation significance test
+- Kendall's tau significance test
+- Partial correlation test
+- Semi-partial correlation inference
+- Point-biserial correlation test
+- Rank correlation tests
+- Tests for equality of correlation coefficients
+- Confidence intervals for association measures
+- Tests of association in contingency tables
+
+## 5.7 Goodness-of-fit and distribution tests
+
+- Chi-square goodness-of-fit test
+- Kolmogorov–Smirnov test
+- Shapiro–Wilk test
+- Anderson–Darling test
+- Cramér–von Mises test
+- Jarque–Bera test
+- Lilliefors test
+- D'Agostino's K-squared test
+- Levene's test
+- Brown–Forsythe test
+- Bartlett's test
+- Fligner–Killeen test
+
+These tests must be classified as inferential procedures or diagnostics according to their actual role. Graphical assessments such as Q–Q plots are diagnostic visualisations, not hypothesis tests.
+
+---
+
+# 6. BAYESIAN STATISTICS
+
+Bayesian statistics is a first-class inference paradigm and knowledge area. It must not be treated merely as a collection of separate regression methods.
+
+## 6.1 Bayesian foundations
+
+- Prior distributions
+- Likelihood functions
+- Posterior distributions
+- Posterior predictive distributions
+- Bayes' theorem
+- Posterior odds
+- Bayes factors
+- Bayesian decision theory
+- Prior elicitation
+- Prior sensitivity analysis
+- Exchangeability
+- Hierarchical probability models
+
+## 6.2 Bayesian estimation
+
+- Bayesian point estimation
+- Bayesian interval estimation
+- Credible intervals
+- Highest posterior density intervals
+- Conjugate prior analysis
+- Empirical Bayes estimation
+- Hierarchical Bayesian estimation
+- Bayesian model averaging
+- Posterior summaries
+- Posterior predictive estimation
+
+## 6.3 Bayesian hypothesis evaluation
+
+- Bayesian hypothesis comparison
+- Bayes factors
+- Posterior probability of hypotheses
+- Bayesian evidence assessment
+- Bayesian equivalence testing
+- Bayesian decision rules
+- Region of practical equivalence
+
+## 6.4 Bayesian computational methods
+
+- Markov Chain Monte Carlo
+- Metropolis–Hastings algorithm
+- Gibbs sampling
+- Hamiltonian Monte Carlo
+- No-U-Turn Sampler
+- Importance sampling
+- Rejection sampling
+- Sequential Monte Carlo
+- Variational inference
+- Approximate Bayesian computation
+- Posterior predictive checking
+- Convergence diagnostics
+- Effective sample size
+- Monte Carlo standard error
+
+## 6.5 Bayesian modelling
+
+- Bayesian linear regression
+- Bayesian logistic regression
+- Bayesian generalised linear models
+- Bayesian ANOVA
+- Bayesian hierarchical models
+- Bayesian multilevel models
+- Bayesian survival models
+- Bayesian time-series models
+- Bayesian spatial models
+- Bayesian networks
+- Bayesian non-parametric models
+- Bayesian mixture models
+- Bayesian latent-variable models
+- Bayesian causal models
+
+---
+
+# PART IV — MODELLING AND REGRESSION
 
 # 7. REGRESSION AND GENERALISED LINEAR MODELS
 
-## 7.1 Linear regression models
+## 7.1 Linear regression
 
-- Simple linear regression.
-- Multiple linear regression.
-- Polynomial regression.
-- Interaction regression.
-- Weighted least squares regression.
-- Generalised least squares.
-- Regression with categorical predictors.
-- Regression with continuous predictors.
-- Regression with dummy variables.
-- Regression with transformed variables.
-- Multivariate linear regression.
-- Constrained linear regression.
+- Simple linear regression
+- Multiple linear regression
+- Polynomial regression
+- Interaction regression
+- Weighted least squares regression
+- Generalised least squares
+- Regression with categorical predictors
+- Regression with continuous predictors
+- Regression with dummy variables
+- Regression with transformed variables
+- Restricted and constrained regression
 
 ## 7.2 Generalised linear models
 
-- Generalised linear models.
-- Binary logistic regression.
-- Multinomial logistic regression.
-- Ordinal logistic regression.
-- Poisson regression.
-- Negative binomial regression.
-- Quasi-Poisson regression.
-- Gamma regression.
-- Inverse Gaussian regression.
-- Probit regression.
-- Complementary log-log regression.
-- Zero-inflated Poisson regression.
-- Zero-inflated negative binomial regression.
-- Hurdle models.
-- Beta regression.
-- Tweedie regression.
-- Generalised additive models for location, scale and shape.
+- Generalised linear models
+- Binary logistic regression
+- Multinomial logistic regression
+- Ordinal logistic regression
+- Poisson regression
+- Negative binomial regression
+- Quasi-Poisson regression
+- Gamma regression
+- Inverse Gaussian regression
+- Probit regression
+- Complementary log-log regression
+- Zero-inflated Poisson regression
+- Zero-inflated negative binomial regression
+- Hurdle models
+- Beta regression
+- Fractional response models
 
 ## 7.3 Advanced regression
 
-- Robust regression.
-- Quantile regression.
-- Ridge regression.
-- Lasso regression.
-- Elastic net regression.
-- Generalised additive models.
-- Non-linear regression.
-- Spline regression.
-- Mixed-effects regression.
-- Multilevel regression.
-- Hierarchical regression.
-- Bayesian regression.
-- Penalised regression.
-- Tobit regression.
-- Truncated regression.
-- Censored regression.
-- Sample-selection models.
-- Instrumental-variable regression.
-- Regression discontinuity models.
-- Spatial regression.
-- Panel-data regression.
-- Fixed-effects models.
-- Random-effects models.
-- Dynamic panel models.
+- Robust regression
+- Quantile regression
+- Ridge regression
+- Lasso regression
+- Elastic net regression
+- Generalised additive models
+- Non-linear regression
+- Spline regression
+- Mixed-effects regression
+- Multilevel regression
+- Hierarchical regression
+- Bayesian regression
+- Penalised regression
+- Partial least squares regression
+- Reduced-rank regression
+- Tobit regression
+- Truncated regression
+- Censored regression
+- Multivariate regression
+- Distributional regression
 
-Hierarchical regression as a blockwise variable-entry strategy must be distinguished from hierarchical or multilevel models that represent nested data structures.
+## 7.4 Longitudinal and clustered-data models
 
-## 7.4 Categorical response modelling
+- Linear mixed-effects models
+- Generalised linear mixed models
+- Random-intercept models
+- Random-slope models
+- Growth-curve models
+- Population-averaged models
+- Generalised estimating equations
+- Repeated-measures regression
+- Clustered-data regression
+- Hierarchical longitudinal models
 
-- Binary response models.
-- Multinomial response models.
-- Ordinal response models.
-- Adjacent-category models.
-- Continuation-ratio models.
-- Cumulative-link models.
-- Log-linear models.
-- Multinomial probit models.
-- Ordinal probit models.
+## 7.5 Categorical response models
 
-## 7.5 Regression diagnostics
+- Binary response models
+- Multinomial response models
+- Ordinal response models
+- Adjacent-category models
+- Continuation-ratio models
+- Cumulative link models
+- Log-linear models
+- Multinomial probit models
+- Ordinal probit models
 
-- Residual analysis.
-- Linearity assessment.
-- Heteroscedasticity testing.
-- Multicollinearity assessment.
-- Autocorrelation testing.
-- Influence diagnostics.
-- Leverage analysis.
-- Cook's distance.
-- DFBETAs.
-- DFFITS.
-- Model specification tests.
-- Goodness-of-fit assessment.
-- Residual normality assessment.
-- Calibration assessment.
-- Cross-validation.
+## 7.6 Regression diagnostics and model evaluation
 
-Cross-validation is primarily a model evaluation procedure, not a substitute for residual or assumption diagnostics.
+- Residual analysis
+- Linearity assessment
+- Heteroscedasticity testing
+- Multicollinearity assessment
+- Autocorrelation testing
+- Influence diagnostics
+- Leverage analysis
+- Cook's distance
+- DFBETAs
+- DFFITS
+- Model specification tests
+- Goodness-of-fit assessment
+- Calibration assessment
+- Residual distribution assessment
+- Cross-validation
+- External validation
 
----
-
-# 8. BAYESIAN STATISTICS
-
-Bayesian statistics is a first-class knowledge area and an inference paradigm that may be applied across multiple statistical domains.
-
-## 8.1 Bayesian foundations
-
-- Prior distributions.
-- Likelihood functions.
-- Posterior distributions.
-- Posterior predictive distributions.
-- Bayes' theorem.
-- Posterior odds.
-- Bayes factors.
-- Bayesian decision theory.
-- Informative priors.
-- Weakly informative priors.
-- Non-informative priors.
-- Conjugate priors.
-- Prior predictive checking.
-- Posterior predictive checking.
-
-## 8.2 Bayesian estimation
-
-- Bayesian point estimation.
-- Bayesian interval estimation.
-- Credible intervals.
-- Highest posterior density intervals.
-- Conjugate prior analysis.
-- Empirical Bayes estimation.
-- Hierarchical Bayesian estimation.
-- Bayesian model averaging.
-- Bayesian shrinkage estimation.
-- Bayesian regularisation.
-
-## 8.3 Bayesian hypothesis testing
-
-- Bayesian hypothesis comparison.
-- Bayes factors.
-- Posterior probability of hypotheses.
-- Bayesian evidence assessment.
-- Bayesian equivalence testing.
-- Bayesian non-inferiority analysis.
-- Bayesian model comparison.
-
-## 8.4 Bayesian computational methods
-
-- Markov Chain Monte Carlo.
-- Metropolis–Hastings algorithm.
-- Gibbs sampling.
-- Hamiltonian Monte Carlo.
-- No-U-Turn Sampler.
-- Importance sampling.
-- Sequential Monte Carlo.
-- Variational inference.
-- Approximate Bayesian computation.
-- Posterior predictive checking.
-- Convergence diagnostics.
-- Effective sample size.
-- Trace-plot analysis.
-- Monte Carlo standard errors.
-
-## 8.5 Bayesian modelling
-
-- Bayesian linear regression.
-- Bayesian logistic regression.
-- Bayesian ANOVA.
-- Bayesian hierarchical models.
-- Bayesian multilevel models.
-- Bayesian survival models.
-- Bayesian time-series models.
-- Bayesian spatial models.
-- Bayesian networks.
-- Bayesian non-parametric models.
-- Bayesian mixture models.
-- Bayesian latent-variable models.
-- Bayesian causal models.
-- Bayesian longitudinal models.
+Cross-validation and external validation are model-evaluation procedures. They should not be conflated with residual diagnostics or assumption tests.
 
 ---
 
-# PART V: EXPERIMENTAL DESIGN AND SAMPLING
+# PART V — STUDY DESIGN, SAMPLING AND SURVEY STATISTICS
 
-# 9. EXPERIMENTAL DESIGN AND DESIGN OF EXPERIMENTS
+# 8. EXPERIMENTAL DESIGN AND DESIGN OF EXPERIMENTS
 
-Experimental design is a study-design knowledge area. Its design structures must be distinguished from the statistical procedures used to analyse the resulting data.
+Experimental design is a distinct design domain. A design specifies how observations, treatments and experimental units are organised; a statistical analysis method is selected to analyse the resulting data.
 
-## 9.1 Principles of experimental design
+## 8.1 Principles of experimental design
 
-- Randomisation.
-- Replication.
-- Blocking.
-- Factorial experimentation.
-- Control groups.
-- Treatment allocation.
-- Experimental units.
-- Confounding control.
-- Blinding.
-- Allocation concealment.
-- Treatment fidelity.
-- Experimental validity.
-- Internal validity.
-- External validity.
-- Carryover control.
-- Interference between experimental units.
+- Randomisation
+- Replication
+- Blocking
+- Factorial experimentation
+- Control groups
+- Treatment allocation
+- Experimental units
+- Confounding control
+- Allocation concealment
+- Blinding
+- Internal validity
+- External validity
 
-## 9.2 Classical experimental designs
+## 8.2 Classical experimental designs
 
-- Completely randomised design.
-- Randomised complete block design.
-- Incomplete block design.
-- Balanced incomplete block design.
-- Latin square design.
-- Graeco-Latin square design.
-- Factorial design.
-- Full factorial design.
-- Fractional factorial design.
-- Split-plot design.
-- Split-split-plot design.
-- Nested design.
-- Repeated-measures design.
-- Crossover design.
-- Incomplete crossover design.
-- Response surface designs.
+- Completely randomised design
+- Randomised complete block design
+- Latin square design
+- Graeco-Latin square design
+- Full factorial design
+- Fractional factorial design
+- Split-plot design
+- Split-split-plot design
+- Nested design
+- Repeated-measures design
+- Crossover design
+- Incomplete block design
+- Balanced incomplete block design
 
-## 9.3 Advanced experimental designs
+## 8.3 Advanced experimental designs
 
-- Response surface methodology.
-- Central composite design.
-- Box–Behnken design.
-- Mixture design.
-- Optimal design.
-- D-optimal design.
-- A-optimal design.
-- G-optimal design.
-- I-optimal design.
-- Taguchi methods.
-- Robust parameter design.
-- Sequential experimental design.
-- Adaptive experimentation.
-- Computer-generated optimal designs.
-- Factor screening designs.
+- Response surface methodology
+- Central composite design
+- Box–Behnken design
+- Mixture design
+- Optimal design
+- D-optimal design
+- A-optimal design
+- G-optimal design
+- Taguchi methods
+- Robust parameter design
+- Sequential experimental design
+- Adaptive experimentation
+- Factor screening
+- Definitive screening designs
 
-## 9.4 Clinical and intervention study designs
+## 8.4 Clinical and intervention study designs
 
-- Parallel-group trials.
-- Cluster-randomised trials.
-- Crossover trials.
-- Factorial clinical trials.
-- Stepped-wedge trials.
-- Adaptive clinical trials.
-- Non-inferiority trials.
-- Equivalence trials.
-- Superiority trials.
-- Single-arm trials.
-- Pragmatic trials.
-- Explanatory trials.
-- Platform trials.
-- Basket trials.
-- Umbrella trials.
-- N-of-1 trials.
-- Randomised encouragement designs.
+- Parallel-group trials
+- Individually randomised trials
+- Cluster-randomised trials
+- Crossover trials
+- Factorial clinical trials
+- Stepped-wedge trials
+- Adaptive clinical trials
+- Non-inferiority trials
+- Equivalence trials
+- Superiority trials
+- Single-arm trials
+- Pragmatic trials
+- Explanatory trials
+- Platform trials
+- Basket trials
+- Umbrella trials
 
-## 9.5 Experimental analysis procedures
+## 8.5 Experimental analysis procedures
 
-- Treatment-effect estimation.
-- Analysis of variance.
-- Blocking analysis.
-- Factorial effect analysis.
-- Interaction analysis.
-- Response surface analysis.
-- Sample-size determination.
-- Power analysis.
-- Interim analysis.
-- Multiple-comparison procedures.
-- Multiplicity adjustment.
-- Treatment-effect heterogeneity analysis.
-- Intention-to-treat analysis.
-- Per-protocol analysis.
-- Sensitivity analysis.
+- Treatment-effect estimation
+- Analysis of variance
+- Blocking analysis
+- Factorial effect analysis
+- Interaction analysis
+- Response surface analysis
+- Sample-size determination
+- Power analysis
+- Interim analysis
+- Multiple-comparison procedures
+- Intention-to-treat analysis
+- Per-protocol analysis
+- Sensitivity analysis
 
-## 9.6 Power and sample-size methods
+## 8.6 Design-to-analysis relationships
 
-- Power calculation for means.
-- Power calculation for proportions.
-- Power calculation for correlations.
-- Power calculation for regression.
-- Power calculation for ANOVA.
-- Cluster-trial sample-size calculation.
-- Crossover-trial sample-size calculation.
-- Survival-trial sample-size calculation.
-- Non-inferiority sample-size calculation.
-- Equivalence sample-size calculation.
-- Simulation-based power analysis.
-- Minimum detectable effect estimation.
+TimanStat should link each design structure to appropriate analysis options. For example:
+
+- Randomised complete block design → blocked ANOVA or an appropriate mixed model.
+- Cluster-randomised trial → cluster-aware regression, mixed models or GEE.
+- Crossover trial → paired or period-aware models, with carryover considerations.
+- Repeated-measures design → repeated-measures ANOVA or longitudinal models.
+- Factorial design → main-effect and interaction models.
+
+These are examples of relationships, not automatic one-to-one rules. The actual analysis depends on the outcome, allocation, number of factors, dependence structure and estimand.
 
 ---
 
-# 10. SAMPLING AND SURVEY STATISTICS
+# 9. SAMPLING AND SURVEY STATISTICS
 
-## 10.1 Probability sampling designs
+## 9.1 Probability sampling
 
-- Simple random sampling.
-- Systematic sampling.
-- Stratified random sampling.
-- Cluster sampling.
-- Multistage sampling.
-- Multiphase sampling.
-- Probability proportional to size sampling.
-- Unequal probability sampling.
-- Two-stage sampling.
-- Area sampling.
-- Adaptive cluster sampling.
-- Network sampling.
+- Simple random sampling
+- Systematic sampling
+- Stratified random sampling
+- Cluster sampling
+- Multistage sampling
+- Multiphase sampling
+- Probability proportional to size sampling
+- Unequal probability sampling
+- Two-stage sampling
+- Area sampling
+- Adaptive cluster sampling
 
-## 10.2 Non-probability sampling designs
+## 9.2 Non-probability sampling
 
-- Convenience sampling.
-- Purposive sampling.
-- Quota sampling.
-- Snowball sampling.
-- Respondent-driven sampling.
-- Consecutive sampling.
-- Volunteer sampling.
-- Time-location sampling.
-- Venue-based sampling.
+- Convenience sampling
+- Purposive sampling
+- Quota sampling
+- Snowball sampling
+- Respondent-driven sampling
+- Consecutive sampling
+- Volunteer sampling
+- Time-location sampling
 
-Inference from non-probability samples must be clearly distinguished from design-based inference using known inclusion probabilities. Model-based inference requires its own assumptions and justification.
+Non-probability samples do not automatically support design-based population inference. Model-based inference, weighting assumptions and generalisability must be considered separately.
 
-## 10.3 Survey estimation
+## 9.3 Survey estimation
 
-- Population mean estimation.
-- Population total estimation.
-- Population proportion estimation.
-- Ratio estimation.
-- Regression estimation.
-- Calibration estimation.
-- Horvitz–Thompson estimation.
-- Generalised regression estimation.
-- Difference estimation.
-- Domain estimation.
-- Small-area estimation.
-- Finite population estimation.
+- Population mean estimation
+- Population total estimation
+- Population proportion estimation
+- Ratio estimation
+- Regression estimation
+- Calibration estimation
+- Horvitz–Thompson estimation
+- Generalised regression estimation
+- Domain estimation
+- Small-area estimation
 
-## 10.4 Complex survey analysis
+## 9.4 Complex survey analysis
 
-- Survey weights.
-- Sampling weights.
-- Non-response adjustment.
-- Post-stratification.
-- Raking.
-- Finite population correction.
-- Design effects.
-- Taylor series linearisation.
-- Replicate-weight variance estimation.
-- Jackknife variance estimation.
-- Balanced repeated replication.
-- Bootstrap survey variance estimation.
-- Complex-survey regression.
-- Complex-survey hypothesis testing.
-- Survey-weighted descriptive analysis.
-- Survey-weighted confidence intervals.
-- Calibration diagnostics.
-- Non-response bias assessment.
+- Survey weights
+- Sampling weights
+- Non-response adjustment
+- Post-stratification
+- Raking
+- Finite population correction
+- Design effects
+- Taylor series linearisation
+- Replicate-weight variance estimation
+- Jackknife variance estimation
+- Balanced repeated replication
+- Bootstrap survey variance estimation
+- Complex-survey regression
+- Complex-survey hypothesis testing
+- Survey design-based confidence intervals
+- Non-response bias assessment
 
-## 10.5 Sample-size determination
+## 9.5 Sample-size determination
 
-- Estimation-based sample size.
-- Hypothesis-testing sample size.
-- Power-based sample size.
-- Finite population sample size.
-- Cluster-adjusted sample size.
-- Design-effect-adjusted sample size.
-- Non-response-adjusted sample size.
-- Precision-based sample size.
-- Stratified sample-size allocation.
-- Optimal allocation.
-- Neyman allocation.
-- Simulation-based sample-size determination.
+- Estimation-based sample size
+- Hypothesis-testing sample size
+- Power-based sample size
+- Finite population sample size
+- Cluster-adjusted sample size
+- Design-effect-adjusted sample size
+- Non-response-adjusted sample size
+- Precision-based sample size
+- Equivalence and non-inferiority sample size
+- Diagnostic accuracy sample size
+- Survival study sample size
+- Simulation-based sample size
 
 ---
 
-# PART VI: MULTIVARIATE AND NON-PARAMETRIC STATISTICS
+# PART VI — SPECIALISED STATISTICAL DISCIPLINES
 
-# 11. MULTIVARIATE STATISTICS
+# 10. MULTIVARIATE STATISTICS
 
-## 11.1 Dimension reduction
+## 10.1 Dimension reduction
 
-- Principal component analysis.
-- Exploratory factor analysis.
-- Confirmatory factor analysis.
-- Independent component analysis.
-- Correspondence analysis.
-- Multiple correspondence analysis.
-- Multidimensional scaling.
-- Non-negative matrix factorisation.
-- Factor rotation.
-- Sparse principal component analysis.
-- Kernel principal component analysis.
-- Canonical variate analysis.
-- Latent-variable analysis.
+- Principal component analysis
+- Exploratory factor analysis
+- Confirmatory factor analysis
+- Independent component analysis
+- Correspondence analysis
+- Multiple correspondence analysis
+- Multidimensional scaling
+- Non-negative matrix factorisation
+- Factor rotation
+- Sparse principal component analysis
 
-## 11.2 Multivariate association and modelling
+## 10.2 Multivariate association and modelling
 
-- Canonical correlation analysis.
-- Partial least squares.
-- Multivariate regression.
-- Multivariate analysis of variance.
-- Multivariate analysis of covariance.
-- Multivariate analysis of repeated measures.
-- Multivariate generalised linear models.
-- Multivariate analysis of covariance structures.
+- Canonical correlation analysis
+- Partial least squares
+- Multivariate regression
+- Multivariate analysis of variance
+- Multivariate analysis of covariance
+- Multivariate analysis of repeated measures
+- Canonical variate analysis
+- Multivariate generalised linear models
 
-## 11.3 Classification and discrimination
+## 10.3 Classification and discrimination
 
-- Linear discriminant analysis.
-- Quadratic discriminant analysis.
-- Classification analysis.
-- Mahalanobis distance.
-- Canonical discriminant analysis.
-- Regularised discriminant analysis.
-- Multiclass discriminant analysis.
+- Linear discriminant analysis
+- Quadratic discriminant analysis
+- Classification analysis
+- Mahalanobis distance
+- Canonical discriminant analysis
+- Regularised discriminant analysis
 
-## 11.4 Clustering
+## 10.4 Clustering
 
-- K-means clustering.
-- K-medoids clustering.
-- Hierarchical clustering.
-- Agglomerative clustering.
-- Divisive clustering.
-- Model-based clustering.
-- Gaussian mixture models.
-- Fuzzy clustering.
-- Density-based clustering.
-- DBSCAN.
-- Spectral clustering.
-- Mean-shift clustering.
-- Latent class analysis.
-- Latent profile analysis.
-- Hierarchical mixture models.
-
-## 11.5 Multivariate distribution analysis
-
-- Multivariate normality assessment.
-- Multivariate covariance analysis.
-- Multivariate outlier detection.
-- Mahalanobis distance analysis.
-- Multivariate skewness.
-- Multivariate kurtosis.
-- Multivariate hypothesis testing.
+- K-means clustering
+- K-medoids clustering
+- Hierarchical clustering
+- Agglomerative clustering
+- Divisive clustering
+- Model-based clustering
+- Gaussian mixture models
+- Fuzzy clustering
+- Density-based clustering
+- DBSCAN
+- Spectral clustering
+- Latent class analysis
+- Latent profile analysis
 
 ---
 
-# 12. NON-PARAMETRIC AND DISTRIBUTION-FREE STATISTICS
+# 11. NON-PARAMETRIC AND DISTRIBUTION-FREE STATISTICS
 
-## 12.1 Non-parametric tests
+- Sign test
+- Wilcoxon signed-rank test
+- Mann–Whitney U test
+- Kruskal–Wallis test
+- Friedman test
+- Spearman correlation
+- Kendall correlation
+- Permutation tests
+- Randomisation tests
+- Bootstrap inference
+- Kernel density estimation
+- Non-parametric regression
+- Local polynomial regression
+- Smoothing splines
+- Quantile-based inference
+- Distribution-free confidence intervals
+- Rank-based methods
+- Empirical likelihood
+- Non-parametric survival methods
 
-- Sign test.
-- Wilcoxon signed-rank test.
-- Mann–Whitney U test.
-- Kruskal–Wallis test.
-- Friedman test.
-- Mood's median test.
-- Jonckheere–Terpstra test.
-- Spearman correlation.
-- Kendall correlation.
-- Runs test.
-- Kolmogorov–Smirnov test.
-- Cramér–von Mises test.
-
-## 12.2 Randomisation and permutation methods
-
-- Permutation tests.
-- Randomisation tests.
-- Exact randomisation inference.
-- Permutation correlation tests.
-- Permutation regression tests.
-- Permutation-based ANOVA.
-- Restricted permutation procedures.
-
-## 12.3 Non-parametric estimation and modelling
-
-- Kernel density estimation.
-- Non-parametric regression.
-- Local polynomial regression.
-- Smoothing splines.
-- Quantile-based inference.
-- Distribution-free confidence intervals.
-- Rank-based estimation.
-- Empirical distribution estimation.
-- Non-parametric hazard estimation.
-
-## 12.4 Robust statistical methods
-
-- Robust location estimation.
-- Robust scale estimation.
-- Robust regression.
-- M-estimation.
-- R-estimation.
-- L-estimation.
-- Winsorisation.
-- Trimmed estimators.
-- Robust covariance estimation.
-- Robust correlation.
-- Robust multivariate analysis.
+This domain groups methods by their distributional framework. It does not create duplicate method records. A method listed elsewhere should have one canonical identity and be cross-referenced here.
 
 ---
 
-# PART VII: TIME, SURVIVAL AND LONGITUDINAL STATISTICS
+# 12. TIME-SERIES AND FORECASTING
 
-# 13. TIME-SERIES ANALYSIS AND FORECASTING
+## 12.1 Time-series exploration
 
-## 13.1 Time-series exploration
+- Trend analysis
+- Seasonal analysis
+- Cyclical analysis
+- Autocorrelation
+- Partial autocorrelation
+- Decomposition
+- Moving averages
+- Exponential smoothing
+- Structural-break analysis
+- Change-point detection
 
-- Trend analysis.
-- Seasonal analysis.
-- Cyclical analysis.
-- Autocorrelation.
-- Partial autocorrelation.
-- Decomposition.
-- Moving averages.
-- Exponential smoothing.
-- Structural-break analysis.
-- Seasonal decomposition.
-- Time-series visualisation.
+## 12.2 Stationarity and diagnostics
 
-## 13.2 Stationarity and diagnostics
+- Augmented Dickey–Fuller test
+- Phillips–Perron test
+- KPSS test
+- Ljung–Box test
+- Box–Pierce test
+- Unit-root testing
+- Residual diagnostics
+- Seasonal unit-root testing
+- Structural-break testing
 
-- Augmented Dickey–Fuller test.
-- Phillips–Perron test.
-- KPSS test.
-- Ljung–Box test.
-- Box–Pierce test.
-- Unit-root testing.
-- Residual diagnostics.
-- Structural-break testing.
-- Change-point detection.
-- ARCH effect testing.
+## 12.3 Time-series models
 
-## 13.3 Time-series models
+- Autoregressive models
+- Moving-average models
+- ARMA
+- ARIMA
+- Seasonal ARIMA
+- Vector autoregression
+- Vector error-correction models
+- ARCH
+- GARCH
+- EGARCH
+- GJR-GARCH
+- State-space models
+- Structural time-series models
+- Dynamic factor models
+- Regime-switching models
+- Fractional integration models
+- Cointegration models
+- Bayesian time-series models
+- Functional time-series models
 
-- Autoregressive models.
-- Moving-average models.
-- ARMA.
-- ARIMA.
-- Seasonal ARIMA.
-- Vector autoregression.
-- Vector error-correction models.
-- ARCH.
-- GARCH.
-- Exponential smoothing state-space models.
-- State-space models.
-- Structural time-series models.
-- Dynamic factor models.
-- Regime-switching models.
-- Threshold autoregressive models.
-- Distributed-lag models.
-- Autoregressive distributed-lag models.
-- Fractionally integrated models.
-- Long-memory models.
-- Cointegration models.
-- Functional time-series models.
+## 12.4 Forecasting
 
-## 13.4 Volatility and financial time series
+- Naive forecasting
+- Seasonal naive forecasting
+- Exponential smoothing
+- Holt's method
+- Holt–Winters method
+- ARIMA forecasting
+- Regression-based forecasting
+- Probabilistic forecasting
+- Forecast intervals
+- Forecast accuracy assessment
+- Rolling-origin evaluation
+- Forecast combination
+- Hierarchical forecasting
 
-- ARCH models.
-- GARCH models.
-- EGARCH.
-- GJR-GARCH.
-- Multivariate GARCH.
-- Stochastic volatility models.
-- Realised volatility models.
-- Volatility forecasting.
+## 12.5 Spectral and volatility analysis
 
-## 13.5 Spectral and frequency-domain methods
-
-- Spectral analysis.
-- Periodogram analysis.
-- Cross-spectral analysis.
-- Fourier methods.
-- Wavelet analysis.
-- Frequency-domain estimation.
-
-## 13.6 Forecasting
-
-- Naive forecasting.
-- Seasonal naive forecasting.
-- Exponential smoothing.
-- Holt's method.
-- Holt–Winters method.
-- ARIMA forecasting.
-- Regression-based forecasting.
-- Probabilistic forecasting.
-- Forecast intervals.
-- Forecast accuracy assessment.
-- Hierarchical forecasting.
-- Reconciliation of forecasts.
-- Ensemble forecasting.
+- Spectral analysis
+- Periodograms
+- Fourier methods
+- Wavelet analysis
+- Volatility modelling
+- ARCH-family models
+- Stochastic volatility models
 
 ---
 
-# 14. SURVIVAL AND EVENT-HISTORY ANALYSIS
+# 13. SURVIVAL AND EVENT-HISTORY ANALYSIS
 
-## 14.1 Survival estimation
-
-- Kaplan–Meier estimator.
-- Nelson–Aalen estimator.
-- Life-table analysis.
-- Survival probability estimation.
-- Cumulative hazard estimation.
-- Restricted mean survival time.
-
-## 14.2 Survival hypothesis testing
-
-- Log-rank test.
-- Wilcoxon–Breslow–Gehan test.
-- Tarone–Ware test.
-- Tests for equality of survival curves.
-
-## 14.3 Survival models
-
-- Cox proportional hazards regression.
-- Stratified Cox regression.
-- Time-dependent Cox regression.
-- Parametric survival regression.
-- Weibull survival models.
-- Exponential survival models.
-- Log-normal survival models.
-- Log-logistic survival models.
-- Generalised gamma survival models.
-- Accelerated failure-time models.
-- Frailty models.
-- Flexible parametric survival models.
-
-## 14.4 Advanced event-history methods
-
-- Competing-risks analysis.
-- Fine–Gray regression.
-- Cause-specific hazard modelling.
-- Recurrent-event analysis.
-- Multi-state models.
-- Joint longitudinal-survival models.
-- Cure models.
-- Interval-censored survival analysis.
-- Left-truncated survival analysis.
-- Recurrent-event frailty models.
-
-## 14.5 Survival measures and diagnostics
-
-- Hazard ratio estimation.
-- Survival probability estimation.
-- Cumulative incidence functions.
-- Proportional hazards diagnostics.
-- Schoenfeld residuals.
-- Martingale residuals.
-- Deviance residuals.
-- Survival model calibration.
-- Time-dependent ROC analysis.
+- Kaplan–Meier estimator
+- Nelson–Aalen estimator
+- Life-table analysis
+- Log-rank test
+- Wilcoxon–Breslow–Gehan test
+- Cox proportional hazards regression
+- Stratified Cox regression
+- Time-dependent Cox regression
+- Parametric survival regression
+- Weibull survival models
+- Exponential survival models
+- Log-normal survival models
+- Log-logistic survival models
+- Accelerated failure-time models
+- Competing-risks analysis
+- Cause-specific hazard models
+- Fine–Gray regression
+- Recurrent-event analysis
+- Frailty models
+- Multi-state models
+- Restricted mean survival time
+- Hazard ratio estimation
+- Survival probability estimation
+- Cure models
+- Interval-censored survival analysis
+- Flexible parametric survival models
+- Bayesian survival models
+- Survival machine learning
 
 ---
 
-# 15. LONGITUDINAL AND REPEATED-MEASURES STATISTICS
+# 14. SPATIAL STATISTICS AND GEOSTATISTICS
 
-Longitudinal analysis deals with repeated observations over time, usually involving the same individuals, units or clusters.
+## 14.1 Spatial exploration
 
-## 15.1 Longitudinal data structures
+- Spatial distribution analysis
+- Spatial point-pattern analysis
+- Spatial clustering
+- Spatial density estimation
+- Kernel density mapping
+- Spatial autocorrelation
+- Spatial heterogeneity assessment
 
-- Repeated-measures data.
-- Panel data.
-- Clustered longitudinal data.
-- Individual growth trajectories.
-- Unequally spaced longitudinal data.
-- Unbalanced longitudinal data.
-- Longitudinal cohort data.
+## 14.2 Spatial dependence
 
-## 15.2 Longitudinal models
+- Global Moran's I
+- Local Moran's I
+- Geary's C
+- Getis–Ord Gi*
+- Spatial correlograms
+- Join-count statistics
 
-- Repeated-measures ANOVA.
-- Linear mixed-effects models.
-- Generalised linear mixed models.
-- Multilevel longitudinal models.
-- Growth-curve models.
-- Latent growth models.
-- Generalised estimating equations.
-- Marginal models.
-- Random-intercept models.
-- Random-slope models.
-- Joint longitudinal models.
-- Bayesian longitudinal models.
+## 14.3 Spatial modelling
 
-## 15.3 Longitudinal analysis procedures
+- Spatial autoregressive models
+- Spatial error models
+- Spatial Durbin models
+- Conditional autoregressive models
+- Simultaneous autoregressive models
+- Spatial generalised linear mixed models
+- Spatial Bayesian models
+- Geographically weighted regression
+- Spatial panel models
+- Disease mapping
+- Spatial point-process models
+- Marked point-process models
+- Spatial-temporal models
 
-- Within-subject comparisons.
-- Between-subject comparisons.
-- Time-by-group interaction analysis.
-- Trajectory analysis.
-- Change-score analysis.
-- Baseline-adjusted analysis.
-- Longitudinal treatment-effect estimation.
-- Missing longitudinal data analysis.
-- Longitudinal mediation analysis.
+## 14.4 Geostatistics
 
-## 15.4 Longitudinal diagnostics
-
-- Residual diagnostics.
-- Covariance structure assessment.
-- Random-effects diagnostics.
-- Serial correlation assessment.
-- Model fit assessment.
-- Sensitivity analysis.
-
----
-
-# PART VIII: SPATIAL, CAUSAL AND STOCHASTIC STATISTICS
-
-# 16. SPATIAL STATISTICS AND GEOSTATISTICS
-
-## 16.1 Spatial exploration
-
-- Spatial distribution analysis.
-- Spatial point-pattern analysis.
-- Spatial clustering.
-- Spatial density estimation.
-- Kernel density mapping.
-- Spatial autocorrelation.
-- Spatial data visualisation.
-- Spatial outlier detection.
-
-## 16.2 Spatial dependence
-
-- Global Moran's I.
-- Local Moran's I.
-- Geary's C.
-- Getis–Ord Gi*.
-- Spatial correlograms.
-- Join-count statistics.
-- Spatial scan statistics.
-
-## 16.3 Spatial modelling
-
-- Spatial autoregressive models.
-- Spatial error models.
-- Spatial Durbin models.
-- Conditional autoregressive models.
-- Simultaneous autoregressive models.
-- Spatial generalised linear mixed models.
-- Spatial Bayesian models.
-- Geographically weighted regression.
-- Spatial panel models.
-- Spatial lag models.
-- Spatial probit models.
-- Disease-mapping models.
-
-## 16.4 Geostatistics
-
-- Variograms.
-- Semivariograms.
-- Kriging.
-- Ordinary kriging.
-- Universal kriging.
-- Co-kriging.
-- Spatial interpolation.
-- Gaussian processes.
-- Indicator kriging.
-- Block kriging.
-
-## 16.5 Spatial point processes
-
-- Poisson point processes.
-- Inhomogeneous Poisson processes.
-- Cox processes.
-- Cluster point processes.
-- Marked point processes.
-- Spatial interaction analysis.
-
-## 16.6 Spatiotemporal statistics
-
-- Spatiotemporal point processes.
-- Spatiotemporal regression.
-- Spatiotemporal disease mapping.
-- Dynamic spatial models.
-- Spatial-temporal Bayesian models.
-- Spatiotemporal forecasting.
+- Variograms
+- Semivariograms
+- Kriging
+- Ordinary kriging
+- Universal kriging
+- Co-kriging
+- Spatial interpolation
+- Gaussian processes
+- Indicator kriging
+- Conditional simulation
 
 ---
 
-# 17. CAUSAL INFERENCE
+# 15. CAUSAL INFERENCE
 
-## 17.1 Causal foundations
+## 15.1 Causal foundations
 
-- Potential outcomes framework.
-- Counterfactual inference.
-- Directed acyclic graphs.
-- Structural causal models.
-- Confounding assessment.
-- Identification assumptions.
-- Consistency.
-- Exchangeability.
-- Positivity.
-- Interference.
-- Average treatment effect.
-- Average treatment effect on the treated.
-- Average treatment effect on the untreated.
-- Conditional average treatment effect.
-- Heterogeneous treatment effects.
-- Causal estimands.
+- Potential outcomes framework
+- Counterfactual inference
+- Directed acyclic graphs
+- Structural causal models
+- Confounding assessment
+- Identification assumptions
+- Consistency
+- Exchangeability
+- Positivity
+- Average treatment effect
+- Average treatment effect on the treated
+- Average treatment effect on the untreated
+- Conditional average treatment effects
+- Heterogeneous treatment effects
+- Causal estimands
 
-## 17.2 Experimental causal methods
+## 15.2 Experimental causal methods
 
-- Randomised controlled trials.
-- Cluster-randomised experiments.
-- Factorial experiments.
-- Instrumented randomisation.
-- Randomised encouragement designs.
-- Treatment assignment analysis.
-- Intention-to-treat estimation.
-- Per-protocol estimation.
+- Randomised controlled trials
+- Cluster-randomised experiments
+- Factorial experiments
+- Instrumented randomisation
+- Randomisation inference
+- Encouragement designs
 
-## 17.3 Observational causal methods
+## 15.3 Observational causal methods
 
-- Propensity-score matching.
-- Propensity-score weighting.
-- Inverse probability weighting.
-- Regression adjustment.
-- Doubly robust estimation.
-- Difference-in-differences.
-- Instrumental-variable estimation.
-- Regression discontinuity design.
-- Synthetic control.
-- Interrupted time-series analysis.
-- Matching methods.
-- Mediation analysis.
-- Moderation analysis.
-- Sensitivity analysis for unmeasured confounding.
-- Targeted maximum likelihood estimation.
-- G-computation.
-- Marginal structural models.
-- Longitudinal causal models.
-- Negative-control methods.
+- Propensity-score matching
+- Propensity-score weighting
+- Inverse probability weighting
+- Regression adjustment
+- Doubly robust estimation
+- Difference-in-differences
+- Instrumental-variable estimation
+- Regression discontinuity design
+- Synthetic control
+- Interrupted time-series analysis
+- Matching methods
+- Mediation analysis
+- Moderation analysis
+- Sensitivity analysis for unmeasured confounding
+- Targeted maximum likelihood estimation
+- G-computation
+- Marginal structural models
+- Principal stratification
+- Transportability and generalisability methods
 
-## 17.4 Advanced causal methods
+## 15.4 Causal design and diagnostics
 
-- Instrumental-variable identification.
-- Principal stratification.
-- Mediation estimands.
-- Interventional direct and indirect effects.
-- Transportability.
-- Generalisability of causal effects.
-- Causal discovery.
-- Causal machine learning.
-- Double/debiased machine learning.
-- Causal forests.
-- Heterogeneous treatment-effect estimation.
-- Sensitivity analysis for violations of identification assumptions.
-
-## 17.5 Causal diagnostics and validation
-
-- Covariate balance assessment.
-- Positivity assessment.
-- Overlap diagnostics.
-- Instrument strength assessment.
-- Regression discontinuity validity checks.
-- Parallel-trends assessment.
-- Sensitivity analysis.
-- Robustness checks.
-- Negative-control analysis.
+- Confounder identification
+- Collider assessment
+- Positivity assessment
+- Covariate balance diagnostics
+- Instrument validity assessment
+- Parallel-trends assessment
+- Negative controls
+- Sensitivity analysis
+- E-value analysis
+- Mediation identification assumptions
 
 ---
 
-# 18. STOCHASTIC PROCESSES
+# 16. STOCHASTIC PROCESSES
 
-## 18.1 Discrete stochastic processes
-
-- Markov chains.
-- Discrete-time Markov chains.
-- Markov decision processes.
-- Branching processes.
-- Random walks.
-- Birth–death processes.
-- Renewal processes.
-- Discrete-state stochastic processes.
-
-## 18.2 Continuous stochastic processes
-
-- Markov processes.
-- Continuous-time Markov chains.
-- Poisson processes.
-- Brownian motion.
-- Wiener processes.
-- Gaussian processes.
-- Martingales.
-- Stochastic differential equations.
-- Diffusion processes.
-- Lévy processes.
-
-## 18.3 Applied stochastic processes
-
-- Queueing theory.
-- Reliability stochastic processes.
-- Epidemic stochastic processes.
-- Population processes.
-- Inventory processes.
-- Spatial stochastic processes.
-- Financial stochastic processes.
-
-## 18.4 Stochastic modelling
-
-- Transition probability estimation.
-- Stationary distribution estimation.
-- First-passage time analysis.
-- Absorbing-state analysis.
-- Stochastic simulation.
-- Stochastic optimisation.
+- Markov chains
+- Markov processes
+- Continuous-time Markov chains
+- Discrete-time Markov chains
+- Poisson processes
+- Renewal processes
+- Birth–death processes
+- Branching processes
+- Brownian motion
+- Wiener processes
+- Random walks
+- Martingales
+- Gaussian processes
+- Stochastic differential equations
+- Queueing theory
+- Reliability stochastic processes
+- Point processes
+- Marked point processes
+- Spatial stochastic processes
 
 ---
 
-# PART IX: SPECIALISED STATISTICAL DISCIPLINES
+# 17. RELIABILITY AND QUALITY STATISTICS
 
-# 19. RELIABILITY AND QUALITY STATISTICS
+## 17.1 Reliability analysis
 
-## 19.1 Reliability analysis
+- Reliability functions
+- Failure-time distributions
+- Mean time to failure
+- Mean time between failures
+- Hazard functions
+- System reliability
+- Series-system reliability
+- Parallel-system reliability
+- Accelerated life testing
+- Reliability growth modelling
+- Repairable-system analysis
+- Stress-strength models
+- Degradation modelling
+- Warranty analysis
 
-- Reliability functions.
-- Failure-time distributions.
-- Mean time to failure.
-- Mean time between failures.
-- Hazard functions.
-- System reliability.
-- Series-system reliability.
-- Parallel-system reliability.
-- Accelerated life testing.
-- Reliability growth modelling.
-- Repairable-system analysis.
-- Recurrent failure analysis.
-- Component reliability.
-- System availability.
+## 17.2 Statistical quality control
 
-## 19.2 Statistical quality control
-
-- Statistical process control.
-- Shewhart control charts.
-- X-bar charts.
-- R charts.
-- S charts.
-- p charts.
-- np charts.
-- c charts.
-- u charts.
-- CUSUM charts.
-- EWMA charts.
-- Multivariate control charts.
-- Process capability analysis.
-- Process performance analysis.
-- Acceptance sampling.
-- Six Sigma statistical methods.
-- Process monitoring.
-- Change detection.
-
-## 19.3 Quality and reliability modelling
-
-- Reliability block diagrams.
-- Fault-tree analysis.
-- Failure-mode analysis.
-- Degradation modelling.
-- Accelerated degradation modelling.
-- Warranty analysis.
-- Competing failure modes.
+- Statistical process control
+- Shewhart control charts
+- X-bar charts
+- R charts
+- S charts
+- p charts
+- np charts
+- c charts
+- u charts
+- CUSUM charts
+- EWMA charts
+- Multivariate control charts
+- Process capability analysis
+- Process performance analysis
+- Acceptance sampling
+- Six Sigma statistical methods
+- Measurement-system analysis
 
 ---
 
-# 20. EPIDEMIOLOGICAL AND BIOSTATISTICAL METHODS
+# 18. EPIDEMIOLOGICAL AND BIOSTATISTICAL METHODS
 
-## 20.1 Disease frequency
+## 18.1 Disease frequency
 
-- Incidence.
-- Incidence rate.
-- Cumulative incidence.
-- Prevalence.
-- Point prevalence.
-- Period prevalence.
-- Mortality rate.
-- Case-fatality proportion.
-- Standardised mortality ratios.
-- Standardised incidence ratios.
-- Age-specific rates.
-- Person-time analysis.
+- Incidence
+- Incidence rate
+- Cumulative incidence
+- Prevalence
+- Point prevalence
+- Period prevalence
+- Mortality rate
+- Case-fatality proportion
+- Standardised mortality ratios
+- Age-specific rates
+- Person-time rates
 
-## 20.2 Measures of association and impact
+## 18.2 Measures of association and impact
 
-- Risk ratio.
-- Rate ratio.
-- Odds ratio.
-- Prevalence ratio.
-- Risk difference.
-- Attributable risk.
-- Population attributable fraction.
-- Number needed to treat.
-- Number needed to harm.
-- Vaccine effectiveness.
-- Standardised rate ratios.
+- Risk ratio
+- Rate ratio
+- Odds ratio
+- Prevalence ratio
+- Risk difference
+- Attributable risk
+- Population attributable fraction
+- Number needed to treat
+- Number needed to harm
+- Standardised rate ratios
 
-## 20.3 Epidemiological study analysis
+## 18.3 Epidemiological analysis
 
-- Cohort analysis.
-- Case-control analysis.
-- Cross-sectional analysis.
-- Ecological analysis.
-- Outbreak analysis.
-- Stratified analysis.
-- Direct standardisation.
-- Indirect standardisation.
-- Mantel–Haenszel analysis.
-- Diagnostic test accuracy.
-- Sensitivity and specificity.
-- Positive and negative predictive values.
-- Likelihood ratios.
-- ROC curve analysis.
-- Meta-analysis of epidemiological studies.
+- Cohort analysis
+- Case-control analysis
+- Cross-sectional analysis
+- Ecological analysis
+- Outbreak analysis
+- Stratified analysis
+- Direct standardisation
+- Indirect standardisation
+- Mantel–Haenszel analysis
+- Diagnostic test accuracy
+- Sensitivity and specificity
+- Positive and negative predictive values
+- Likelihood ratios
+- ROC curve analysis
+- Screening programme evaluation
+- Infectious-disease modelling
+- Transmission modelling
+- Reproductive number estimation
+- Meta-analysis of epidemiological studies
 
-## 20.4 Clinical and biomedical statistics
+## 18.4 Clinical and biomedical statistics
 
-- Clinical trial analysis.
-- Repeated-measures biomedical analysis.
-- Diagnostic accuracy studies.
-- Agreement analysis.
-- Bland–Altman analysis.
-- Bioequivalence analysis.
-- Dose-response modelling.
-- Pharmacokinetic modelling.
-- Pharmacodynamic modelling.
-- Longitudinal clinical analysis.
-- Biomarker analysis.
-- Reference interval estimation.
-- Diagnostic threshold analysis.
-
-## 20.5 Infectious-disease modelling
-
-- Compartmental models.
-- SIR models.
-- SIS models.
-- SEIR models.
-- Stochastic epidemic models.
-- Reproduction number estimation.
-- Epidemic growth-rate estimation.
-- Transmission-rate estimation.
-- Outbreak forecasting.
-- Infectious-disease survival analysis.
-- Spatial epidemic modelling.
-- Vaccination-impact modelling.
-
-## 20.6 Population and public-health analysis
-
-- Demographic rate analysis.
-- Fertility analysis.
-- Mortality analysis.
-- Life-table methods.
-- Standardised mortality analysis.
-- Health-service utilisation analysis.
-- Screening evaluation.
-- Health inequality analysis.
-- Population attributable risk.
-- Health programme evaluation.
-- Disease burden estimation.
-
-## 20.7 Biostatistical model extensions
-
-- Multilevel health models.
-- Clustered health-outcome models.
-- Bayesian disease models.
-- Spatial disease models.
-- Longitudinal clinical models.
-- Joint models of biomarkers and survival.
-- Diagnostic prediction models.
+- Clinical trial analysis
+- Repeated-measures biomedical analysis
+- Diagnostic accuracy studies
+- Agreement analysis
+- Bland–Altman analysis
+- Bioequivalence analysis
+- Dose-response modelling
+- Pharmacokinetic modelling
+- Pharmacodynamic modelling
+- Longitudinal clinical analysis
+- Clustered clinical data analysis
+- Diagnostic and screening evaluation
+- Biomarker analysis
+- Competing-risk analysis
 
 ---
 
-# 21. PSYCHOMETRICS AND MEASUREMENT THEORY
+# 19. PSYCHOMETRICS AND MEASUREMENT THEORY
 
-## 21.1 Classical test theory
-
-- Classical test theory.
-- True-score theory.
-- Measurement error.
-- Reliability coefficients.
-- Cronbach's alpha.
-- McDonald's omega.
-- Split-half reliability.
-- Test–retest reliability.
-- Inter-rater reliability.
-- Intraclass correlation coefficient.
-
-## 21.2 Item response theory
-
-- One-parameter logistic model.
-- Two-parameter logistic model.
-- Three-parameter logistic model.
-- Graded response model.
-- Partial credit model.
-- Rating scale model.
-- Nominal response model.
-- Item characteristic curves.
-- Item information functions.
-- Test information functions.
-
-## 21.3 Rasch measurement
-
-- Rasch model.
-- Rating scale Rasch model.
-- Partial credit Rasch model.
-- Person ability estimation.
-- Item difficulty estimation.
-- Fit statistics.
-- Differential item functioning.
-
-## 21.4 Measurement validity
-
-- Measurement validity.
-- Construct validity.
-- Content validity.
-- Criterion validity.
-- Convergent validity.
-- Discriminant validity.
-- Predictive validity.
-- Measurement invariance.
-- Differential item functioning.
-- Cross-cultural measurement equivalence.
-
-## 21.5 Scale development and assessment
-
-- Scale development.
-- Item generation.
-- Item analysis.
-- Exploratory factor analysis.
-- Confirmatory factor analysis.
-- Reliability assessment.
-- Validity assessment.
-- Factor structure assessment.
-- Generalisability theory.
-- Latent-variable measurement models.
+- Classical test theory
+- Item response theory
+- Rasch measurement models
+- Reliability analysis
+- Cronbach's alpha
+- McDonald's omega
+- Split-half reliability
+- Test–retest reliability
+- Inter-rater reliability
+- Intraclass correlation coefficient
+- Measurement validity
+- Content validity
+- Construct validity
+- Convergent validity
+- Discriminant validity
+- Exploratory factor analysis
+- Confirmatory factor analysis
+- Measurement invariance
+- Differential item functioning
+- Scale development
+- Item analysis
+- Generalisability theory
+- Latent variable modelling
+- Multidimensional item response theory
+- Computerised adaptive testing
 
 ---
 
-# 22. STATISTICAL LEARNING AND PREDICTIVE MODELLING
+# 20. STATISTICAL LEARNING AND PREDICTIVE MODELLING
 
-## 22.1 Supervised learning
+## 20.1 Supervised learning
 
-- Linear regression.
-- Logistic regression.
-- Decision trees.
-- Random forests.
-- Gradient boosting.
-- Extreme gradient boosting.
-- Support vector machines.
-- K-nearest neighbours.
-- Naive Bayes.
-- Classification algorithms.
-- Regression algorithms.
-- Generalised additive models.
-- Penalised regression.
+- Linear regression
+- Logistic regression
+- Decision trees
+- Random forests
+- Gradient boosting
+- Extreme gradient boosting
+- Support vector machines
+- K-nearest neighbours
+- Naive Bayes
+- Classification algorithms
+- Regression algorithms
+- Neural networks
 
-## 22.2 Unsupervised learning
+## 20.2 Unsupervised learning
 
-- Clustering.
-- Dimension reduction.
-- Principal component analysis.
-- Factor analysis.
-- Anomaly detection.
-- Association-rule mining.
-- Density estimation.
-- Latent class analysis.
-- Manifold learning.
+- Clustering
+- Dimension reduction
+- Principal component analysis
+- Factor analysis
+- Anomaly detection
+- Association-rule mining
+- Density estimation
+- Latent class models
 
-## 22.3 Model evaluation
+## 20.3 Model evaluation
 
-- Train-test splitting.
-- Cross-validation.
-- Bootstrap validation.
-- Confusion matrix.
-- Accuracy.
-- Precision.
-- Recall.
-- Specificity.
-- F1 score.
-- ROC curve.
-- Area under the ROC curve.
-- Precision–recall curve.
-- Calibration analysis.
-- Brier score.
-- Regression prediction errors.
-- Mean absolute error.
-- Mean squared error.
-- Root mean squared error.
-- Mean absolute percentage error.
-- Bias–variance assessment.
-- External validation.
-- Temporal validation.
-- Geographic validation.
+- Train-test splitting
+- Cross-validation
+- Bootstrap validation
+- Confusion matrix
+- Accuracy
+- Precision
+- Recall
+- Specificity
+- F1 score
+- ROC curve
+- Area under the ROC curve
+- Precision–recall curve
+- Calibration analysis
+- Brier score
+- Regression prediction errors
+- Bias–variance assessment
+- External validation
+- Temporal validation
+- Model drift assessment
+- Decision-curve analysis
 
-## 22.4 Advanced learning methods
+## 20.4 Advanced learning methods
 
-- Regularisation.
-- Ensemble learning.
-- Stacking.
-- Bagging.
-- Boosting.
-- Feature selection.
-- Feature importance.
-- Model interpretability.
-- Partial dependence.
-- SHAP analysis.
-- Survival machine learning.
-- Imbalanced classification methods.
-- Cost-sensitive learning.
-- Transfer learning.
-- Semi-supervised learning.
-- Active learning.
-
-## 22.5 Predictive model reliability
-
-- Model calibration.
-- Prediction uncertainty.
-- Decision-curve analysis.
-- Net benefit analysis.
-- External validation.
-- Model drift assessment.
-- Subgroup performance assessment.
-- Fairness assessment.
-- Explainability limitations.
-- Generalisability assessment.
+- Regularisation
+- Ensemble learning
+- Stacking
+- Bagging
+- Boosting
+- Feature selection
+- Feature importance
+- Model interpretability
+- Partial dependence
+- SHAP analysis
+- Survival machine learning
+- Imbalanced classification methods
+- Explainable machine learning
+- Fairness assessment
+- Model calibration
+- Distribution shift assessment
 
 ---
 
-# PART X: ADVANCED AND EXTENDED STATISTICAL DOMAINS
+# PART VII — ADDITIONAL AND ADVANCED STATISTICAL DOMAINS
+
+# 21. MATHEMATICAL STATISTICS AND STATISTICAL THEORY
+
+This domain contains the mathematical theory underlying statistical procedures.
+
+- Statistical decision theory
+- Statistical likelihood theory
+- Sufficiency
+- Completeness
+- Exponential families
+- Rao–Blackwell theorem
+- Lehmann–Scheffé theorem
+- Cramér–Rao lower bound
+- Neyman–Pearson lemma
+- Uniformly most powerful tests
+- Likelihood-ratio testing
+- Asymptotic theory
+- Large-sample theory
+- Empirical process theory
+- U-statistics
+- M-estimation
+- Z-estimation
+- Robust statistical theory
+- Minimax estimation
+- Admissibility
+- Information-theoretic approaches to statistics
+
+# 22. LONGITUDINAL AND PANEL DATA ANALYSIS
+
+- Repeated-measures analysis
+- Longitudinal mixed-effects models
+- Generalised estimating equations
+- Growth-curve models
+- Latent growth models
+- Random-intercept models
+- Random-slope models
+- Panel-data regression
+- Fixed-effects models
+- Random-effects models
+- Dynamic panel models
+- Difference and system GMM
+- Cross-lagged panel models
+- Longitudinal mediation models
+- Missingness in longitudinal data
+- Joint longitudinal-survival models
 
 # 23. EXTREME-VALUE STATISTICS
 
-- Extreme-value theory.
-- Generalised extreme-value distribution.
-- Generalised Pareto distribution.
-- Block maxima methods.
-- Peaks-over-threshold methods.
-- Return-level estimation.
-- Return-period estimation.
-- Tail-index estimation.
-- Extreme quantile estimation.
-- Multivariate extreme-value analysis.
-- Extreme-value regression.
-- Tail dependence analysis.
+- Extreme-value theory
+- Generalised extreme-value distribution
+- Generalised Pareto distribution
+- Block maxima methods
+- Peaks-over-threshold methods
+- Return-level estimation
+- Tail-index estimation
+- Extreme quantile estimation
+- Multivariate extreme-value models
+- Tail dependence
+- Extreme-value regression
 
 # 24. COMPOSITIONAL DATA ANALYSIS
 
-- Compositional data structures.
-- Closure operation.
-- Simplex geometry.
-- Log-ratio transformations.
-- Additive log-ratio transformation.
-- Centred log-ratio transformation.
-- Isometric log-ratio transformation.
-- Compositional correlation.
-- Compositional regression.
-- Compositional principal component analysis.
-- Compositional clustering.
-- Zero replacement methods.
-- Compositional data visualisation.
+- Compositional data fundamentals
+- Simplex geometry
+- Closure operation
+- Additive log-ratio transformation
+- Centred log-ratio transformation
+- Isometric log-ratio transformation
+- Compositional descriptive analysis
+- Compositional regression
+- Compositional principal component analysis
+- Compositional clustering
+- Zero replacement methods
+- Subcomposition analysis
 
 # 25. FUNCTIONAL DATA ANALYSIS
 
-- Functional data representation.
-- Functional data exploration.
-- Functional principal component analysis.
-- Functional regression.
-- Functional linear models.
-- Functional logistic regression.
-- Functional clustering.
-- Functional classification.
-- Functional time-series analysis.
-- Smoothing and basis representation.
-- Functional covariance analysis.
-- Functional data visualisation.
+- Functional data representation
+- Functional descriptive statistics
+- Functional principal component analysis
+- Functional regression
+- Functional linear models
+- Functional ANOVA
+- Functional clustering
+- Functional classification
+- Functional time-series analysis
+- Smoothing and basis expansion
+- Functional mixed models
 
 # 26. DIRECTIONAL AND CIRCULAR STATISTICS
 
-- Circular data representation.
-- Directional distributions.
-- Von Mises distribution.
-- Circular mean.
-- Circular variance.
-- Circular dispersion.
-- Circular correlation.
-- Circular regression.
-- Tests for uniformity.
-- Rayleigh test.
-- Watson's test.
-- Kuiper's test.
-- Directional data visualisation.
+- Circular data description
+- Mean direction
+- Circular variance
+- Circular concentration
+- von Mises distribution
+- Wrapped distributions
+- Circular correlation
+- Tests for circular uniformity
+- Directional regression
+- Spherical statistics
+- Orientation data analysis
 
-# 27. NETWORK STATISTICS
+# 27. NETWORK AND GRAPH STATISTICS
 
-- Network data structures.
-- Graph-theoretic measures.
-- Degree distribution.
-- Centrality measures.
-- Network density.
-- Clustering coefficients.
-- Community detection.
-- Exponential random graph models.
-- Stochastic block models.
-- Network regression.
-- Relational event models.
-- Network sampling.
-- Network dependence modelling.
-- Social network analysis.
+- Network descriptive statistics
+- Degree distributions
+- Centrality measures
+- Network density
+- Community detection
+- Exponential random graph models
+- Stochastic block models
+- Network regression
+- Link prediction
+- Network dependence models
+- Temporal network analysis
+- Spatial network analysis
 
-# 28. INFORMATION THEORY AND INFORMATION-BASED STATISTICS
+# 28. COMBINATORIAL AND INFORMATION-THEORETIC METHODS
 
-- Shannon entropy.
-- Conditional entropy.
-- Mutual information.
-- Kullback–Leibler divergence.
-- Jensen–Shannon divergence.
-- Information gain.
-- Cross-entropy.
-- Minimum description length.
-- Information criteria.
-- Akaike information criterion.
-- Bayesian information criterion.
-- Model information assessment.
+- Entropy
+- Conditional entropy
+- Mutual information
+- Kullback–Leibler divergence
+- Jensen–Shannon divergence
+- Information criteria
+- Minimum description length
+- Permutation entropy
+- Information-theoretic feature selection
+- Statistical complexity measures
 
-# 29. ECONOMETRICS AND FINANCIAL STATISTICS
+# 29. ECONOMETRIC AND FINANCIAL STATISTICS
 
-- Cross-sectional econometrics.
-- Time-series econometrics.
-- Panel-data econometrics.
-- Fixed-effects estimation.
-- Random-effects estimation.
-- Instrumental-variable estimation.
-- Two-stage least squares.
-- Generalised method of moments.
-- Simultaneous-equation models.
-- Cointegration.
-- Error-correction models.
-- Dynamic panel models.
-- Volatility models.
-- Financial risk modelling.
-- Value-at-risk estimation.
-- Expected shortfall estimation.
-- Financial dependence modelling.
+- Ordinary least squares econometrics
+- Instrumental-variable econometrics
+- Simultaneous equation models
+- Two-stage least squares
+- Three-stage least squares
+- Generalised method of moments
+- Panel-data econometrics
+- Time-series econometrics
+- Cointegration
+- Vector error-correction models
+- ARCH and GARCH models
+- Stochastic volatility models
+- Event studies
+- Financial risk modelling
+- Value-at-risk
+- Expected shortfall
+- Portfolio risk estimation
+- Duration models
+- Limited dependent-variable models
 
 ---
 
-# PART XI: CROSS-CUTTING STATISTICAL CAPABILITIES
+# PART VIII — CROSS-CUTTING STATISTICAL CAPABILITIES
 
-# 30. EFFECT-SIZE ESTIMATION AND MEASURES OF ASSOCIATION
+# 30. EFFECT-SIZE AND ASSOCIATION MEASURES
 
-Effect sizes quantify the magnitude of differences, relationships or effects. They must be distinguished from test statistics, p-values and model parameters.
+Effect sizes and measures of association are reporting quantities, not necessarily standalone analysis methods.
 
-## 30.1 Standardised mean differences
+- Cohen's d
+- Hedges' g
+- Glass's delta
+- Eta-squared
+- Partial eta-squared
+- Omega-squared
+- Cohen's f
+- Cramér's V
+- Phi coefficient
+- Pearson's r
+- Rank-biserial correlation
+- Common-language effect size
+- Odds ratio
+- Risk ratio
+- Risk difference
+- Incidence-rate ratio
+- Regression coefficients
+- Standardised regression coefficients
+- R-squared
+- Adjusted R-squared
+- Partial R-squared
+- Hazard ratio
+- Number needed to treat
+- Number needed to harm
+- Intraclass correlation
+- Concordance measures
 
-- Cohen's d.
-- Hedges' g.
-- Glass's delta.
-- Common-language effect size.
-- Standardised mean difference.
-
-## 30.2 ANOVA effect sizes
-
-- Eta-squared.
-- Partial eta-squared.
-- Omega-squared.
-- Partial omega-squared.
-- Cohen's f.
-
-## 30.3 Association effect sizes
-
-- Pearson's r.
-- Phi coefficient.
-- Cramér's V.
-- Rank-biserial correlation.
-- Kendall's tau.
-- Spearman's rho.
-- Contingency coefficient.
-
-## 30.4 Epidemiological and clinical effect measures
-
-- Odds ratio.
-- Risk ratio.
-- Rate ratio.
-- Risk difference.
-- Prevalence ratio.
-- Incidence-rate ratio.
-- Hazard ratio.
-- Number needed to treat.
-- Number needed to harm.
-- Attributable fraction.
-- Population attributable fraction.
-
-## 30.5 Regression and predictive measures
-
-- Regression coefficients.
-- Standardised regression coefficients.
-- R-squared.
-- Adjusted R-squared.
-- Partial R-squared.
-- Prediction error measures.
-- Explained variance.
-- Model discrimination measures.
-
-## 30.6 Reporting principles
-
-Each effect-size record should identify:
-
-- Its mathematical definition.
-- Its applicable statistical method.
-- Its scale and interpretation.
-- Whether it is standardised or unstandardised.
-- Its uncertainty estimate.
-- Its limitations.
-- Whether directionality is meaningful.
-
-Odds ratios, hazard ratios and regression coefficients should not automatically be labelled standardised effect sizes.
-
----
+The catalogue must distinguish standardised effect sizes from model parameters and measures of association. For example, an odds ratio is a measure of association, while Cohen's d is a standardised mean-difference effect size.
 
 # 31. ASSUMPTION TESTING AND STATISTICAL DIAGNOSTICS
 
-Diagnostics are supporting analytical procedures. They are not automatically primary research analyses.
+Diagnostics are supporting procedures used to evaluate data, models and analytical assumptions. They are not automatically primary analysis methods.
 
 ## 31.1 Distributional diagnostics
 
-- Shapiro–Wilk test.
-- Anderson–Darling test.
-- Kolmogorov–Smirnov test.
-- Lilliefors test.
-- Jarque–Bera test.
-- Q–Q plot assessment.
-- P–P plot assessment.
-- Skewness assessment.
-- Kurtosis assessment.
-- Multivariate normality assessment.
+- Shapiro–Wilk test
+- Anderson–Darling test
+- Kolmogorov–Smirnov test
+- Lilliefors test
+- Jarque–Bera test
+- Q–Q plot assessment
+- P–P plot assessment
+- Skewness and kurtosis assessment
 
 ## 31.2 Variance and dependence diagnostics
 
-- Levene's test.
-- Brown–Forsythe test.
-- Bartlett's test.
-- Fligner–Killeen test.
-- Durbin–Watson test.
-- Breusch–Pagan test.
-- White's test.
-- Breusch–Godfrey test.
-- Autocorrelation assessment.
-- Heteroscedasticity assessment.
+- Levene's test
+- Brown–Forsythe test
+- Bartlett's test
+- Fligner–Killeen test
+- Durbin–Watson test
+- Breusch–Pagan test
+- White's test
+- Breusch–Godfrey test
+- Intraclass correlation assessment
+- Dependence assessment
 
 ## 31.3 Regression diagnostics
 
-- Variance inflation factor.
-- Tolerance.
-- Residual analysis.
-- Cook's distance.
-- Leverage.
-- DFBETAs.
-- DFFITS.
-- Ramsey RESET test.
-- Influence analysis.
-- Specification diagnostics.
-- Residual normality assessment.
-- Functional-form assessment.
+- Variance inflation factor
+- Tolerance
+- Residual analysis
+- Cook's distance
+- Leverage
+- DFBETAs
+- DFFITS
+- Ramsey RESET test
+- Influence analysis
+- Specification diagnostics
+- Calibration diagnostics
+- Link-function diagnostics
 
-## 31.4 Model-specific diagnostics
+## 31.4 General data diagnostics
 
-- Proportional hazards assessment.
-- Schoenfeld residual analysis.
-- Survival model calibration.
-- Generalised linear model deviance diagnostics.
-- Overdispersion assessment.
-- Zero-inflation assessment.
-- Mixed-model residual assessment.
-- Random-effects diagnostics.
-- Time-series residual diagnostics.
-- Spatial residual diagnostics.
-- Bayesian convergence diagnostics.
-- Posterior predictive checks.
+- Missing-data analysis
+- Missingness-pattern analysis
+- Missing completely at random assessment
+- Missing at random assessment
+- Missing not at random sensitivity assessment
+- Outlier detection
+- Duplicate detection
+- Data consistency checks
+- Data validity checks
+- Distributional anomaly detection
+- Range and logical validation
+- Data integrity checks
 
-## 31.5 General data diagnostics
-
-- Missing-data analysis.
-- Missingness-pattern analysis.
-- Outlier detection.
-- Duplicate detection.
-- Data consistency checks.
-- Data validity checks.
-- Distributional anomaly detection.
-- Range checks.
-- Logical consistency checks.
-- Unit and scale checks.
-- Sampling-weight validation.
-- Record linkage checks.
-
-## 31.6 Missingness mechanisms
-
-- Missing completely at random (MCAR).
-- Missing at random (MAR).
-- Missing not at random (MNAR).
-
-These are conceptual missingness mechanisms. They must not be presented as categories that can always be conclusively established from observed data alone.
-
-Little's MCAR test and other diagnostic procedures may provide evidence relevant to missingness assessment, but do not prove that MAR or MNAR holds.
-
----
+**Important:** MCAR, MAR and MNAR are missing-data mechanisms. They cannot generally be conclusively classified from observed data alone. Diagnostics may provide evidence, but assumptions and sensitivity analyses remain necessary.
 
 # 32. RESAMPLING, SIMULATION AND COMPUTATIONAL INFERENCE
 
-These are cross-cutting computational capabilities that may support multiple statistical methods.
+These are computational procedures that support many statistical methods and inference paradigms.
 
-## 32.1 Bootstrap procedures
-
-- Bootstrap.
-- Parametric bootstrap.
-- Non-parametric bootstrap.
-- Cluster bootstrap.
-- Block bootstrap.
-- Stratified bootstrap.
-- Wild bootstrap.
-- Bayesian bootstrap.
-- Bootstrap confidence intervals.
-- Bootstrap standard errors.
-- Bootstrap bias estimation.
-
-## 32.2 Permutation and randomisation procedures
-
-- Permutation testing.
-- Randomisation inference.
-- Exact permutation procedures.
-- Restricted permutation.
-- Permutation-based confidence procedures.
-
-## 32.3 Simulation methods
-
-- Monte Carlo simulation.
-- Stochastic simulation.
-- Simulation-based power analysis.
-- Simulation-based sample-size determination.
-- Statistical uncertainty propagation.
-- Sensitivity simulation.
-- Scenario simulation.
-
-## 32.4 Computational algorithms
-
-- Markov Chain Monte Carlo.
-- Importance sampling.
-- Rejection sampling.
-- Sequential Monte Carlo.
-- Numerical integration.
-- Numerical optimisation.
-- Variational inference.
-- Approximate Bayesian computation.
-- Gibbs sampling.
-- Metropolis–Hastings.
-- Hamiltonian Monte Carlo.
-- No-U-Turn Sampler.
-
-## 32.5 Computational validation
-
-- Numerical convergence assessment.
-- Monte Carlo error assessment.
-- Simulation validation.
-- Reproducibility checks.
-- Algorithm stability assessment.
-- Computational precision assessment.
-
----
+- Bootstrap
+- Parametric bootstrap
+- Non-parametric bootstrap
+- Cluster bootstrap
+- Block bootstrap
+- Wild bootstrap
+- Permutation testing
+- Randomisation inference
+- Monte Carlo simulation
+- Markov Chain Monte Carlo
+- Importance sampling
+- Rejection sampling
+- Sequential Monte Carlo
+- Numerical integration
+- Numerical optimisation
+- Simulation-based power analysis
+- Statistical uncertainty propagation
+- Parametric simulation
+- Posterior simulation
+- Variance reduction methods
 
 # 33. META-ANALYSIS AND EVIDENCE SYNTHESIS
 
-## 33.1 Meta-analysis models
-
-- Fixed-effect meta-analysis.
-- Random-effects meta-analysis.
-- Multilevel meta-analysis.
-- Network meta-analysis.
-- Pairwise meta-analysis.
-- Proportional meta-analysis.
-- Meta-regression.
-- Individual participant data meta-analysis.
-- Bayesian meta-analysis.
-
-## 33.2 Heterogeneity analysis
-
-- Cochran's Q.
-- I-squared statistic.
-- Tau-squared.
-- Prediction intervals.
-- Between-study variance estimation.
-- Subgroup analysis.
-- Meta-regression.
-- Heterogeneity sensitivity analysis.
-
-## 33.3 Publication bias and small-study effects
-
-- Funnel plots.
-- Egger's test.
-- Begg's test.
-- Trim-and-fill method.
-- Selection models.
-- Sensitivity analysis for publication bias.
-
-## 33.4 Evidence synthesis procedures
-
-- Leave-one-out sensitivity analysis.
-- Cumulative meta-analysis.
-- Systematic-review statistical synthesis.
-- Evidence grading support.
-- Risk-of-bias integration.
-- Network evidence synthesis.
-- Evidence certainty assessment.
-
----
+- Fixed-effect meta-analysis
+- Random-effects meta-analysis
+- Multilevel meta-analysis
+- Network meta-analysis
+- Pairwise meta-analysis
+- Proportional meta-analysis
+- Meta-regression
+- Heterogeneity analysis
+- Cochran's Q
+- I-squared statistic
+- Tau-squared
+- Publication-bias assessment
+- Funnel plots
+- Egger's test
+- Trim-and-fill method
+- Leave-one-out sensitivity analysis
+- Cumulative meta-analysis
+- Individual participant data meta-analysis
+- Systematic-review statistical synthesis
+- Prediction intervals in meta-analysis
+- Small-study effects assessment
+- Robust variance estimation
 
 # 34. MISSING-DATA STATISTICS
 
-## 34.1 Missing-data assessment
+## 34.1 Missingness concepts
 
-- Missingness identification.
-- Missingness-pattern analysis.
-- Missingness-mechanism assessment.
-- MCAR assessment.
-- MAR assumptions.
-- MNAR assumptions.
-- Missing-data sensitivity analysis.
+- Missing completely at random
+- Missing at random
+- Missing not at random
+- Monotone missingness
+- Arbitrary missingness patterns
+- Missingness indicators
+- Missingness mechanisms
 
-## 34.2 Complete and available case methods
+## 34.2 Missing-data methods
 
-- Complete-case analysis.
-- Available-case analysis.
-- Pairwise deletion.
-- Listwise deletion.
-
-## 34.3 Single imputation
-
-- Mean imputation.
-- Median imputation.
-- Mode imputation.
-- Regression imputation.
-- Hot-deck imputation.
-- Predictive mean matching.
-
-Single imputation methods should be accompanied by warnings about their limitations, particularly the potential understatement of uncertainty.
-
-## 34.4 Multiple imputation and likelihood methods
-
-- Multiple imputation.
-- Multiple imputation by chained equations.
-- Joint-model multiple imputation.
-- Multilevel multiple imputation.
-- Multiple imputation for categorical data.
-- Maximum likelihood estimation with missing data.
-- Full-information maximum likelihood.
-- Inverse probability weighting for missingness.
-
-## 34.5 MNAR sensitivity analysis
-
-- Pattern-mixture models.
-- Selection models.
-- Shared-parameter models.
-- Delta-adjustment sensitivity analysis.
-- Tipping-point analysis.
-- Sensitivity analysis for missing-not-at-random mechanisms.
-
----
-
-# PART XII: STATISTICAL REPORTING, VISUALISATION AND SOFTWARE ARCHITECTURE
+- Complete-case analysis
+- Available-case analysis
+- Mean imputation
+- Regression imputation
+- Hot-deck imputation
+- Multiple imputation
+- Multiple imputation by chained equations
+- Joint-model multiple imputation
+- Inverse probability weighting for missingness
+- Maximum likelihood estimation with missing data
+- Expectation-maximisation methods
+- Pattern-mixture models
+- Selection models
+- Delta-adjustment sensitivity analysis
+- Sensitivity analysis for missing-not-at-random mechanisms
 
 # 35. STATISTICAL REPORTING
 
-Every applicable analysis should support structured reporting.
+Every applicable analysis should support structured reporting of:
 
-## 35.1 Research context
-
-- Research objective.
-- Research question.
-- Research hypothesis.
-- Study design.
-- Population of interest.
-- Sampling design.
-- Statistical domain.
-- Analytical purpose.
-
-## 35.2 Data description
-
-- Dataset identification.
-- Sample size.
-- Analytical sample size.
-- Variable definitions.
-- Variable roles.
-- Measurement scales.
-- Data exclusions.
-- Missing-data handling.
-- Data transformations.
-- Data-quality findings.
-
-## 35.3 Method selection
-
-- Selected method.
-- Method-selection rationale.
-- Alternative methods considered.
-- Method assumptions.
-- Suitability of data.
-- Statistical model specification.
-- Estimand.
-
-## 35.4 Statistical results
-
-- Descriptive summaries.
-- Test statistic or model estimates.
-- Degrees of freedom, where applicable.
-- P-value, where applicable.
-- Confidence interval or credible interval, where applicable.
-- Effect size, where applicable.
-- Standard errors.
-- Model-fit statistics.
-- Diagnostic findings.
-- Prediction measures, where applicable.
-
-## 35.5 Interpretation
-
-- Statistical interpretation.
-- Practical interpretation.
-- Clinical or programme interpretation, where relevant.
-- Magnitude and direction of effects.
-- Uncertainty.
-- Limitations.
-- Assumption violations.
-- Sensitivity analysis.
-- Reproducibility information.
-
-## 35.6 Reporting standards
-
-TimanStat should support appropriate reporting structures for different disciplines and study designs.
-
-It should not impose a single reporting template on all statistical analyses.
-
----
+- Research objective
+- Research question
+- Statistical purpose
+- Knowledge area
+- Selected method and model
+- Method-selection rationale
+- Variable roles and measurement scales
+- Study design
+- Sampling design
+- Target population
+- Estimand, where applicable
+- Hypotheses, where applicable
+- Sample size and analytical sample
+- Missing-data handling
+- Test statistic or model estimates
+- Degrees of freedom, where applicable
+- P-value, where applicable
+- Confidence interval or credible interval, where applicable
+- Effect size or association measure, where applicable
+- Assumption checks
+- Model diagnostics
+- Sensitivity analyses
+- Limitations
+- Interpretation
+- Reproducibility information
+- Software and method version information
 
 # 36. VISUALISATION AND PRESENTATION
 
-## 36.1 Descriptive visualisations
+TimanStat should support appropriate visualisations, including:
 
-- Bar charts.
-- Histograms.
-- Box plots.
-- Violin plots.
-- Density plots.
-- Frequency polygons.
-- Scatter plots.
-- Line charts.
-- Heatmaps.
-- Mosaic plots.
-- Population pyramids.
-- Pareto charts.
+- Descriptive charts
+- Frequency charts
+- Distribution plots
+- Box plots
+- Violin plots
+- Scatter plots
+- Correlation plots
+- Inferential plots
+- Confidence-interval plots
+- Forest plots
+- Regression diagnostic plots
+- Residual plots
+- Survival curves
+- Kaplan–Meier plots
+- ROC curves
+- Precision–recall curves
+- Calibration plots
+- Partial dependence plots
+- Spatial maps
+- Spatial cluster maps
+- Time-series plots
+- Forecast plots
+- Control charts
+- Meta-analysis funnel plots
+- Effect-size plots
+- Network graphs
+- Functional data plots
+- Circular plots
 
-## 36.2 Inferential visualisations
-
-- Confidence-interval plots.
-- Forest plots.
-- Effect-size plots.
-- Coefficient plots.
-- Hypothesis comparison plots.
-- Sampling-distribution plots.
-- Posterior distribution plots.
-- Posterior predictive plots.
-
-## 36.3 Model diagnostics and evaluation
-
-- Regression diagnostic plots.
-- Residual plots.
-- Q–Q plots.
-- Influence plots.
-- Calibration plots.
-- ROC curves.
-- Precision–recall curves.
-- Decision curves.
-- Partial dependence plots.
-- Variable importance plots.
-
-## 36.4 Specialised visualisations
-
-- Survival curves.
-- Kaplan–Meier plots.
-- Competing-risk plots.
-- Spatial maps.
-- Time-series plots.
-- Forecast plots.
-- Control charts.
-- Meta-analysis funnel plots.
-- Network graphs.
-- Circular plots.
-- Functional data plots.
-- Compositional data plots.
+A visualisation is a presentation entity. It must not be registered as a statistical test or model merely because it is associated with one.
 
 ---
 
-# 37. STATISTICAL METHOD METADATA AND MACHINE-READABLE REGISTRY
+# PART IX — MACHINE-READABLE KNOWLEDGE ARCHITECTURE
 
-Every catalogue entity should have a structured machine-readable record.
+# 37. STATISTICAL TAXONOMY
 
-The metadata system must distinguish the entity's identity, classification, analytical requirements, computational availability and verification status.
+Every catalogue entry must be classified using independent dimensions.
 
-## 37.1 Core identity fields
+## 37.1 Statistical purpose
 
-- `entity_id` — globally unique identifier.
-- `name` — human-readable name.
-- `entity_type` — method, model, design, diagnostic, algorithm, measure, visualisation, principle or reporting procedure.
-- `description` — concise methodological description.
-- `version` — catalogue or entity version.
-- `parent_id` — parent entity, where applicable.
-- `related_entity_ids` — related canonical records.
-- `aliases` — alternative names and abbreviations.
+Permitted values:
 
-## 37.2 Classification fields
+- `descriptive`
+- `inferential`
+- `predictive`
+- `causal`
+- `exploratory`
+- `decision_support`
+- `foundational`
+- `multiple`
 
-- `knowledge_area` — primary statistical knowledge area.
-- `knowledge_area_tags` — additional relevant areas.
-- `analysis_purpose` — descriptive, exploratory, inferential, predictive, causal or decision-oriented.
-- `method_family` — method family.
-- `inference_paradigm` — frequentist, Bayesian, randomisation-based, likelihood-based or not applicable.
-- `application_domains` — epidemiology, agriculture, education, economics, public health and other areas.
-- `classification_tags` — additional searchable labels.
+A procedure may have more than one applicable purpose.
 
-## 37.3 Research-question fields
+## 37.2 Knowledge area
 
-- `research_objectives` — objectives addressed.
-- `research_question_patterns` — natural-language question patterns.
-- `hypothesis_requirements` — whether formal hypotheses are required.
-- `estimand` — target quantity being estimated.
-- `interpretation_framework` — relevant interpretation rules.
+Examples:
 
-## 37.4 Variable and data requirements
+- `descriptive_statistics`
+- `probability_theory`
+- `frequentist_inference`
+- `bayesian_statistics`
+- `regression`
+- `experimental_design`
+- `survey_statistics`
+- `multivariate_statistics`
+- `nonparametric_statistics`
+- `time_series`
+- `survival_analysis`
+- `spatial_statistics`
+- `causal_inference`
+- `stochastic_processes`
+- `reliability_statistics`
+- `epidemiology`
+- `psychometrics`
+- `statistical_learning`
+- `mathematical_statistics`
+- `longitudinal_analysis`
+- `extreme_value_statistics`
+- `compositional_data_analysis`
+- `functional_data_analysis`
+- `directional_statistics`
+- `network_statistics`
+- `econometrics`
 
-- `variable_requirements` — outcome, predictor, factor, covariate and other roles.
-- `measurement_scales` — nominal, ordinal, interval and ratio.
-- `data_structure_requirements` — independent, paired, clustered, repeated, longitudinal, time-series, spatial or other structures.
-- `outcome_type` — continuous, binary, categorical, count, ordinal, time-to-event or other.
-- `sample_size_requirements` — applicable minimum or recommended sample considerations.
-- `sampling_design_requirements` — relevant sampling requirements.
-- `study_design_requirements` — relevant research-design requirements.
-- `weighting_requirements` — whether sampling or other weights are required.
-- `missing_data_requirements` — handling considerations.
+## 37.3 Entity type
 
-## 37.5 Statistical specification fields
+Each catalogue record must have one primary entity type:
 
-- `model_specification` — formal model structure.
-- `variable_roles` — required and optional roles.
-- `assumptions` — method-specific assumptions.
-- `selection_rules` — conditions for method recommendation.
-- `exclusion_rules` — conditions under which the method should not be recommended.
-- `alternative_methods` — alternatives.
-- `related_diagnostics` — diagnostic entity identifiers.
-- `related_effect_sizes` — applicable effect-size identifiers.
-- `related_intervals` — applicable uncertainty-interval procedures.
+- `method` — a statistical procedure used to answer an analytical question.
+- `model` — a mathematical or probabilistic representation of a data-generating process or relationship.
+- `design` — a structure governing how observations, treatments or samples are generated.
+- `diagnostic` — a procedure used to assess data, assumptions or model adequacy.
+- `algorithm` — a computational procedure used to estimate, optimise or simulate.
+- `measure` — a statistic, parameter, effect size or summary quantity.
+- `visualization` — a graphical representation of data, estimates or model behaviour.
+- `theory` — a foundational statistical principle or mathematical result.
+- `distribution` — a probability distribution used in statistical modelling.
 
-## 37.6 Computational fields
+An entity may have related records of other types, but it must not be ambiguously registered as all types at once.
 
-- `computational_requirements` — computational resources or dependencies.
-- `algorithm_ids` — computational algorithms used.
-- `numerical_requirements` — optimisation, integration or convergence requirements.
-- `execution_constraints` — limits and restrictions.
-- `supported_data_types` — data formats or structures supported.
-- `output_schema` — expected result structure.
+## 37.4 Method family
 
-## 37.7 Result and reporting fields
+Examples:
 
-- `outputs` — statistics, estimates and model outputs.
-- `effect_sizes` — applicable effect-size measures.
-- `interval_estimates` — applicable confidence or credible intervals.
-- `diagnostics` — applicable diagnostic procedures.
-- `limitations` — known methodological limitations.
-- `interpretation_guidance` — rules for explaining findings.
-- `visualisation_ids` — recommended visualisation entities.
-- `reporting_requirements` — required reporting elements.
+- `central_tendency`
+- `dispersion`
+- `distribution_shape`
+- `association`
+- `mean_comparison`
+- `categorical_testing`
+- `goodness_of_fit`
+- `regression`
+- `classification`
+- `clustering`
+- `dimension_reduction`
+- `survival`
+- `forecasting`
+- `causal_estimation`
+- `sampling_estimation`
+- `variance_estimation`
+- `resampling`
+- `measurement`
+- `reliability`
 
-## 37.8 Implementation and verification fields
+## 37.5 Inference paradigm
 
-- `recognition_status` — whether TimanStat can identify the entity.
-- `recommendation_status` — whether TimanStat can recommend it.
-- `specification_status` — whether TimanStat can construct its analytical specification.
-- `implementation_status` — computational development state.
-- `testing_status` — test coverage and execution state.
-- `verification_status` — methodological and numerical verification state.
-- `validation_status` — validation against accepted references, benchmarks or independent implementations.
-- `last_verified` — date of last verification.
-- `references` — authoritative methodological sources.
+Applicable values:
 
-## 37.9 Relationship fields
+- `frequentist`
+- `bayesian`
+- `randomization_based`
+- `likelihood_based`
+- `design_based`
+- `model_based`
+- `distribution_free`
+- `not_applicable`
+- `multiple`
 
-- `parent_id` — parent entity.
-- `related_entity_ids` — related entities.
-- `requires_entity_ids` — required supporting entities.
-- `diagnostic_entity_ids` — relevant diagnostics.
-- `algorithm_entity_ids` — relevant computational algorithms.
-- `design_entity_ids` — relevant study designs.
-- `alternative_entity_ids` — alternative procedures.
+The paradigm must not be confused with the knowledge area. For example, Bayesian regression belongs to the regression knowledge area and uses the Bayesian inference paradigm.
 
-## 37.10 Example conceptual record
+## 37.6 Application domain
 
-The following is an illustrative record for Welch's independent-samples t-test. It is a schema example, not a claim that every field has already been implemented.
+Examples:
 
-```json
-{
-  "entity_id": "method.inference.mean_difference.welch_t_test",
-  "name": "Welch's independent-samples t-test",
-  "entity_type": "method",
-  "knowledge_area": "frequentist_inference",
-  "analysis_purpose": ["inferential"],
-  "inference_paradigm": ["frequentist"],
-  "method_family": "difference_testing",
-  "research_objectives": [
-    "Compare the means of two independent groups"
-  ],
-  "estimand": "Difference between population means",
-  "outcome_type": "continuous",
-  "data_structure_requirements": [
-    "two independent groups"
-  ],
-  "assumptions": [
-    "independent observations",
-    "appropriate continuous outcome",
-    "finite group variances"
-  ],
-  "related_diagnostics": [],
-  "implementation_status": "implemented",
-  "testing_status": "to_be_verified",
-  "verification_status": "to_be_verified",
-  "validation_status": "to_be_verified"
-}
-```
+- `general_research`
+- `biostatistics`
+- `epidemiology`
+- `public_health`
+- `agriculture`
+- `economics`
+- `education`
+- `business`
+- `psychology`
+- `engineering`
+- `environmental_science`
+- `social_science`
 
-The status values in an actual registry must be based on verified project evidence, not copied from this illustrative example.
+Application domains are cross-cutting tags. They should not determine the mathematical identity of a method.
 
 ---
 
-# 38. IMPLEMENTATION, TESTING, VERIFICATION AND VALIDATION STATUS
+# 38. CANONICAL IDENTIFIERS AND RELATIONSHIPS
 
-Catalogue inclusion and operational availability must remain separate.
+Every statistical entity must have one canonical record and a unique identifier.
 
-## 38.1 Recognition status
+Recommended identifier conventions:
 
-- `not_registered`
-- `registered`
-- `recognised`
+- `desc.mean.arithmetic`
+- `desc.shape.skewness`
+- `infer.t_test.independent.welch`
+- `infer.anova.one_way`
+- `model.regression.linear.multiple`
+- `model.regression.logistic.binary`
+- `design.experiment.randomized_complete_block`
+- `diagnostic.normality.shapiro_wilk`
+- `algorithm.resampling.bootstrap.nonparametric`
+- `measure.effect.cohens_d`
+- `viz.distribution.histogram`
+- `theory.probability.central_limit_theorem`
 
-Indicates whether the platform has a formal knowledge record and can identify the entity.
+Identifiers are illustrative conventions and may be refined before registry implementation.
 
-## 38.2 Recommendation status
+## 38.1 Relationship types
 
-- `not_available`
-- `under_development`
-- `available`
+The registry should support explicit relationships such as:
 
-Indicates whether the analysis planner can recommend the method appropriately.
+- `belongs_to`
+- `is_a`
+- `uses_algorithm`
+- `requires_design`
+- `analysed_by`
+- `has_diagnostic`
+- `reports_measure`
+- `has_visualization`
+- `alternative_to`
+- `extends`
+- `related_to`
+- `requires_assumption`
+- `estimates`
+- `implemented_by`
 
-## 38.3 Specification status
+Examples:
 
-- `not_available`
-- `under_development`
-- `available`
+- One-way ANOVA `belongs_to` mean-comparison methods.
+- One-way ANOVA `reports_measure` eta-squared or omega-squared.
+- Randomised complete block design `analysed_by` a suitable blocked model.
+- Shapiro–Wilk `is_a` diagnostic.
+- Bootstrap `is_a` computational algorithm.
+- Cohen's d `is_a` effect-size measure.
 
-Indicates whether TimanStat can construct a valid analytical specification for the method.
+## 38.2 No duplicate definitions
 
-## 38.4 Implementation status
+If a method appears in several knowledge areas, it must have one canonical record and multiple relationships or tags.
 
-- `planned`
-- `in_development`
-- `implemented`
+For example:
 
-Indicates the computational development state.
+- Spearman correlation may be relevant to descriptive association, non-parametric statistics and inferential analysis.
+- Bootstrap may support confidence intervals, model validation and computational inference.
+- ANOVA may be relevant to classical inference, experimental design and multivariate analysis.
 
-## 38.5 Testing status
+These cross-references must not create duplicate method identities.
+
+---
+
+# 39. STATISTICAL METHOD METADATA SCHEMA
+
+Every executable or selectable statistical method should have a structured record.
+
+## 39.1 Identity and classification
+
+- `entity_id`
+- `name`
+- `aliases`
+- `entity_type`
+- `parent_id`
+- `related_entity_ids`
+- `knowledge_area`
+- `method_family`
+- `statistical_purpose`
+- `inference_paradigm`
+- `application_domains`
+- `tags`
+
+## 39.2 Method description
+
+- `description`
+- `statistical_objective`
+- `research_questions`
+- `appropriate_use_cases`
+- `inappropriate_use_cases`
+- `methodological_rationale`
+- `limitations`
+
+## 39.3 Research and data requirements
+
+- `outcome_requirements`
+- `predictor_requirements`
+- `variable_roles`
+- `measurement_scales`
+- `data_structure_requirements`
+- `sample_size_requirements`
+- `study_design_requirements`
+- `sampling_design_requirements`
+- `independence_structure`
+- `grouping_requirements`
+- `time_structure_requirements`
+- `missing_data_requirements`
+
+## 39.4 Statistical specification
+
+- `estimand`
+- `hypotheses`
+- `model_structure`
+- `link_function`
+- `probability_distribution`
+- `estimation_method`
+- `inference_method`
+- `assumptions`
+- `identification_assumptions`
+- `selection_rules`
+
+## 39.5 Outputs and interpretation
+
+- `test_statistics`
+- `parameter_estimates`
+- `effect_sizes`
+- `association_measures`
+- `interval_estimates`
+- `uncertainty_measures`
+- `model_fit_statistics`
+- `diagnostics`
+- `interpretation_guidance`
+- `reporting_requirements`
+- `visualization_options`
+
+## 39.6 Computation and implementation
+
+- `algorithm_requirements`
+- `computational_requirements`
+- `supported_engines`
+- `implementation_status`
+- `verification_status`
+- `validation_scope`
+- `known_limitations`
+- `references`
+- `version`
+
+Fields may be optional where they do not apply. A descriptive frequency table, for example, does not require a hypothesis or estimand.
+
+---
+
+# 40. IMPLEMENTATION AND VERIFICATION STATUS
+
+Implementation status and verification status must be separate.
+
+## 40.1 Implementation status
+
+Permitted values:
+
+- `catalogued` — recognised in the statistical knowledge catalogue.
+- `planned` — selected for future implementation.
+- `in_development` — implementation work has begun.
+- `implemented` — executable functionality exists.
+- `deprecated` — no longer recommended for new use.
+
+## 40.2 Verification status
+
+Permitted values:
 
 - `not_tested`
-- `tests_in_development`
-- `tested`
-
-Indicates whether automated tests have been written and executed successfully.
-
-## 38.6 Verification status
-
-- `not_verified`
-- `verification_in_progress`
-- `verified`
-
-Indicates whether calculations and outputs have been checked against accepted mathematical or statistical references.
-
-## 38.7 Validation status
-
-- `not_validated`
-- `validation_in_progress`
+- `unit_tested`
+- `integration_tested`
+- `numerically_verified`
+- `methodologically_reviewed`
 - `validated`
 
-Indicates whether the implementation has been evaluated against appropriate benchmarks, independent implementations, reference datasets or other accepted validation procedures.
+These statuses describe different levels of evidence. A method should not be marked `validated` merely because its code runs or its unit tests pass.
 
-## 38.8 Operational eligibility
+## 40.3 Validation requirements
 
-A method must not be presented as fully operational merely because its code exists.
+Validation should consider:
 
-Operational eligibility should require:
-
-1. A registered canonical entity.
-2. An appropriate analytical specification.
-3. Implemented computational functionality.
-4. Passing automated tests.
-5. Verified statistical calculations.
-6. Appropriate validation.
-7. Defined limitations and execution constraints.
-
-The platform should expose the actual capability state rather than presenting all catalogue entries as executable.
-
----
-
-# PART XIII: TIMANSTAT ARCHITECTURAL PRINCIPLES
-
-# 39. STATISTICAL KNOWLEDGE AND EXECUTION ARCHITECTURE
-
-TimanStat should use a layered architecture.
-
-## 39.1 Layer 1: Statistical knowledge base
-
-Contains:
-
-- Statistical concepts.
-- Knowledge areas.
-- Methods.
-- Models.
-- Study designs.
-- Diagnostics.
-- Algorithms.
-- Measures.
-- Visualisations.
-- Methodological relationships.
-
-This layer defines what TimanStat knows.
-
-## 39.2 Layer 2: Research-objective understanding
-
-Interprets the user's research objective and identifies:
-
-- Research purpose.
-- Research question.
-- Population of interest.
-- Outcome of interest.
-- Explanatory variables.
-- Study design.
-- Desired estimand.
-- Required analytical output.
-
-This layer translates natural-language objectives into structured analytical requirements.
-
-## 39.3 Layer 3: Data understanding and profiling
-
-Examines:
-
-- Dataset structure.
-- Variable types.
-- Measurement scales.
-- Missingness.
-- Duplicates.
-- Outliers.
-- Data validity.
-- Data consistency.
-- Sampling structure.
-- Repeated observations.
-- Clustering.
-- Temporal and spatial structure.
-
-This layer establishes whether the supplied data can support the requested analysis.
-
-## 39.4 Layer 4: Method selection
-
-Uses the research objective, data structure, variables, study design, sampling design and assumptions to recommend suitable analytical methods.
-
-It should:
-
-- Identify candidate methods.
-- Explain why each candidate is relevant.
-- Identify unsuitable methods.
-- Explain necessary assumptions.
-- Identify alternatives.
-- Ask clarifying questions where information is insufficient.
-- Distinguish recommended methods from executable methods.
-
-## 39.5 Layer 5: Statistical model specification
-
-Converts the selected method into a formal analytical specification.
-
-A general statistical model specification should accommodate:
-
-- Analysis type.
-- Outcome variable.
-- Predictor variables.
-- Factors.
-- Covariates.
-- Interaction terms.
-- Study design.
-- Sampling structure.
-- Hypotheses.
-- Estimand.
-- Assumptions.
-- Execution settings.
-
-The specification must use controlled identifiers and structured parameters rather than arbitrary executable code.
-
-## 39.6 Layer 6: Validation and diagnostics
-
-Checks:
-
-- Variable compatibility.
-- Data sufficiency.
-- Model specification.
-- Study-design compatibility.
-- Sampling-design compatibility.
-- Assumptions.
-- Missing-data implications.
-- Numerical feasibility.
-- Execution constraints.
-
-Where an assumption is violated, TimanStat should explain the consequence and consider appropriate alternatives rather than silently proceeding.
-
-## 39.7 Layer 7: Statistical computation
-
-Executes the validated analytical specification through approved statistical functions and computational algorithms.
-
-The computational engine should:
-
-- Use validated functions.
-- Apply appropriate numerical procedures.
-- Record analytical provenance.
-- Handle errors explicitly.
-- Return structured outputs.
-- Avoid arbitrary code execution.
-- Preserve reproducibility.
-
-## 39.8 Layer 8: Results verification
-
-Checks:
-
-- Numerical consistency.
-- Expected result structure.
-- Degrees of freedom.
-- Sample sizes.
-- Missing observations.
-- Convergence.
-- Numerical precision.
-- Reference or benchmark agreement, where available.
-
-## 39.9 Layer 9: Interpretation and communication
-
-Produces:
-
-- Statistical interpretation.
-- Practical interpretation.
-- Effect sizes.
-- Uncertainty estimates.
-- Limitations.
-- Diagnostic findings.
-- Visualisations.
-- Reports.
-- Reproducibility information.
-
-The interpretation must be consistent with the method, estimand, assumptions and evidence actually produced.
+- Correctness of the statistical formula
+- Correct handling of missing values
+- Correct handling of edge cases
+- Numerical stability
+- Agreement with trusted reference implementations
+- Agreement with known analytical examples
+- Assumption and diagnostic behaviour
+- Reproducibility
+- Appropriate interpretation
+- Documented limitations
 
 ---
 
-# 40. METHOD SELECTION PRINCIPLES
+# PART X — TIMANSTAT ANALYTICAL ARCHITECTURE
 
-The method-selection engine must not choose an analysis based only on the name of a statistical test or the measurement scale of one variable.
+# 41. STATISTICAL ANALYSIS WORKFLOW
 
-It must consider the full analytical context.
+TimanStat should use a structured analytical workflow:
 
-## 40.1 Research objective
+1. **Objective understanding:** interpret the research question and intended decision.
+2. **Data inspection:** identify variables, measurement scales, data structure and quality.
+3. **Statistical classification:** identify the purpose, knowledge area and relevant method families.
+4. **Estimand identification:** establish the quantity or relationship the user wants to describe, estimate, test or predict.
+5. **Method recommendation:** identify suitable methods and explain alternatives.
+6. **Clarification and approval:** ask the user for missing information or confirmation where necessary.
+7. **Model specification:** define variables, outcomes, predictors, factors, covariates, interactions, design and hypotheses.
+8. **Specification validation:** check data compatibility, assumptions and study-design constraints.
+9. **Execution:** call the appropriate validated statistical engine.
+10. **Result verification:** check numerical outputs, diagnostics and consistency.
+11. **Interpretation:** explain estimates, uncertainty, effect sizes and limitations.
+12. **Communication:** produce tables, visualisations and reports.
 
-What is the user trying to establish?
+Not every analysis requires every stage. A descriptive summary, for example, does not require a hypothesis test or inferential model.
 
-Examples:
+# 42. SEPARATION OF RESPONSIBILITIES
 
-- Describe a population.
-- Compare groups.
-- Determine an association.
-- Estimate a population parameter.
-- Predict an outcome.
-- Evaluate a treatment effect.
-- Examine change over time.
-- Analyse time to an event.
+TimanStat should separate the following architectural responsibilities:
 
-## 40.2 Outcome and explanatory variables
+## 42.1 Knowledge catalogue
 
-The system must identify:
+Stores statistical concepts, methods, models, designs, diagnostics, algorithms, measures and their relationships.
 
-- Outcome variable.
-- Predictor variables.
-- Grouping variables.
-- Factors.
-- Covariates.
-- Potential confounders.
-- Time variables.
-- Cluster identifiers.
-- Sampling weights.
+## 42.2 Objective and domain classifier
 
-## 40.3 Measurement scales
+Interprets the research question and identifies relevant statistical purposes and knowledge areas.
 
-- Nominal.
-- Ordinal.
-- Interval.
-- Ratio.
+## 42.3 Method selector
 
-The system must distinguish the measurement scale from the statistical distribution and data structure.
+Evaluates candidate methods using research objectives, variable roles, measurement scales, study design, sampling design, data structure and assumptions.
 
-## 40.4 Data structure
+## 42.4 Statistical model specification
 
-- Independent observations.
-- Paired observations.
-- Repeated observations.
-- Clustered observations.
-- Nested observations.
-- Longitudinal observations.
-- Time-series observations.
-- Spatial observations.
-- Survival data.
-- Complex survey data.
+Converts the selected method into a structured, machine-readable model specification.
 
-## 40.5 Study design
+## 42.5 Validation and diagnostics engine
 
-- Experimental.
-- Observational.
-- Cross-sectional.
-- Cohort.
-- Case-control.
-- Repeated-measures.
-- Randomised controlled trial.
-- Cluster-randomised trial.
-- Quasi-experimental.
-- Other applicable designs.
+Checks the proposed specification, data compatibility, assumptions and diagnostic requirements.
 
-## 40.6 Sampling design
+## 42.6 Statistical computation engine
 
-- Simple random sampling.
-- Stratified sampling.
-- Cluster sampling.
-- Multistage sampling.
-- Non-probability sampling.
-- Complex survey sampling.
+Executes validated statistical procedures using controlled, tested functions. It must not execute arbitrary code generated from a user prompt.
 
-## 40.7 Assumptions and diagnostics
+## 42.7 Result verification layer
 
-The method selector must assess whether the required assumptions are plausible and whether they can be evaluated from the available data.
+Checks computational outputs, numerical properties, expected ranges and relevant reference cases.
 
-## 40.8 Estimand
+## 42.8 Interpretation and reporting layer
 
-The system must identify the quantity the user wants to estimate or test.
-
-Examples:
-
-- Population mean.
-- Difference between population means.
-- Population proportion.
-- Difference between proportions.
-- Correlation.
-- Regression coefficient.
-- Risk ratio.
-- Odds ratio.
-- Average treatment effect.
-- Hazard ratio.
-- Predicted probability.
-
-## 40.9 Selection output
-
-The method-selection process should produce:
-
-1. Primary recommended method.
-2. Alternative methods, where appropriate.
-3. Rationale.
-4. Required variables.
-5. Assumptions.
-6. Data suitability assessment.
-7. Diagnostics.
-8. Expected outputs.
-9. Limitations.
-10. Implementation availability.
+Converts verified statistical outputs into explanations, tables, visualisations and reproducible reports.
 
 ---
 
-# 41. GENERAL STATISTICAL MODEL CONTRACT
+# 43. STATISTICAL MODEL SPECIFICATION
 
-TimanStat should maintain a common statistical model specification that can support different analytical methods.
+A model specification should be separate from the analysis request and the computed result.
 
-The specification should include:
+A general model specification may contain:
 
 - `analysis_type`
-- `entity_id`
 - `outcome_variable`
 - `predictor_variables`
 - `factors`
 - `covariates`
 - `interaction_terms`
-- `design`
+- `grouping_variables`
+- `time_variable`
+- `cluster_variable`
+- `study_design`
 - `sampling_design`
-- `data_structure`
 - `estimand`
 - `hypotheses`
 - `assumptions`
+- `estimation_settings`
+- `inference_settings`
+- `missing_data_strategy`
+- `diagnostic_plan`
 - `execution_settings`
 
-The model contract must be extensible. Different statistical procedures will require additional method-specific parameters.
-
-A common contract should not force unrelated methods into identical mathematical specifications.
-
-The system must distinguish:
-
-- General model fields.
-- Method-specific fields.
-- Required fields.
-- Optional fields.
-- Validated values.
-- Unsupported values.
+The specification must use controlled identifiers and validated variable references. It must not accept arbitrary executable instructions.
 
 ---
 
-# 42. STATISTICAL ENGINE DESIGN PRINCIPLES
-
-## 42.1 Shared statistical infrastructure
-
-The engine should provide common services for:
-
-- Input validation.
-- Variable-role validation.
-- Model specification.
-- Assumption assessment.
-- Result structures.
-- Effect-size calculation.
-- Confidence-interval calculation.
-- Diagnostic reporting.
-- Numerical verification.
-- Provenance.
-- Error handling.
-
-## 42.2 Method-specific computation
-
-Individual method implementations should contain the mathematical calculations and procedures specific to that method.
-
-Examples:
-
-- Independent-samples t-test.
-- One-way ANOVA.
-- Chi-square test.
-- Linear regression.
-- Logistic regression.
-- Kaplan–Meier estimation.
-
-## 42.3 Avoiding duplicated infrastructure
-
-The system should not build separate, unrelated inferential engines for every statistical test.
-
-Methods that share statistical concepts should reuse common infrastructure while retaining their own mathematical procedures.
-
-## 42.4 Execution safety
-
-- No arbitrary code execution from user questions.
-- Controlled method identifiers.
-- Controlled model parameters.
-- Input validation.
-- Numerical safeguards.
-- Explicit error handling.
-- Reproducibility.
-- Traceable analytical provenance.
-
----
-
-# 43. STATISTICAL RESULT AND PROVENANCE FRAMEWORK
-
-Every analysis should return a structured result containing the information relevant to its method.
-
-## 43.1 Core result fields
-
-- Analysis title.
-- Method identifier.
-- Method name.
-- Execution status.
-- Research objective.
-- Dataset reference.
-- Analytical sample size.
-- Variables used.
-- Model specification.
-- Estimates.
-- Test statistics.
-- Degrees of freedom, where applicable.
-- P-values, where applicable.
-- Confidence or credible intervals.
-- Effect sizes.
-- Diagnostics.
-- Assumptions.
-- Findings.
-- Limitations.
-- Interpretation.
-- Metadata.
-
-## 43.2 Provenance
-
-The platform should retain:
-
-- Dataset identity.
-- Data version or fingerprint.
-- Variables used.
-- Method identifier and version.
-- Model specification.
-- Execution parameters.
-- Software dependencies.
-- Execution timestamp.
-- Random seed, where applicable.
-- Diagnostic results.
-- Verification results.
-
-## 43.3 Error and warning handling
-
-The system must distinguish:
-
-- Invalid input.
-- Missing required variables.
-- Incompatible data.
-- Violated assumptions.
-- Insufficient sample size.
-- Numerical failure.
-- Non-convergence.
-- Unsupported method.
-- Unavailable implementation.
-- Successful execution with limitations.
-
-Warnings must not be silently converted into successful results.
-
----
-
-# 44. FUTURE EXTENSIBILITY
-
-The catalogue must allow additional statistical methods and disciplines to be introduced without restructuring the core architecture.
-
-Potential extensions include:
-
-- Advanced functional data analysis.
-- Compositional data analysis.
-- Extreme-value statistics.
-- Directional statistics.
-- Mathematical statistics.
-- Information theory.
-- Network statistics.
-- Spatial-temporal modelling.
-- Causal machine learning.
-- Advanced statistical decision theory.
-- Statistical genetics.
-- Environmental statistics.
-- Ecological statistics.
-- Bayesian non-parametric methods.
-- Advanced multivariate modelling.
-- Statistical privacy and disclosure control.
-- Differential privacy.
-- Federated statistical analysis.
-
-New entities must follow the same classification, metadata, relationship and verification principles.
-
----
-
-# 45. GOVERNANCE AND MAINTENANCE OF THE CATALOGUE
-
-## 45.1 Catalogue governance
-
-The catalogue should be maintained as a controlled statistical knowledge resource.
-
-Changes should be documented and versioned.
-
-## 45.2 Adding a new method
-
-A new method should be registered only after identifying:
-
-- Its canonical name.
-- Its entity type.
-- Its statistical purpose.
-- Its knowledge area.
-- Its method family.
-- Its research objectives.
-- Its data requirements.
-- Its assumptions.
-- Its outputs.
-- Its relationships to existing entities.
-- Its authoritative methodological references.
-
-## 45.3 Updating existing methods
-
-Updates should preserve the canonical entity identifier unless there is a compelling reason to create a new entity.
-
-Changes to definitions, assumptions, selection rules or computational requirements should be versioned.
-
-## 45.4 Avoiding duplication
-
-Before creating a new record, the catalogue manager should check for:
-
-- Existing canonical records.
-- Alternative names.
-- Closely related procedures.
-- Special cases of existing methods.
-- Methods that differ only by an inferential paradigm.
-
-## 45.5 Methodological references
-
-Each method should eventually be supported by authoritative references, including recognised statistical textbooks, peer-reviewed methodological literature and appropriate technical documentation.
-
-References should be associated with the specific entity they support.
-
----
-
-# 46. FINAL ARCHITECTURAL PRINCIPLES
+# 44. ARCHITECTURAL PRINCIPLES
 
 1. The catalogue must be comprehensive, structured and extensible.
-2. Every statistical entity must have a unique canonical identifier.
-3. Methods, models, designs, diagnostics, algorithms, measures, visualisations and principles must be represented as distinct entity types.
-4. Statistical purpose must be distinguished from knowledge area.
-5. Inference paradigm must be distinguished from method family.
-6. Bayesian statistics must remain a first-class knowledge area and inference paradigm.
-7. Experimental design must remain a first-class study-design domain.
-8. Descriptive and inferential analysis must remain central analytical purposes.
-9. Probability theory and mathematical statistics must be represented as foundational knowledge areas.
-10. A method may have multiple domain relationships without having duplicate canonical records.
-11. Every method must have explicit data and variable requirements.
-12. Method selection must consider the research objective, estimand, data structure, variable types, sampling design, study design and assumptions.
-13. Diagnostics must be distinguished from primary analytical methods.
-14. Computational algorithms must be distinguished from statistical models.
-15. Effect sizes and uncertainty measures must be methodologically appropriate.
-16. Statistical calculations must be separated from method selection and reporting.
-17. Shared statistical infrastructure should be reused across related methods.
-18. Method-specific mathematical procedures must remain explicit and independently verifiable.
-19. Statistical computations must be traceable and reproducible.
-20. No method should be represented as operational without appropriate implementation, testing, verification and validation.
-21. Unsupported methods must not be silently substituted with superficially similar procedures.
-22. The platform must communicate uncertainty, assumptions and limitations honestly.
-23. The catalogue must accommodate future statistical disciplines without redesigning its core architecture.
+2. Every entity must have a unique canonical identifier.
+3. Statistical purposes, knowledge areas, method families and entity types must remain distinct.
+4. Each entity must have one primary entity type.
+5. Related methods must be connected through explicit relationships.
+6. Methods must not be duplicated merely because they are relevant to multiple domains.
+7. Descriptive and inferential analysis must remain clearly distinguished.
+8. Bayesian and frequentist approaches must be represented as inference paradigms, not as mutually exclusive statistical universes.
+9. Experimental designs must be distinguished from statistical analysis methods.
+10. Diagnostics must be distinguished from primary analysis methods.
+11. Computational algorithms must be distinguished from statistical models.
+12. Effect sizes and other measures must be distinguished from methods.
+13. Visualisations must be distinguished from statistical procedures.
+14. Selection must consider the research objective, estimand, data structure, variable types, sampling design, study design and assumptions.
+15. Method selection must explain why a method is suitable and identify important alternatives.
+16. Statistical calculations must be separated from method selection, validation and reporting.
+17. No method should be represented as operational merely because it is registered.
+18. Verification and methodological validation must be documented.
+19. The framework must support both classical and emerging statistical disciplines.
+20. New methods must be incorporable without redesigning the core architecture.
+
+# 45. FUTURE EXTENSIBILITY
+
+The taxonomy should accommodate additional statistical fields and methods, including:
+
+- Advanced causal machine learning
+- Advanced statistical decision theory
+- Spatial-temporal modelling
+- Advanced functional data analysis
+- Advanced compositional data analysis
+- High-dimensional statistics
+- Statistical genetics
+- Genomics and omics statistics
+- Network science
+- Statistical methods for artificial intelligence
+- Privacy-preserving statistics
+- Differential privacy
+- Federated statistical analysis
+- Distribution-free and robust machine learning
+- Advanced Bayesian computation
+- Statistical methods for complex adaptive systems
+
+These areas may be expanded as the knowledge catalogue matures.
 
 ---
 
-# 47. CONCLUSION
+**END OF TIMANSTAT STATISTICAL METHODS CATALOGUE — VERSION 2.1**
 
-The TimanStat Statistical Methods Catalogue is the foundation of the platform's statistical knowledge architecture.
-
-Its purpose is not simply to provide a list of statistical tests. It is to establish a structured representation of statistical knowledge that allows TimanStat to understand research objectives, recognise appropriate analytical approaches, reason about data suitability, specify statistical models, coordinate validated computations and communicate defensible results.
-
-The catalogue therefore serves three connected purposes:
-
-1. **Statistical knowledge:** defining what TimanStat should know.
-2. **Analytical intelligence:** defining how TimanStat should reason about research questions and select appropriate methods.
-3. **Statistical execution:** defining how selected methods will eventually be specified, computed, verified and reported.
-
-The complete catalogue should be registered before implementation is prioritised. Implementation can then proceed incrementally, beginning with a carefully selected set of methods while preserving the broader statistical architecture.
-
-**End of TimanStat Statistical Methods Catalogue, Version 2.1.**
+**Version note:** Version 2.1 preserves the comprehensive scope of Version 2.0 while introducing a multidimensional taxonomy, canonical entity records, explicit relationships, an expanded metadata schema and a clearer separation between statistical knowledge, method selection, model specification, diagnostics, computation, verification and reporting.
