@@ -4,20 +4,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from timan_intelligence.registry.contracts import RegistryEntity
 
 
 @dataclass
 class MethodEntity(RegistryEntity):
-    """Registry representation of a statistical method.
+    """Registry representation of a statistical method."""
 
-    A method describes a procedure used to answer a statistical question.
-    Its model, design, diagnostics and computational algorithms are
-    represented as separate registry entities and linked through
-    relationships.
-    """
+    entity_type: Literal["method"] = field(
+        default="method",
+        init=False,
+    )
 
     use_cases: list[str] = field(default_factory=list)
 
