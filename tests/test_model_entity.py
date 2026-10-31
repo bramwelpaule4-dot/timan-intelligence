@@ -1,8 +1,6 @@
 
 """Tests for the TimanStat statistical model entity schema."""
 
-import pytest
-
 from timan_intelligence.registry.contracts import RegistryEntity
 from timan_intelligence.registry.model import StatisticalModelEntity
 
@@ -83,97 +81,79 @@ def create_model(**overrides):
 
 
 def test_model_entity_inherits_shared_registry_contract():
-    model = create_model()
-
-    assert isinstance(model, RegistryEntity)
+    assert isinstance(create_model(), RegistryEntity)
 
 
 def test_model_entity_has_model_entity_type():
-    model = create_model()
-
-    assert model.entity_type == "model"
+    assert create_model().entity_type == "model"
 
 
 def test_model_entity_preserves_canonical_identifier():
-    model = create_model()
-
-    assert model.entity_id == "model.regression.linear.multiple"
+    assert create_model().entity_id == "model.regression.linear.multiple"
 
 
 def test_model_entity_stores_model_classification():
     model = create_model()
-
     assert model.model_family == "linear_regression"
     assert model.model_class == "linear_model"
 
 
 def test_model_entity_stores_response_variable():
     model = create_model()
-
     assert model.response_variable["name"] == "income"
     assert model.response_variable["data_type"] == "continuous"
 
 
 def test_model_entity_stores_predictor_variables():
     model = create_model()
-
     assert len(model.predictor_variables) == 2
     assert model.predictor_variables[0]["name"] == "education_years"
 
 
 def test_model_entity_stores_mathematical_formulation():
     model = create_model()
-
     assert "equation" in model.mathematical_formulation
     assert "parameters" in model.mathematical_formulation
 
 
 def test_model_entity_stores_parameter_definitions():
-    model = create_model()
-
-    assert model.parameter_definitions["beta_0"] == "Intercept"
+    assert create_model().parameter_definitions["beta_0"] == "Intercept"
 
 
 def test_model_entity_separates_estimation_methods():
     model = create_model()
-
     assert "Ordinary least squares" in model.estimation_methods
     assert "Maximum likelihood" in model.estimation_methods
 
 
 def test_model_entity_separates_inference_methods():
     model = create_model()
-
     assert "Wald inference" in model.inference_methods
     assert "Likelihood-based inference" in model.inference_methods
 
 
 def test_model_entity_stores_assumptions():
     model = create_model()
-
     assert len(model.assumptions) == 4
     assert "Independent observations." in model.assumptions
 
 
 def test_model_entity_stores_diagnostics():
     model = create_model()
-
     assert "Residual analysis" in model.diagnostics
     assert "Multicollinearity assessment" in model.diagnostics
 
 
 def test_model_entity_stores_outputs():
     model = create_model()
-
     assert "Estimated coefficients" in model.outputs
     assert "Confidence intervals" in model.outputs
 
 
 def test_model_entity_stores_limitations():
     model = create_model()
-
     assert len(model.limitations) == 2
-    assert "does not establish causality" in model.limitations[1]
+    assert "does not establish causality" in model.limitations[1].lower()
 
 
 def test_model_entity_has_independent_mutable_collections():
@@ -195,7 +175,6 @@ def test_model_entity_preserves_shared_lifecycle_fields():
         implementation_status="planned",
         verification_status="not_tested",
     )
-
     assert model.record_maturity == "catalogued"
     assert model.implementation_status == "planned"
     assert model.verification_status == "not_tested"
@@ -203,7 +182,6 @@ def test_model_entity_preserves_shared_lifecycle_fields():
 
 def test_model_entity_preserves_shared_relationships():
     model = create_model()
-
     assert model.relationships == []
     assert model.related_entity_ids == []
 
