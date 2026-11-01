@@ -1,3 +1,4 @@
+
 """Shared data contracts for the TimanStat statistical registry."""
 
 from __future__ import annotations
@@ -116,3 +117,5 @@ class RegistryEntity:
     provenance: dict[str, Any] = field(default_factory=dict)
 
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    execution_eligibility: ExecutionEligibility = "not_assessed"
