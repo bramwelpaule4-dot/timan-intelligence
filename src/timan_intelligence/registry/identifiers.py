@@ -1,8 +1,10 @@
-"""Canonical identifier validation for the TimanStat statistical registry."""
+
+"""Canonical identifier validation and parsing for the TimanStat registry."""
 
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 
 
 class IdentifierValidationError(ValueError):
@@ -27,6 +29,15 @@ _IDENTIFIER_PATTERN = re.compile(
     r"^(?P<entity_type>[a-z][a-z0-9_]*)"
     r"(?:\.[a-z][a-z0-9_]*){2,}$"
 )
+
+
+@dataclass(frozen=True)
+class ParsedEntityID:
+    """Immutable parsed representation of a canonical statistical entity ID."""
+
+    canonical_id: str
+    entity_type: str
+    segments: tuple[str, ...]
 
 
 def validate_entity_id(
@@ -76,3 +87,19 @@ def validate_entity_id(
             )
 
     return entity_id
+
+
+def parse_entity_id(entity_id: str) -> ParsedEntityID:
+    """Validate and parse a canonical statistical entity identifier.
+
+    The identifier is validated before parsing and is never normalised
+    or modified.
+    """
+    canonical_id = validate_entity_id(entity_id)
+    segments = tuple(canonical_id.split("."))
+
+    return ParsedEntityID(
+        canonical_id=canonical_id,
+        entity_type=segments[0],
+        segments=segments,
+    )
