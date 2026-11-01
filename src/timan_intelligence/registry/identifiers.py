@@ -1,4 +1,3 @@
-
 """Canonical identifier validation and parsing for the TimanStat registry."""
 
 from __future__ import annotations
