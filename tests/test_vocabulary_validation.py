@@ -13,8 +13,6 @@ from timan_intelligence.registry.vocabulary_repository import (
 )
 from timan_intelligence.registry.vocabulary_validation import (
     DeprecatedVocabularyMemberError,
-    DuplicateVocabularyError,
-    DuplicateVocabularyMemberError,
     InvalidVocabularyIDError,
     InvalidVocabularyMemberIDError,
     VocabularyCompatibilityError,
@@ -387,7 +385,20 @@ def test_validate_vocabulary_membership_rejects_missing_member():
 
 
 def test_validate_vocabulary_membership_rejects_member_from_another_vocabulary():
-    repository = make_repository()
+    repository = VocabularyRepository(RegistryIdentityIndex())
+
+    repository.register_vocabulary(
+        make_definition(STATISTICAL_PURPOSE_ID)
+    )
+    repository.register_vocabulary(
+        make_definition(KNOWLEDGE_AREA_ID)
+    )
+    repository.register_member(
+        make_member(
+            member_id=STATISTICAL_PURPOSE_MEMBER_ID,
+            vocabulary_id=STATISTICAL_PURPOSE_ID,
+        )
+    )
 
     with pytest.raises(VocabularyMembershipError):
         validate_vocabulary_membership(
