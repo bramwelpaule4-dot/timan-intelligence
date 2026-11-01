@@ -25,16 +25,15 @@ class ParsedNamespaceIdentifier:
     segments: tuple[str, ...]
 
 
-# Shared segment syntax:
+# Standard segment syntax:
 # - starts with a lowercase letter
 # - continues with lowercase letters, digits, or underscores
 _SEGMENT_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
-# Implementation and vocabulary identifiers have variable depth.
-_VARIABLE_DEPTH_NAMESPACES = {"implementation", "vocab"}
+# Reference identifier values may also start with a digit.
+# This is necessary for DOI values, which commonly begin with "10.".
+_REFERENCE_VALUE_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_]*$")
 
-# Statistical entity types are included here only because relationship
-# identifiers identify the source entity type in their second segment.
 _RELATIONSHIP_SOURCE_TYPES = {
     "method",
     "model",
@@ -49,14 +48,10 @@ _RELATIONSHIP_SOURCE_TYPES = {
     "vocab",
 }
 
-# Reference identifiers use a registered reference-kind segment.
 _REFERENCE_TYPES = {"doi", "url", "bibliography"}
 
-# A relationship identifier has the form:
-# relationship.<source_type>.<relationship_type>.<six_digit_sequence>
 _RELATIONSHIP_SEQUENCE_PATTERN = re.compile(r"^[0-9]{6}$")
 
-# Registry releases use semantic versioning with numeric components.
 _REGISTRY_RELEASE_PATTERN = re.compile(
     r"^registry_release\."
     r"(0|[1-9][0-9]*)\."
@@ -110,12 +105,7 @@ def _validate_segments(
 
 
 def validate_implementation_id(identifier: str) -> str:
-    """Validate a variable-depth implementation identifier.
-
-    Examples:
-        implementation.scipy.welch_t_test
-        implementation.scipy.stats.welch_t_test
-    """
+    """Validate a variable-depth implementation identifier."""
     _validate_segments(
         identifier,
         expected_namespace="implementation",
@@ -125,12 +115,7 @@ def validate_implementation_id(identifier: str) -> str:
 
 
 def validate_vocabulary_id(identifier: str) -> str:
-    """Validate a variable-depth controlled-vocabulary identifier.
-
-    Examples:
-        vocab.method_family.regression
-        vocab.statistical_method.family.regression
-    """
+    """Validate a variable-depth controlled-vocabulary identifier."""
     _validate_segments(
         identifier,
         expected_namespace="vocab",
@@ -142,16 +127,43 @@ def validate_vocabulary_id(identifier: str) -> str:
 def validate_reference_id(identifier: str) -> str:
     """Validate the structure of a shared reference identifier.
 
-    This function validates the namespace and reference-kind structure.
-    It deliberately does not normalise DOI, URL, or bibliographic values.
-    Reference-specific normalisation and duplicate detection are separate
-    responsibilities.
+    Reference values may start with a digit, as DOI values commonly do.
+    This function does not normalise or verify DOI, URL, or bibliographic
+    values. Reference-specific normalisation and duplicate detection are
+    separate responsibilities.
     """
-    segments = _validate_segments(
-        identifier,
-        expected_namespace="reference",
-        minimum_segments=3,
-    )
+    if not isinstance(identifier, str):
+        raise NamespaceIdentifierValidationError(
+            "Namespace identifier must be a string."
+        )
+
+    if not identifier:
+        raise NamespaceIdentifierValidationError(
+            "Namespace identifier cannot be empty."
+        )
+
+    if identifier != identifier.strip():
+        raise NamespaceIdentifierValidationError(
+            "Namespace identifier cannot have leading or trailing whitespace."
+        )
+
+    segments = tuple(identifier.split("."))
+
+    if len(segments) < 3:
+        raise NamespaceIdentifierValidationError(
+            "reference identifiers must contain at least three "
+            "dot-separated segments."
+        )
+
+    if segments[0] != "reference":
+        raise NamespaceIdentifierValidationError(
+            "Expected namespace prefix 'reference'."
+        )
+
+    if not _SEGMENT_PATTERN.fullmatch(segments[1]):
+        raise NamespaceIdentifierValidationError(
+            f"Invalid reference type segment: '{segments[1]}'."
+        )
 
     if segments[1] not in _REFERENCE_TYPES:
         allowed = ", ".join(sorted(_REFERENCE_TYPES))
@@ -160,21 +172,25 @@ def validate_reference_id(identifier: str) -> str:
             f"Expected one of: {allowed}."
         )
 
+    for segment in segments[2:]:
+        if not _REFERENCE_VALUE_PATTERN.fullmatch(segment):
+            raise NamespaceIdentifierValidationError(
+                f"Invalid reference identifier segment: '{segment}'."
+            )
+
     return identifier
 
 
 def validate_relationship_id(identifier: str) -> str:
-    """Validate a relationship identifier with a six-digit sequence.
-
-    Example:
-        relationship.method.supported_by.000001
-
-    Global uniqueness of the complete identifier is enforced by the
-    registry-wide identity service, not by this structural validator.
-    """
+    """Validate a relationship identifier with a six-digit sequence."""
     if not isinstance(identifier, str):
         raise NamespaceIdentifierValidationError(
             "Namespace identifier must be a string."
+        )
+
+    if identifier != identifier.strip():
+        raise NamespaceIdentifierValidationError(
+            "Namespace identifier cannot have leading or trailing whitespace."
         )
 
     segments = tuple(identifier.split("."))
@@ -208,12 +224,7 @@ def validate_relationship_id(identifier: str) -> str:
 
 
 def validate_registry_release_id(identifier: str) -> str:
-    """Validate a registry release identifier using semantic versioning.
-
-    Examples:
-        registry_release.1.0.0
-        registry_release.2.3.1
-    """
+    """Validate a registry release identifier using semantic versioning."""
     if not isinstance(identifier, str):
         raise NamespaceIdentifierValidationError(
             "Namespace identifier must be a string."
@@ -265,4 +276,3 @@ def parse_namespace_identifier(identifier: str) -> ParsedNamespaceIdentifier:
         namespace=namespace,
         segments=segments,
     )
-
