@@ -1,12 +1,15 @@
+
 """Tests for the TimanStat shared registry entity contracts."""
 
-from datetime import datetime, timezone
+from datetime import datetime
+from typing import get_args
 
 import pytest
 
 from timan_intelligence.registry.contracts import (
     EntityReference,
     EntityRelationship,
+    ExecutionEligibility,
     RegistryEntity,
 )
 
@@ -114,3 +117,28 @@ def test_entity_supports_replacement_reference():
 def test_entity_rejects_missing_required_fields():
     with pytest.raises(TypeError):
         RegistryEntity()
+
+
+def test_execution_eligibility_defaults_to_not_assessed():
+    entity = create_entity()
+
+    assert entity.execution_eligibility == "not_assessed"
+
+
+def test_execution_eligibility_declares_four_supported_values():
+    assert set(get_args(ExecutionEligibility)) == {
+        "eligible",
+        "ineligible",
+        "conditional",
+        "not_assessed",
+    }
+
+
+@pytest.mark.parametrize(
+    "eligibility",
+    ["eligible", "ineligible", "conditional", "not_assessed"],
+)
+def test_entity_accepts_explicit_execution_eligibility(eligibility):
+    entity = create_entity(execution_eligibility=eligibility)
+
+    assert entity.execution_eligibility == eligibility
