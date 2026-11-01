@@ -1,4 +1,3 @@
-
 """Method-specific entity contract for the TimanStat registry."""
 
 from __future__ import annotations
