@@ -1,4 +1,3 @@
-
 """Tests for TimanStat controlled vocabulary data contracts."""
 
 from dataclasses import fields, is_dataclass
