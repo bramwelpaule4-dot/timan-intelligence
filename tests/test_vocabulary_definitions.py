@@ -53,17 +53,22 @@ def test_all_six_initial_vocabulary_definitions_are_present():
 
 
 def test_named_vocabulary_constants_match_initial_collection():
-    named_vocabularies = {
-        STATISTICAL_PURPOSE_VOCABULARY,
-        KNOWLEDGE_AREA_VOCABULARY,
-        ENTITY_TYPE_VOCABULARY,
-        METHOD_FAMILY_VOCABULARY,
-        INFERENCE_PARADIGM_VOCABULARY,
-        APPLICATION_DOMAIN_VOCABULARY,
+    named_vocabulary_ids = {
+        STATISTICAL_PURPOSE_VOCABULARY.vocabulary_id,
+        KNOWLEDGE_AREA_VOCABULARY.vocabulary_id,
+        ENTITY_TYPE_VOCABULARY.vocabulary_id,
+        METHOD_FAMILY_VOCABULARY.vocabulary_id,
+        INFERENCE_PARADIGM_VOCABULARY.vocabulary_id,
+        APPLICATION_DOMAIN_VOCABULARY.vocabulary_id,
     }
 
-    assert len(named_vocabularies) == 6
-    assert set(INITIAL_VOCABULARIES) == named_vocabularies
+    initial_vocabulary_ids = {
+        vocabulary.vocabulary_id
+        for vocabulary in INITIAL_VOCABULARIES
+    }
+
+    assert len(named_vocabulary_ids) == 6
+    assert initial_vocabulary_ids == named_vocabulary_ids
 
 
 def test_vocabulary_definition_ids_are_unique():
