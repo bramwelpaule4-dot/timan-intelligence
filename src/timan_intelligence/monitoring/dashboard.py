@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pandas as pd
 import streamlit as st
 
@@ -26,30 +28,35 @@ def _filter_features(
         filtered = [
             feature
             for feature in filtered
-            if feature["implementation_status"] == implementation_status
+            if feature.get("implementation_status")
+            == implementation_status
         ]
 
     if verification_status != "All":
         filtered = [
             feature
             for feature in filtered
-            if feature["verification_status"] == verification_status
+            if feature.get("verification_status")
+            == verification_status
         ]
 
-    search_text = search_text.strip().lower()
+    search_text = search_text.strip().casefold()
 
     if search_text:
+        searchable_fields = (
+            "feature_id",
+            "name",
+            "module",
+            "description",
+        )
+
         filtered = [
             feature
             for feature in filtered
             if search_text in " ".join(
-                [
-                    feature.get("feature_id", ""),
-                    feature.get("name", ""),
-                    feature.get("module", ""),
-                    feature.get("description", ""),
-                ]
-            ).lower()
+                str(feature.get(field) or "")
+                for field in searchable_fields
+            ).casefold()
         ]
 
     return filtered
@@ -146,8 +153,9 @@ def render_project_status_dashboard() -> None:
     )
 
     st.caption(
-        "Calculated as validated features divided by implemented "
-        "features. This is not the same as implementation progress."
+        "Calculated as fully validated features divided by implemented "
+        "features. Partial verification stages do not count as fully "
+        "validated."
     )
 
     verification_columns = st.columns(2)
@@ -158,8 +166,8 @@ def render_project_status_dashboard() -> None:
     )
 
     verification_columns[1].metric(
-        "Implemented, awaiting verification",
-        summary["implemented_awaiting_verification"],
+        "Implemented but not fully validated",
+        summary["implemented_not_fully_validated"],
     )
 
     # ---------------------------------------------------------
@@ -180,6 +188,8 @@ def render_project_status_dashboard() -> None:
             implementation_frame.set_index("Status"),
             y="Features",
         )
+    else:
+        st.info("No implementation status records are available.")
 
     st.subheader("Verification status distribution")
 
@@ -195,9 +205,11 @@ def render_project_status_dashboard() -> None:
             verification_frame.set_index("Status"),
             y="Features",
         )
+    else:
+        st.info("No verification status records are available.")
 
     # ---------------------------------------------------------
-    # Outstanding work
+    # Outstanding implementation work
     # ---------------------------------------------------------
 
     st.subheader("Outstanding implementation work")
@@ -205,7 +217,7 @@ def render_project_status_dashboard() -> None:
     outstanding_implementation = [
         feature
         for feature in features
-        if feature["implementation_status"] in (
+        if feature.get("implementation_status") in (
             "planned",
             "in_development",
         )
@@ -228,20 +240,24 @@ def render_project_status_dashboard() -> None:
     else:
         st.info("No planned or in-development features are recorded.")
 
-    st.subheader("Implemented features awaiting verification")
+    # ---------------------------------------------------------
+    # Implemented features not fully validated
+    # ---------------------------------------------------------
 
-    awaiting_verification = [
+    st.subheader("Implemented but not fully validated")
+
+    not_fully_validated = [
         feature
         for feature in features
         if (
-            feature["implementation_status"] == "implemented"
-            and feature["verification_status"] != "validated"
+            feature.get("implementation_status") == "implemented"
+            and feature.get("verification_status") != "validated"
         )
     ]
 
-    if awaiting_verification:
+    if not_fully_validated:
         st.dataframe(
-            pd.DataFrame(awaiting_verification)[
+            pd.DataFrame(not_fully_validated)[
                 [
                     "feature_id",
                     "name",
@@ -254,8 +270,8 @@ def render_project_status_dashboard() -> None:
             hide_index=True,
         )
     else:
-        st.info(
-            "No implemented features are currently awaiting validation."
+        st.success(
+            "All implemented features have reached the validated status."
         )
 
     # ---------------------------------------------------------
@@ -359,13 +375,16 @@ def render_project_status_dashboard() -> None:
         mime="text/csv",
     )
 
+    json_data = json.dumps(
+        report,
+        indent=2,
+        ensure_ascii=False,
+        default=str,
+    ).encode("utf-8")
+
     st.download_button(
         label="Download project status report (JSON)",
-        data=__import__("json").dumps(
-            report,
-            indent=2,
-            default=str,
-        ).encode("utf-8"),
+        data=json_data,
         file_name="timanstat_project_status.json",
         mime="application/json",
     )
