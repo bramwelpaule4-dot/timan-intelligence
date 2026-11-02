@@ -8,9 +8,7 @@ import copy
 import pytest
 
 from timan_intelligence.registry.contracts import RegistryEntity
-from timan_intelligence.registry.entity_repository import (
-    EntityRepository,
-)
+from timan_intelligence.registry.entity_repository import EntityRepository
 from timan_intelligence.registry.identity import (
     DuplicateCanonicalIDError,
     RegistryIdentityIndex,
@@ -128,7 +126,7 @@ def build_dependencies():
     for vocabulary_id, values in vocabulary_values.items():
         for value in values:
             member_id = (
-                f"{vocabulary_id.removeprefix('vocab.definition.')}"
+                f"vocab.{vocabulary_id.removeprefix('vocab.definition.')}"
                 f".{value}"
             )
 
@@ -414,7 +412,7 @@ def test_register_rejects_deprecated_vocabulary_member():
     )
 
     deprecated_member = VocabularyMember(
-        member_id="knowledge_area.deprecated_area",
+        member_id="vocab.knowledge_area.deprecated_area",
         vocabulary_id="vocab.definition.knowledge_area",
         value="deprecated_area",
         label="Deprecated area",
@@ -436,12 +434,9 @@ def test_register_rejects_deprecated_vocabulary_member():
 
 def test_register_rejects_inactive_vocabulary():
     """Classifications cannot use a vocabulary that is not active."""
-    repository, identity_index, vocabulary_repository = (
-        build_repository()
-    )
+    repository, identity_index, _ = build_repository()
 
-    # The repository returns defensive copies, so this test uses a
-    # separate vocabulary repository with an inactive definition.
+    # Use a separate vocabulary repository with an inactive definition.
     identity_index_2 = RegistryIdentityIndex()
     inactive_repository = VocabularyRepository(identity_index_2)
 
@@ -457,7 +452,7 @@ def test_register_rejects_inactive_vocabulary():
     )
 
     entity_type_member = VocabularyMember(
-        member_id="entity_type.method",
+        member_id="vocab.entity_type.method",
         vocabulary_id="vocab.definition.entity_type",
         value="method",
         label="Method",
