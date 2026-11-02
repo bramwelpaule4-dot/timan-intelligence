@@ -27,7 +27,7 @@ from timan_intelligence.registry.vocabulary_validation import (
 )
 
 
-ENTITY_ID = "method.test_entity"
+ENTITY_ID = "method.test.entity"
 
 
 def build_dependencies():
@@ -124,11 +124,12 @@ def build_dependencies():
     }
 
     for vocabulary_id, values in vocabulary_values.items():
+        vocabulary_name = vocabulary_id.removeprefix(
+            "vocab.definition."
+        )
+
         for value in values:
-            member_id = (
-                f"vocab.{vocabulary_id.removeprefix('vocab.definition.')}"
-                f".{value}"
-            )
+            member_id = f"vocab.{vocabulary_name}.{value}"
 
             vocabulary_repository.register_member(
                 VocabularyMember(
@@ -250,7 +251,7 @@ def test_register_preserves_entity_subclass():
     repository, _, _ = build_repository()
 
     method = MethodEntity(
-        entity_id="method.test_subclass",
+        entity_id="method.test.subclass",
         name="Test method subclass",
         description="A test method entity.",
         knowledge_areas=["probability"],
@@ -280,7 +281,7 @@ def test_get_returns_none_for_unknown_entity():
     """Unknown entity IDs return None."""
     repository, _, _ = build_repository()
 
-    assert repository.get("method.unknown") is None
+    assert repository.get("method.unknown.entity") is None
 
 
 def test_list_all_returns_registered_entities():
@@ -288,7 +289,7 @@ def test_list_all_returns_registered_entities():
     repository, _, _ = build_repository()
 
     first = build_entity()
-    second = build_entity(entity_id="method.second_entity")
+    second = build_entity(entity_id="method.test.second_entity")
 
     repository.register(first)
     repository.register(second)
@@ -436,7 +437,8 @@ def test_register_rejects_inactive_vocabulary():
     """Classifications cannot use a vocabulary that is not active."""
     repository, identity_index, _ = build_repository()
 
-    # Use a separate vocabulary repository with an inactive definition.
+    # Use a separate identity index and vocabulary repository so that
+    # the entity-type vocabulary can be registered in draft status.
     identity_index_2 = RegistryIdentityIndex()
     inactive_repository = VocabularyRepository(identity_index_2)
 
@@ -525,7 +527,7 @@ def test_exists_returns_false_for_unknown_entity():
     """The exists method returns False for unknown IDs."""
     repository, _, _ = build_repository()
 
-    assert not repository.exists("method.unknown")
+    assert not repository.exists("method.unknown.entity")
 
 
 def test_exists_returns_true_for_registered_entity():
@@ -550,7 +552,7 @@ def test_count_returns_number_of_registered_entities():
 
     repository.register(build_entity())
     repository.register(
-        build_entity(entity_id="method.second_entity")
+        build_entity(entity_id="method.test.second_entity")
     )
 
     assert repository.count() == 2
