@@ -6,13 +6,23 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from timan_intelligence.config import (
+    APP_DESCRIPTION,
+    APP_NAME,
+    APP_ORGANISATION,
+    APP_TAGLINE,
+    APP_VERSION,
+    SHORT_DESCRIPTION,
+)
+from timan_intelligence.config.branding import PLATFORM_LABEL, SIDEBAR_FOOTER
+
 
 # ============================================================
 # PAGE CONFIGURATION AND BRANDING
 # ============================================================
 
 st.set_page_config(
-    page_title="TimanStat",
+    page_title=APP_NAME,
     page_icon="📊",
     layout="wide",
 )
@@ -146,7 +156,6 @@ def clear_dataset():
     st.session_state.dataset_name = None
     st.session_state.dataset_source_key = None
     st.session_state.pop("dataset_uploader", None)
-
 
 
 def go_to_data_management():
@@ -378,31 +387,16 @@ else:
     )
 
 st.sidebar.markdown(
-    """
+    f"""
     <div style="text-align:center; padding:4px 4px 8px;">
-        <div style="
-            font-size:25px;
-            font-weight:800;
-            color:#174a7e;
-            margin-top:4px;
-        ">
-            TimanStat
+        <div style="font-size:25px; font-weight:800; color:#174a7e; margin-top:4px;">
+            {APP_NAME}
         </div>
-        <div style="
-            font-size:11px;
-            font-weight:700;
-            letter-spacing:.6px;
-            color:#526579;
-            margin-top:3px;
-        ">
-            STATISTICAL SUPPORT PLATFORM
+        <div style="font-size:11px; font-weight:700; letter-spacing:.6px; color:#526579; margin-top:3px;">
+            {PLATFORM_LABEL}
         </div>
-        <div style="
-            font-size:12px;
-            color:#526579;
-            margin-top:7px;
-        ">
-            by Timan Analytics
+        <div style="font-size:12px; color:#526579; margin-top:7px;">
+            by {APP_ORGANISATION}
         </div>
     </div>
     """,
@@ -418,9 +412,7 @@ page = st.sidebar.radio(
 )
 
 st.sidebar.divider()
-st.sidebar.caption(
-    "Statistical Expertise. Data-Driven Decisions."
-)
+st.sidebar.caption(SIDEBAR_FOOTER)
 
 if st.session_state.dataset is not None:
     loaded = st.session_state.dataset
@@ -447,24 +439,19 @@ else:
 
 if page == "Home":
     st.markdown(
-        '<div class="brand">TIMANSTAT</div>',
+        f'<div class="brand">{APP_NAME.upper()}</div>',
         unsafe_allow_html=True,
     )
 
     st.markdown(
         '<div class="subtitle">'
-        "Turning Data into Insights for Informed Decisions."
-        "</div>",
+        f"{APP_TAGLINE}</div>",
         unsafe_allow_html=True,
     )
 
     st.write("")
 
-    st.write(
-        "TimanStat is a statistical analytics platform for "
-        "exploring datasets, checking data quality, calculating "
-        "descriptive statistics and creating basic visualisations."
-    )
+    st.write(APP_DESCRIPTION)
 
     df = st.session_state.dataset
 
@@ -522,9 +509,7 @@ if page == "Home":
         hide_index=True,
         use_container_width=True,
     )
-
-
-# ============================================================
+    # ============================================================
 # DATA MANAGEMENT
 # ============================================================
 
@@ -917,9 +902,7 @@ elif page == "Data Quality":
             "respondent IDs, or programme-specific indicator rules. Those "
             "checks require context and validation rules for the dataset."
         )
-
-
-# ============================================================
+        # ============================================================
 # DESCRIPTIVE STATISTICS
 # ============================================================
 
@@ -1211,9 +1194,7 @@ elif page == "Descriptive Statistics":
             st.info(
                 "A correlation matrix requires at least two numeric variables."
             )
-
-
-# ============================================================
+            # ============================================================
 # VISUALISATIONS
 # ============================================================
 
@@ -1448,22 +1429,20 @@ elif page == "Reports & Exports":
 # ============================================================
 
 elif page == "About":
-    st.title("About TimanStat")
+    st.title(f"About {APP_NAME}")
     st.caption(status_text(MODULES[page][0]))
 
-    st.write(
-        "TimanStat is a Statistical Support Platform being "
-        "developed under Timan Analytics."
-    )
-
-    st.write(
-        "Slogan: **Turning Data into Insights for Informed Decisions.**"
-    )
+    st.write(SHORT_DESCRIPTION)
+    st.write(APP_DESCRIPTION)
+    st.write(f"**Organisation:** {APP_ORGANISATION}")
+    st.write(f"**Tagline:** {APP_TAGLINE}")
+    st.write(f"**Version:** {APP_VERSION}")
 
     st.write(
         "The current prototype supports CSV and Excel import, "
-        "worksheet selection, basic data-quality checks, descriptive "
-        "statistics, basic charts and CSV exports."
+        "worksheet selection, initial data-quality checks, core "
+        "descriptive statistics, basic charts and CSV exports. "
+        "Additional modules remain under development."
     )
 
     st.warning(
