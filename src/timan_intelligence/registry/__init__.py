@@ -1,4 +1,3 @@
-
 """Feature registry package for TimanStat."""
 
 from .feature_registry import (
