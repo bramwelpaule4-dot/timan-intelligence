@@ -1,4 +1,3 @@
-
 """Tests for the shared TimanStat entity repository."""
 
 from __future__ import annotations
