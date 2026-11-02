@@ -2,6 +2,7 @@
 """Tests for the TimanStat project status reporting module."""
 
 from timan_intelligence.monitoring.project_status import (
+    _percentage,
     build_project_status,
 )
 
@@ -83,15 +84,78 @@ def test_validation_rate_is_within_valid_range():
     assert 0 <= rate <= 100
 
 
+def test_implementation_rate_is_calculated_correctly():
+    report = build_project_status()
+    summary = report["summary"]
+
+    expected = (
+        round(
+            summary["implemented_features"]
+            / summary["active_features"] * 100,
+            2,
+        )
+        if summary["active_features"]
+        else 0.0
+    )
+
+    assert summary["implementation_rate_percent"] == expected
+
+
+def test_validation_rate_is_calculated_correctly():
+    report = build_project_status()
+    summary = report["summary"]
+
+    expected = (
+        round(
+            summary["validated_features"]
+            / summary["implemented_features"] * 100,
+            2,
+        )
+        if summary["implemented_features"]
+        else 0.0
+    )
+
+    assert summary["validation_rate_percent"] == expected
+
+
 def test_implemented_features_reconcile_with_validation_counts():
     report = build_project_status()
     summary = report["summary"]
 
     assert (
         summary["validated_features"]
-        + summary["implemented_awaiting_verification"]
+        + summary["implemented_not_fully_validated"]
         == summary["implemented_features"]
     )
+
+
+def test_implemented_not_fully_validated_count_is_correct():
+    report = build_project_status()
+    summary = report["summary"]
+
+    expected = sum(
+        1
+        for feature in report["features"]
+        if (
+            feature["implementation_status"] == "implemented"
+            and feature["verification_status"] != "validated"
+        )
+    )
+
+    assert (
+        summary["implemented_not_fully_validated"]
+        == expected
+    )
+
+
+def test_percentage_handles_zero_denominator():
+    assert _percentage(0, 0) == 0.0
+    assert _percentage(5, 0) == 0.0
+
+
+def test_percentage_calculates_expected_value():
+    assert _percentage(4, 10) == 40.0
+    assert _percentage(1, 3) == 33.33
 
 
 def test_every_feature_record_contains_required_fields():
