@@ -47,8 +47,8 @@ class Feature:
 
 
 # Initial project baseline.
-# These classifications are provisional and should be updated
-# as implementation and verification evidence becomes available.
+# Classifications should be updated only when implementation or
+# verification evidence becomes available.
 
 _FEATURES = (
     Feature(
@@ -304,7 +304,7 @@ def validate_registry() -> list[str]:
     """Return structural registry errors.
 
     An empty list means structural checks passed. It does not establish
-    that the registered statistical procedures are methodologically valid.
+    that registered statistical procedures are methodologically valid.
     """
     errors: list[str] = []
     identifiers = [feature.feature_id for feature in _FEATURES]
@@ -313,17 +313,26 @@ def validate_registry() -> list[str]:
         errors.append("Duplicate feature identifiers found.")
 
     for feature in _FEATURES:
-        if not feature.feature_id.strip():
-            errors.append("A feature has an empty identifier.")
+        if not isinstance(feature.feature_id, str) or not feature.feature_id.strip():
+            errors.append("A feature has an empty or invalid identifier.")
+            continue
 
-        if not feature.name.strip():
+        if not isinstance(feature.name, str) or not feature.name.strip():
             errors.append(
-                f"{feature.feature_id}: feature name is empty."
+                f"{feature.feature_id}: feature name is empty or invalid."
             )
 
-        if not feature.module.strip():
+        if not isinstance(feature.module, str) or not feature.module.strip():
             errors.append(
-                f"{feature.feature_id}: module is empty."
+                f"{feature.feature_id}: module is empty or invalid."
+            )
+
+        if (
+            not isinstance(feature.description, str)
+            or not feature.description.strip()
+        ):
+            errors.append(
+                f"{feature.feature_id}: description is empty or invalid."
             )
 
         if feature.implementation_status not in IMPLEMENTATION_STATUSES:
@@ -334,6 +343,27 @@ def validate_registry() -> list[str]:
         if feature.verification_status not in VERIFICATION_STATUSES:
             errors.append(
                 f"{feature.feature_id}: invalid verification status."
+            )
+
+        if not isinstance(feature.evidence, tuple):
+            errors.append(
+                f"{feature.feature_id}: evidence must be a tuple."
+            )
+        elif not all(
+            isinstance(item, str) and item.strip()
+            for item in feature.evidence
+        ):
+            errors.append(
+                f"{feature.feature_id}: evidence must contain "
+                "non-empty strings."
+            )
+
+        if (
+            feature.notes is not None
+            and not isinstance(feature.notes, str)
+        ):
+            errors.append(
+                f"{feature.feature_id}: notes must be a string or None."
             )
 
         if (
