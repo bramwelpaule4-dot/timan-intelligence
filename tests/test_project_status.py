@@ -40,58 +40,53 @@ def test_generated_at_is_valid_datetime(report):
     generated_at = report["generated_at"]
 
     assert isinstance(generated_at, str)
-    parsed_datetime = datetime.fromisoformat(generated_at)
-    assert parsed_datetime is not None
+    assert datetime.fromisoformat(generated_at)
 
 
 def test_summary_contains_required_metrics(report):
-    summary = report["summary"]
-
     required_metrics = {
         "total_features",
-        "implemented_features",
-        "in_development_features",
-        "planned_features",
+        "active_features",
         "deprecated_features",
+        "implemented_features",
+        "implementation_rate_percent",
         "validated_features",
         "implemented_not_fully_validated",
-        "implementation_rate_percent",
         "validation_rate_percent",
     }
 
-    assert required_metrics.issubset(summary.keys())
+    assert required_metrics.issubset(report["summary"].keys())
 
 
 def test_feature_records_match_registry(report):
-    registry_features = get_all_features()
-
-    assert len(report["features"]) == len(registry_features)
+    assert len(report["features"]) == len(get_all_features())
 
 
 def test_total_features_matches_registry(report):
+    assert report["summary"]["total_features"] == len(get_all_features())
+
+
+def test_active_features_exclude_deprecated_features(report):
     summary = report["summary"]
 
-    assert summary["total_features"] == len(get_all_features())
+    assert (
+        summary["active_features"]
+        == summary["total_features"] - summary["deprecated_features"]
+    )
 
 
 def test_implementation_status_counts_reconcile(report):
     summary = report["summary"]
     implementation_status = report["implementation_status"]
 
-    assert (
-        sum(implementation_status.values())
-        == summary["total_features"]
-    )
+    assert sum(implementation_status.values()) == summary["total_features"]
 
 
 def test_verification_status_counts_reconcile(report):
     summary = report["summary"]
     verification_status = report["verification_status"]
 
-    assert (
-        sum(verification_status.values())
-        == summary["total_features"]
-    )
+    assert sum(verification_status.values()) == summary["total_features"]
 
 
 def test_implementation_status_counts_match_summary(report):
@@ -104,16 +99,6 @@ def test_implementation_status_counts_match_summary(report):
     )
 
     assert (
-        implementation_status["in_development"]
-        == summary["in_development_features"]
-    )
-
-    assert (
-        implementation_status["planned"]
-        == summary["planned_features"]
-    )
-
-    assert (
         implementation_status["deprecated"]
         == summary["deprecated_features"]
     )
@@ -121,12 +106,13 @@ def test_implementation_status_counts_match_summary(report):
 
 def test_implementation_counts_reconcile(report):
     summary = report["summary"]
+    implementation_status = report["implementation_status"]
 
     assert (
-        summary["implemented_features"]
-        + summary["in_development_features"]
-        + summary["planned_features"]
-        + summary["deprecated_features"]
+        implementation_status["implemented"]
+        + implementation_status["in_development"]
+        + implementation_status["planned"]
+        + implementation_status["deprecated"]
         == summary["total_features"]
     )
 
@@ -168,36 +154,32 @@ def test_validation_rate_is_within_valid_range(report):
 
 def test_implementation_rate_is_calculated_correctly(report):
     summary = report["summary"]
+    active_features = summary["active_features"]
 
-    active_features = (
-        summary["total_features"] - summary["deprecated_features"]
-    )
-
-    if active_features == 0:
-        expected_rate = 0.0
-    else:
-        expected_rate = round(
+    expected_rate = (
+        0.0
+        if active_features == 0
+        else round(
             summary["implemented_features"] / active_features * 100,
             2,
         )
+    )
 
     assert summary["implementation_rate_percent"] == expected_rate
 
 
 def test_validation_rate_is_calculated_correctly(report):
     summary = report["summary"]
-
     implemented_features = summary["implemented_features"]
 
-    if implemented_features == 0:
-        expected_rate = 0.0
-    else:
-        expected_rate = round(
-            summary["validated_features"]
-            / implemented_features
-            * 100,
+    expected_rate = (
+        0.0
+        if implemented_features == 0
+        else round(
+            summary["validated_features"] / implemented_features * 100,
             2,
         )
+    )
 
     assert summary["validation_rate_percent"] == expected_rate
 
@@ -257,15 +239,18 @@ def test_feature_modules_are_not_empty(report):
         assert feature["module"].strip()
 
 
+def test_feature_evidence_is_a_list_in_report(report):
+    for feature in report["features"]:
+        assert isinstance(feature["evidence"], list)
+
+
 def test_feature_evidence_is_a_tuple_in_registry():
     for feature in get_all_features():
         assert isinstance(feature.evidence, tuple)
 
 
 def test_registry_validation_returns_list():
-    errors = validate_registry()
-
-    assert isinstance(errors, list)
+    assert isinstance(validate_registry(), list)
 
 
 def test_registry_has_no_validation_errors(report):
