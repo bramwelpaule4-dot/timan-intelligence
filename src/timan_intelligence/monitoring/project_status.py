@@ -81,7 +81,7 @@ def build_project_status() -> dict[str, Any]:
         )
     )
 
-    implemented_awaiting_verification = sum(
+    implemented_not_fully_validated = sum(
         1
         for feature in features
         if (
@@ -118,8 +118,8 @@ def build_project_status() -> dict[str, Any]:
             "implemented_features": implemented_count,
             "implementation_rate_percent": implementation_rate,
             "validated_features": validated_count,
-            "implemented_awaiting_verification": (
-                implemented_awaiting_verification
+            "implemented_not_fully_validated": (
+                implemented_not_fully_validated
             ),
             "validation_rate_percent": validation_rate,
         },
