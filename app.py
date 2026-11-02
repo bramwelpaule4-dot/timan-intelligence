@@ -1,3 +1,4 @@
+
 import hashlib
 import io
 from pathlib import Path
@@ -15,109 +16,63 @@ from timan_intelligence.config import (
     SHORT_DESCRIPTION,
 )
 from timan_intelligence.config.branding import PLATFORM_LABEL, SIDEBAR_FOOTER
+from timan_intelligence.monitoring.dashboard import render_project_status_dashboard
 
 
 # ============================================================
-# PAGE CONFIGURATION AND BRANDING
+# PAGE CONFIGURATION
 # ============================================================
 
 st.set_page_config(
-    page_title=APP_NAME,
-    page_icon="📊",
+    page_title=f"{APP_NAME} | {APP_ORGANISATION}",
+    page_icon="🔷",
     layout="wide",
-)
-
-st.markdown(
-    """
-    <style>
-    .stApp {
-        background-color: #f7f9fc;
-    }
-    .brand {
-        color: #174a7e;
-        font-size: 32px;
-        font-weight: 800;
-    }
-    .subtitle {
-        color: #526579;
-        font-size: 15px;
-    }
-    div[data-testid="stMetric"] {
-        background: white;
-        padding: 14px;
-        border-radius: 10px;
-        border: 1px solid #e3eaf2;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
+    initial_sidebar_state="expanded",
 )
 
 
 # ============================================================
-# MODULE REGISTRY
+# APPLICATION CONSTANTS
 # ============================================================
+
+APP_ROOT = Path(__file__).resolve().parent
 
 MODULES = {
     "Home": (
         "Available",
-        "Platform overview and starting point.",
+        "Welcome to TimanStat.",
     ),
-    "Data Management": (
+    "Upload & Explore": (
         "Available",
-        "Upload, select, preview and inspect datasets.",
+        "Upload, inspect and explore datasets.",
     ),
     "Data Quality": (
-        "Available — initial checks",
-        "Review missing values, duplicates and variable structure.",
+        "Available",
+        "Review dataset completeness, consistency and quality.",
     ),
     "Descriptive Statistics": (
-        "Available — core functions",
-        "Calculate numeric summaries and categorical frequencies.",
+        "Available",
+        "Explore descriptive statistics and distributions.",
     ),
-    "Survey Analysis": (
+    "Statistical Analysis": (
         "Under development",
-        "Questionnaire analysis, survey design, weights and response patterns.",
-    ),
-    "Statistical Inference": (
-        "Under development",
-        "Confidence intervals, hypothesis tests and statistical association.",
-    ),
-    "Research & Modelling": (
-        "Under development",
-        "Research workflows, regression and advanced statistical models.",
-    ),
-    "MEAL Intelligence": (
-        "Under development",
-        "Indicators, targets, results frameworks, evaluation and accountability.",
-    ),
-    "Business Intelligence": (
-        "Under development",
-        "Business KPIs, sales, costs, profitability and operational performance.",
-    ),
-    "Forecasting & Prediction": (
-        "Under development",
-        "Time-series forecasting and predictive modelling.",
-    ),
-    "Optimisation & Scenarios": (
-        "Under development",
-        "What-if analysis, sensitivity analysis and resource-allocation scenarios.",
+        "Conduct statistical analyses using validated methods.",
     ),
     "Visualisations": (
-        "Available — core charts",
-        "Create basic charts from the currently loaded dataset.",
+        "Available",
+        "Explore data through visual summaries and charts.",
     ),
-    "AI Analyst": (
+    "Ask Your Data": (
         "Under development",
-        "Natural-language analysis is not connected yet.",
+        "Interact with your data using natural-language questions.",
     ),
-    "Reports & Exports": (
-        "Available — data exports",
-        "Download the current dataset and available descriptive outputs.",
-    ),
-    "Settings & Governance": (
+    "Reports": (
         "Under development",
-        "Authentication, tenant isolation and audit controls are not implemented.",
+        "Prepare analytical reports and exports.",
+    ),
+    "Project Status": (
+        "Available — implementation monitoring",
+        "Monitor feature implementation, verification and project progress.",
     ),
     "About": (
         "Available",
@@ -126,311 +81,139 @@ MODULES = {
 }
 
 
-def status_text(status):
-    """Format module availability consistently."""
-    if status.startswith("Available"):
-        return f"🟢 {status}"
-    return f"🟡 {status}"
-
-
 # ============================================================
 # SESSION STATE
 # ============================================================
 
-if "dataset" not in st.session_state:
-    st.session_state.dataset = None
+if "uploaded_data" not in st.session_state:
+    st.session_state.uploaded_data = None
 
-if "dataset_name" not in st.session_state:
-    st.session_state.dataset_name = None
+if "uploaded_filename" not in st.session_state:
+    st.session_state.uploaded_filename = None
 
-if "dataset_source_key" not in st.session_state:
-    st.session_state.dataset_source_key = None
-
-if "navigation_page" not in st.session_state:
-    st.session_state.navigation_page = "Home"
-
-
-def clear_dataset():
-    """Clear the currently loaded dataset."""
-    st.session_state.dataset = None
-    st.session_state.dataset_name = None
-    st.session_state.dataset_source_key = None
-    st.session_state.pop("dataset_uploader", None)
-
-
-def go_to_data_management():
-    """Navigate to Data Management using a Streamlit callback."""
-    st.session_state.navigation_page = "Data Management"
+if "selected_page" not in st.session_state:
+    st.session_state.selected_page = "Home"
 
 
 # ============================================================
-# DATA LOADING AND STATISTICAL HELPERS
+# SHARED HELPERS
 # ============================================================
 
-def get_upload_id(uploaded_file):
-    """Create a fingerprint for an uploaded file."""
-    return hashlib.sha256(
-        uploaded_file.getvalue()
-    ).hexdigest()
+def show_header():
+    """Display the main application identity."""
 
-
-def load_uploaded_file(uploaded_file, sheet_name=None):
-    """
-    Load a CSV file or a specifically selected Excel worksheet.
-
-    Excel imports require an explicit worksheet selection.
-    The source data is not silently cleaned or recoded.
-    """
-    file_name = uploaded_file.name.lower()
-    raw_bytes = uploaded_file.getvalue()
-
-    if file_name.endswith(".csv"):
-        last_error = None
-
-        for encoding in (
-            "utf-8-sig",
-            "utf-8",
-            "cp1252",
-            "latin-1",
-        ):
-            try:
-                return pd.read_csv(
-                    io.BytesIO(raw_bytes),
-                    encoding=encoding,
-                )
-            except UnicodeDecodeError as exc:
-                last_error = exc
-
-        raise ValueError(
-            f"Could not decode this CSV file: {last_error}"
-        )
-
-    if file_name.endswith(".xlsx"):
-        if sheet_name is None:
-            raise ValueError(
-                "Select an Excel worksheet before importing."
-            )
-
-        return pd.read_excel(
-            io.BytesIO(raw_bytes),
-            sheet_name=sheet_name,
-            engine="openpyxl",
-        )
-
-    raise ValueError(
-        "Unsupported file type. Upload a CSV or .xlsx workbook."
-    )
-
-
-def numeric_summary(df):
-    """Calculate standard descriptive statistics for numeric columns."""
-    numeric = df.select_dtypes(include="number")
-
-    if numeric.empty:
-        return pd.DataFrame(
-            columns=[
-                "variable",
-                "count",
-                "mean",
-                "std",
-                "min",
-                "25%",
-                "50%",
-                "75%",
-                "max",
-            ]
-        )
-
-    result = numeric.describe().T
-    result.index.name = "variable"
-
-    return result.reset_index()
-
-
-def variable_quality_profile(df):
-    """Create a detailed variable-level data-quality summary."""
-    row_count = len(df)
-    records = []
-
-    for col in df.columns:
-        series = df[col]
-        missing_count = int(series.isna().sum())
-        blank_count = 0
-
-        if (
-            pd.api.types.is_object_dtype(series.dtype)
-            or pd.api.types.is_string_dtype(series.dtype)
-        ):
-            text_values = series.dropna().astype(str)
-            blank_count = int(text_values.str.strip().eq("").sum())
-
-        total_missing_like = missing_count + blank_count
-        non_missing = row_count - missing_count
-        unique_count = int(series.nunique(dropna=True))
-
-        records.append(
-            {
-                "Variable": str(col),
-                "Data type": str(series.dtype),
-                "Records": row_count,
-                "Missing values": missing_count,
-                "Missing (%)": round(missing_count / row_count * 100, 2)
-                if row_count else 0.0,
-                "Blank strings": blank_count,
-                "Missing/blank (%)": round(
-                    total_missing_like / row_count * 100, 2
-                ) if row_count else 0.0,
-                "Non-missing values": non_missing,
-                "Unique values": unique_count,
-                "Unique (%)": round(
-                    unique_count / non_missing * 100, 2
-                ) if non_missing else 0.0,
-                "Constant column": "Yes"
-                if unique_count <= 1 and row_count > 0 else "No",
-            }
-        )
-
-    return pd.DataFrame(records)
-
-
-def numeric_outlier_profile(df):
-    """Flag potential IQR outliers without changing source values."""
-    numeric = df.select_dtypes(include="number")
-    records = []
-
-    for col in numeric.columns:
-        values = numeric[col].dropna()
-        if values.empty:
-            continue
-
-        q1 = values.quantile(0.25)
-        q3 = values.quantile(0.75)
-        iqr = q3 - q1
-        lower = q1 - 1.5 * iqr
-        upper = q3 + 1.5 * iqr
-        outliers = values[(values < lower) | (values > upper)]
-
-        records.append(
-            {
-                "Variable": str(col),
-                "Valid values": int(values.count()),
-                "Q1": q1,
-                "Q3": q3,
-                "IQR": iqr,
-                "Lower fence": lower,
-                "Upper fence": upper,
-                "Potential outliers": int(outliers.count()),
-                "Potential outliers (%)": round(
-                    outliers.count() / values.count() * 100, 2
-                ) if values.count() else 0.0,
-            }
-        )
-
-    return pd.DataFrame(records)
-
-
-def get_dataset():
-    """Return the active dataset, with appropriate guidance if absent."""
-    df = st.session_state.dataset
-
-    if df is None:
-        st.info(
-            "Upload and import a dataset first in Data Management."
-        )
-        return None
-
-    if df.empty:
-        st.warning(
-            "The imported worksheet contains no data rows."
-        )
-        return None
-
-    return df
-
-
-def show_under_development(page, purpose):
-    """Display an honest status page for an unfinished module."""
-    st.title(page)
-    st.caption("Module status: 🟡 Under development")
-    st.write(purpose)
-    st.info(
-        "This module is not yet operational. "
-        "Do not use it as if it provides completed analysis."
-    )
-
-
-# ============================================================
-# SIDEBAR: LOGO AND NAVIGATION
-# ============================================================
-
-logo_path = Path(__file__).parent / "timan_analytics_logo.png"
-
-if logo_path.exists():
-    st.sidebar.image(
-        str(logo_path),
-        use_container_width=True,
-    )
-else:
-    st.sidebar.markdown(
-        """
-        <div style="
-            text-align:center;
-            padding:16px 6px;
-            border:1px dashed #8aa1b8;
-            border-radius:12px;
-        ">
-            <strong>Timan Analytics logo</strong><br/>
-            <small>Add timan_analytics_logo.png beside app.py</small>
+    st.markdown(
+        f"""
+        <div style="padding: 0.5rem 0 1rem 0;">
+            <h1 style="margin-bottom: 0.1rem;">🔷 {APP_NAME}</h1>
+            <p style="font-size: 1.05rem; margin-top: 0;">
+                {APP_TAGLINE}
+            </p>
+            <p style="color: grey; margin-top: 0;">
+                {PLATFORM_LABEL} | {APP_ORGANISATION}
+            </p>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-st.sidebar.markdown(
-    f"""
-    <div style="text-align:center; padding:4px 4px 8px;">
-        <div style="font-size:25px; font-weight:800; color:#174a7e; margin-top:4px;">
-            {APP_NAME}
-        </div>
-        <div style="font-size:11px; font-weight:700; letter-spacing:.6px; color:#526579; margin-top:3px;">
-            {PLATFORM_LABEL}
-        </div>
-        <div style="font-size:12px; color:#526579; margin-top:7px;">
-            by {APP_ORGANISATION}
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
 
-st.sidebar.divider()
+def show_under_development(page, description):
+    """Display a clear notice for modules not yet operational."""
 
-page = st.sidebar.radio(
-    "NAVIGATION",
-    list(MODULES.keys()),
-    key="navigation_page",
-)
-
-st.sidebar.divider()
-st.sidebar.caption(SIDEBAR_FOOTER)
-
-if st.session_state.dataset is not None:
-    loaded = st.session_state.dataset
-
-    st.sidebar.success(
-        f"Dataset: {st.session_state.dataset_name or 'Uploaded dataset'}"
+    st.title(page)
+    st.info("This module is currently under development.")
+    st.write(description)
+    st.warning(
+        "The presence of a module in navigation does not mean its "
+        "analytical engine is implemented. Modules marked "
+        "Under development are not operational."
     )
 
-    st.sidebar.caption(
-        f"{loaded.shape[0]:,} rows · {loaded.shape[1]:,} columns"
+
+def get_dataset():
+    """Return the currently uploaded dataset, if available."""
+
+    return st.session_state.uploaded_data
+
+
+def set_dataset(data, filename):
+    """Store the uploaded dataset in the application session."""
+
+    st.session_state.uploaded_data = data
+    st.session_state.uploaded_filename = filename
+
+
+def require_dataset():
+    """Check whether a dataset has been uploaded."""
+
+    data = get_dataset()
+
+    if data is None:
+        st.warning("Please upload a dataset before using this module.")
+        return None
+
+    return data
+
+
+def display_dataset_information(data):
+    """Display basic dataset information."""
+
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric("Rows", data.shape[0])
+    col2.metric("Columns", data.shape[1])
+    col3.metric("Missing cells", int(data.isna().sum().sum()))
+
+    st.write("**Column names**")
+    st.write(list(data.columns))
+
+
+def dataframe_download(data, filename):
+    """Provide a CSV download for a dataframe."""
+
+    csv_data = data.to_csv(index=False).encode("utf-8")
+
+    st.download_button(
+        label="Download CSV",
+        data=csv_data,
+        file_name=filename,
+        mime="text/csv",
     )
 
-    st.sidebar.button(
-        "Clear current dataset",
-        on_click=clear_dataset,
+
+# ============================================================
+# SIDEBAR NAVIGATION
+# ============================================================
+
+with st.sidebar:
+    st.markdown(f"## 🔷 {APP_NAME}")
+    st.caption(APP_ORGANISATION)
+
+    st.divider()
+
+    page = st.radio(
+        "Navigation",
+        list(MODULES.keys()),
+        index=list(MODULES.keys()).index(
+            st.session_state.selected_page
+        ),
+        key="navigation_page",
     )
-else:
-    st.sidebar.caption("No dataset loaded")
+
+    st.session_state.selected_page = page
+
+    st.divider()
+
+    st.caption(SIDEBAR_FOOTER)
+    st.caption(f"Version {APP_VERSION}")
+
+
+# ============================================================
+# MAIN APPLICATION HEADER
+# ============================================================
+
+show_header()
 
 
 # ============================================================
@@ -438,265 +221,126 @@ else:
 # ============================================================
 
 if page == "Home":
-    st.markdown(
-        f'<div class="brand">{APP_NAME.upper()}</div>',
-        unsafe_allow_html=True,
-    )
 
-    st.markdown(
-        '<div class="subtitle">'
-        f"{APP_TAGLINE}</div>",
-        unsafe_allow_html=True,
-    )
-
-    st.write("")
-
-    st.write(APP_DESCRIPTION)
-
-    df = st.session_state.dataset
-
-    if df is None:
-        a, b, c = st.columns(3)
-
-        a.metric("Dataset status", "Not loaded")
-        b.metric("Available formats", "CSV / Excel")
-        c.metric("Navigation modules", len(MODULES))
-
-        st.info(
-            "To begin, select Data Management from the left "
-            "navigation and upload a CSV or Excel file."
-        )
-
-        st.button(
-            "Go to Data Management",
-            type="primary",
-            on_click=go_to_data_management,
-        )
-
-    else:
-        a, b, c = st.columns(3)
-
-        a.metric("Rows", f"{df.shape[0]:,}")
-        b.metric("Columns", f"{df.shape[1]:,}")
-        c.metric(
-            "Missing cells",
-            f"{int(df.isna().sum().sum()):,}",
-        )
-
-        st.subheader("Dataset preview")
-        st.dataframe(
-            df.head(10),
-            use_container_width=True,
-        )
-
-        st.caption(
-            f"Current dataset: {st.session_state.dataset_name}"
-        )
-
-    st.subheader("Module availability")
-
-    status_rows = [
-        {
-            "Module": name,
-            "Status": status,
-            "Purpose": purpose,
-        }
-        for name, (status, purpose) in MODULES.items()
-    ]
-
-    st.dataframe(
-        pd.DataFrame(status_rows),
-        hide_index=True,
-        use_container_width=True,
-    )
-    # ============================================================
-# DATA MANAGEMENT
-# ============================================================
-
-elif page == "Data Management":
-    st.title("Data Management")
-    st.caption(status_text(MODULES[page][0]))
+    st.title("Welcome to TimanStat")
 
     st.write(
-        "Upload a CSV or Excel workbook. For Excel files, "
-        "select and preview a worksheet before importing it. "
-        "The active dataset remains available as you navigate "
-        "between modules in this session."
+        "TimanStat is a statistical analytics platform developed "
+        "by Timan Analytics to support data exploration, quality "
+        "assessment, statistical analysis and reporting."
+    )
+
+    st.info(
+        "The current application is an active prototype. "
+        "Some modules are operational while others remain under "
+        "development."
+    )
+
+    st.subheader("Available capabilities")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown(
+            """
+            - Dataset upload
+            - Dataset preview
+            - Initial data-quality checks
+            - Descriptive statistics
+            """
+        )
+
+    with col2:
+        st.markdown(
+            """
+            - Basic visualisations
+            - Selected data exports
+            - Project implementation monitoring
+            """
+        )
+
+    st.subheader("Getting started")
+
+    st.write(
+        "Use the navigation menu to upload a dataset, explore "
+        "its structure, review data quality and generate "
+        "descriptive summaries."
+    )
+
+
+# ============================================================
+# UPLOAD AND EXPLORE
+# ============================================================
+
+elif page == "Upload & Explore":
+
+    st.title("Upload & Explore Data")
+
+    st.write(
+        "Upload a CSV or Excel dataset for initial inspection."
     )
 
     uploaded_file = st.file_uploader(
-        "Choose a CSV or Excel file",
-        type=["csv", "xlsx"],
-        key="dataset_uploader",
-        help=(
-            "Supported formats: CSV and .xlsx. "
-            "Password-protected workbooks are not supported."
-        ),
+        "Choose a dataset",
+        type=["csv", "xlsx", "xls"],
     )
 
     if uploaded_file is not None:
-        upload_id = get_upload_id(uploaded_file)
-        upload_key = f"{uploaded_file.name}:{upload_id}"
-        file_name = uploaded_file.name.lower()
 
-        # CSV: import directly when a different file is uploaded.
-        if file_name.endswith(".csv"):
-            if (
-                st.session_state.dataset_source_key != upload_key
-                or st.session_state.dataset is None
-            ):
-                try:
-                    imported = load_uploaded_file(uploaded_file)
+        try:
+            file_extension = Path(uploaded_file.name).suffix.lower()
 
-                    st.session_state.dataset = imported
-                    st.session_state.dataset_name = uploaded_file.name
-                    st.session_state.dataset_source_key = upload_key
+            if file_extension == ".csv":
+                data = pd.read_csv(uploaded_file)
 
-                    st.success(
-                        f"Successfully imported **{uploaded_file.name}**."
-                    )
-
-                except Exception as exc:
-                    st.error(f"Import failed: {exc}")
+            elif file_extension in [".xlsx", ".xls"]:
+                data = pd.read_excel(uploaded_file)
 
             else:
+                st.error("Unsupported file format.")
+                data = None
+
+            if data is not None:
+
+                set_dataset(data, uploaded_file.name)
+
                 st.success(
-                    f"Dataset loaded: **{uploaded_file.name}**"
+                    f"Successfully uploaded {uploaded_file.name}"
                 )
 
-        # Excel: inspect worksheets and require explicit selection.
-        elif file_name.endswith(".xlsx"):
-            try:
-                with pd.ExcelFile(
-                    io.BytesIO(uploaded_file.getvalue()),
-                    engine="openpyxl",
-                ) as workbook:
-                    sheet_names = workbook.sheet_names
+                st.subheader("Dataset preview")
 
-                if not sheet_names:
-                    st.error(
-                        "This workbook does not contain any worksheets."
-                    )
+                st.dataframe(
+                    data.head(100),
+                    use_container_width=True,
+                )
 
-                else:
-                    st.subheader("Select an Excel worksheet")
+                st.subheader("Dataset information")
 
-                    selected_sheet = st.selectbox(
-                        "Worksheets in this workbook",
-                        sheet_names,
-                        key=f"sheet_selector_{upload_id}",
-                    )
+                display_dataset_information(data)
 
-                    preview = pd.read_excel(
-                        io.BytesIO(uploaded_file.getvalue()),
-                        sheet_name=selected_sheet,
-                        engine="openpyxl",
-                        nrows=10,
-                    )
+        except Exception as error:
+            st.error(
+                f"Unable to read the uploaded dataset: {error}"
+            )
 
-                    st.write(
-                        f"Worksheet preview: **{selected_sheet}**"
-                    )
+    else:
 
-                    st.dataframe(
-                        preview,
-                        hide_index=True,
-                        use_container_width=True,
-                    )
+        existing_data = get_dataset()
 
-                    st.caption(
-                        "Before importing, check the column headings "
-                        "and records. Avoid worksheets containing only "
-                        "pivot tables, subtotals or grand totals."
-                    )
+        if existing_data is not None:
 
-                    if st.button(
-                        "Load selected worksheet",
-                        type="primary",
-                        key=f"load_sheet_{upload_id}",
-                    ):
-                        imported = load_uploaded_file(
-                            uploaded_file,
-                            sheet_name=selected_sheet,
-                        )
-
-                        st.session_state.dataset = imported
-                        st.session_state.dataset_name = (
-                            f"{uploaded_file.name} — {selected_sheet}"
-                        )
-                        st.session_state.dataset_source_key = (
-                            f"{upload_key}:{selected_sheet}"
-                        )
-
-                        st.success(
-                            f"Imported worksheet **{selected_sheet}** "
-                            f"from **{uploaded_file.name}**."
-                        )
-
-            except Exception as exc:
-                st.error(f"Excel import failed: {exc}")
-
-    # Show the active dataset, whether or not a new file is being previewed.
-    df = st.session_state.dataset
-
-    if df is not None:
-        st.divider()
-        st.subheader("Currently loaded dataset")
-
-        st.caption(
-            f"Active dataset: {st.session_state.dataset_name}"
-        )
-
-        a, b, c = st.columns(3)
-
-        a.metric("Rows", f"{df.shape[0]:,}")
-        b.metric("Columns", f"{df.shape[1]:,}")
-        c.metric(
-            "Missing cells",
-            f"{int(df.isna().sum().sum()):,}",
-        )
-
-        st.dataframe(
-            df.head(100),
-            use_container_width=True,
-        )
-
-        with st.expander("Column details"):
-            details = pd.DataFrame(
-                {
-                    "Column": df.columns.astype(str),
-                    "Data type": [
-                        str(dtype) for dtype in df.dtypes
-                    ],
-                    "Missing values": [
-                        int(value)
-                        for value in df.isna().sum().values
-                    ],
-                    "Unique values": [
-                        int(df[col].nunique(dropna=True))
-                        for col in df.columns
-                    ],
-                }
+            st.info(
+                f"Current dataset: "
+                f"{st.session_state.uploaded_filename}"
             )
 
             st.dataframe(
-                details,
-                hide_index=True,
+                existing_data.head(100),
                 use_container_width=True,
             )
 
-        st.download_button(
-            "Download current dataset as CSV",
-            data=df.to_csv(index=False).encode("utf-8-sig"),
-            file_name="timan_dataset_export.csv",
-            mime="text/csv",
-            key="download_dataset_management",
-        )
-
-    else:
-        st.info(
-            "No dataset loaded yet. Choose a file above to get started."
-        )
+            display_dataset_information(existing_data)
 
 
 # ============================================================
@@ -704,724 +348,244 @@ elif page == "Data Management":
 # ============================================================
 
 elif page == "Data Quality":
-    st.title("Data Quality")
-    st.caption(status_text(MODULES[page][0]))
-    st.write(
-        "Assess completeness, uniqueness, consistency and potential "
-        "numeric anomalies before using the dataset for reporting or "
-        "statistical analysis. Checks flag issues for review; they do "
-        "not automatically change or delete source data."
-    )
 
-    df = get_dataset()
+    st.title("Data Quality Assessment")
 
-    if df is not None:
-        row_count, column_count = df.shape
-        missing_cells = int(df.isna().sum().sum())
-        total_cells = row_count * column_count
-        duplicate_rows = int(df.duplicated().sum())
-        blank_cells = 0
+    data = require_dataset()
 
-        for col in df.columns:
-            if (
-                pd.api.types.is_object_dtype(df[col].dtype)
-                or pd.api.types.is_string_dtype(df[col].dtype)
-            ):
-                blank_cells += int(
-                    df[col].dropna().astype(str).str.strip().eq("").sum()
-                )
+    if data is not None:
 
-        all_empty_columns = [
-            str(col) for col in df.columns
-            if df[col].isna().all()
-        ]
-        constant_columns = [
-            str(col) for col in df.columns
-            if df[col].nunique(dropna=True) <= 1
-        ]
+        st.subheader("Dataset completeness")
+
+        total_cells = data.shape[0] * data.shape[1]
+        missing_cells = int(data.isna().sum().sum())
+
         completeness = (
-            (total_cells - missing_cells - blank_cells) / total_cells * 100
-            if total_cells else 0.0
+            100 * (total_cells - missing_cells) / total_cells
+            if total_cells > 0
+            else 0
         )
 
-        st.subheader("Dataset-level quality overview")
-        a, b, c, d = st.columns(4)
-        a.metric("Records", f"{row_count:,}")
-        b.metric("Variables", f"{column_count:,}")
-        c.metric("Exact duplicate rows", f"{duplicate_rows:,}")
-        d.metric("Overall completeness", f"{completeness:.1f}%")
+        col1, col2, col3 = st.columns(3)
 
-        e, f, g = st.columns(3)
-        e.metric("Missing cells", f"{missing_cells:,}")
-        f.metric("Blank text cells", f"{blank_cells:,}")
-        g.metric(
-            "Potentially constant variables",
-            f"{len(constant_columns):,}",
+        col1.metric("Total cells", total_cells)
+        col2.metric("Missing cells", missing_cells)
+        col3.metric(
+            "Completeness",
+            f"{completeness:.2f}%",
         )
 
-        st.caption(
-            "Overall completeness treats empty text strings as incomplete "
-            "in addition to explicitly missing values. Duplicate records "
-            "are exact row matches; they may or may not be errors depending "
-            "on the dataset's unit of analysis."
+        st.subheader("Missing values by variable")
+
+        missing_summary = pd.DataFrame(
+            {
+                "Variable": data.columns,
+                "Missing values": data.isna().sum().values,
+                "Missing percentage": (
+                    data.isna().mean().values * 100
+                ),
+            }
         )
 
-        st.subheader("Variable-level quality profile")
-        quality = variable_quality_profile(df)
-        st.dataframe(quality, hide_index=True, use_container_width=True)
-        st.download_button(
-            "Download variable quality profile",
-            data=quality.to_csv(index=False).encode("utf-8-sig"),
-            file_name="timan_data_quality_profile.csv",
-            mime="text/csv",
-            key="download_quality_profile",
+        st.dataframe(
+            missing_summary,
+            use_container_width=True,
         )
 
-        st.subheader("Missingness by variable")
-        missing_by_variable = pd.DataFrame({
-            "Variable": [str(col) for col in df.columns],
-            "Missing values": [int(df[col].isna().sum()) for col in df.columns],
-            "Missing (%)": [
-                round(float(df[col].isna().mean() * 100), 2)
-                if row_count else 0.0
-                for col in df.columns
-            ],
-        })
-        missing_by_variable = missing_by_variable.sort_values(
-            "Missing (%)", ascending=False
-        )
-        if missing_by_variable["Missing values"].sum() == 0:
-            st.success("No explicitly missing values were detected.")
-        else:
-            st.bar_chart(
-                missing_by_variable.set_index("Variable")[["Missing (%)"]]
-            )
-            st.dataframe(
-                missing_by_variable,
-                hide_index=True,
-                use_container_width=True,
-            )
-        st.download_button(
-            "Download missingness report",
-            data=missing_by_variable.to_csv(index=False).encode("utf-8-sig"),
-            file_name="timan_missingness_report.csv",
-            mime="text/csv",
-            key="download_missingness_report",
+        st.subheader("Duplicate records")
+
+        duplicate_count = int(data.duplicated().sum())
+
+        st.metric(
+            "Duplicate rows",
+            duplicate_count,
         )
 
-        st.subheader("Duplicate record review")
-        st.write(
-            "Exact duplicates are rows where every column matches another "
-            "row. Review them against the data collection process before "
-            "deciding whether they should be removed."
-        )
-        if duplicate_rows:
-            show_duplicates = st.checkbox(
-                "Show exact duplicate rows",
-                value=False,
-                key="show_duplicate_rows",
-            )
-            if show_duplicates:
-                duplicate_mask = df.duplicated(keep=False)
-                st.dataframe(
-                    df.loc[duplicate_mask],
-                    use_container_width=True,
-                )
-                st.download_button(
-                    "Download rows involved in exact duplicates",
-                    data=df.loc[duplicate_mask].to_csv(index=False).encode("utf-8-sig"),
-                    file_name="timan_duplicate_rows_review.csv",
-                    mime="text/csv",
-                    key="download_duplicate_rows",
-                )
-        else:
-            st.success("No exact duplicate rows were detected.")
+        st.subheader("Data types")
 
-        st.subheader("Potential numeric outliers")
-        st.write(
-            "The 1.5 × IQR rule flags values outside the lower and upper "
-            "fences. These are review flags, not proof that a value is wrong."
+        dtype_summary = pd.DataFrame(
+            {
+                "Variable": data.columns,
+                "Data type": [
+                    str(dtype) for dtype in data.dtypes
+                ],
+            }
         )
-        outlier_profile = numeric_outlier_profile(df)
-        if outlier_profile.empty:
-            st.info("No numeric columns are available for IQR outlier checks.")
-        else:
-            st.dataframe(
-                outlier_profile,
-                hide_index=True,
-                use_container_width=True,
-            )
-            st.download_button(
-                "Download potential outlier summary",
-                data=outlier_profile.to_csv(index=False).encode("utf-8-sig"),
-                file_name="timan_potential_outliers.csv",
-                mime="text/csv",
-                key="download_outlier_profile",
-            )
 
-        st.subheader("Quality review notes")
-        notes = []
-        if missing_cells:
-            notes.append(
-                f"Review missing values in {int((df.isna().sum() > 0).sum())} "
-                "variable(s); determine whether missingness has a known reason."
-            )
-        if blank_cells:
-            notes.append(
-                f"Found {blank_cells:,} blank or whitespace-only text cell(s). "
-                "These may need to be standardised as missing values."
-            )
-        if duplicate_rows:
-            notes.append(
-                f"Review {duplicate_rows:,} exact duplicate row(s) against "
-                "the intended unit of analysis."
-            )
-        if all_empty_columns:
-            notes.append(
-                "Entirely empty variables: " + ", ".join(all_empty_columns) + "."
-            )
-        if constant_columns:
-            notes.append(
-                "Variables with one or zero observed unique values: "
-                + ", ".join(constant_columns)
-                + ". Confirm whether they are useful for analysis."
-            )
-        if notes:
-            for note in notes:
-                st.warning(note)
-        else:
-            st.success(
-                "These initial checks did not identify missing cells, blank "
-                "text cells, exact duplicate rows or constant variables. "
-                "This is not a guarantee that the dataset is error-free."
-            )
-
-        st.info(
-            "Scope limitation: these checks do not verify values against an "
-            "external source, questionnaire skip logic, valid ranges, unique "
-            "respondent IDs, or programme-specific indicator rules. Those "
-            "checks require context and validation rules for the dataset."
+        st.dataframe(
+            dtype_summary,
+            use_container_width=True,
         )
-        # ============================================================
+
+        st.subheader("Unique values")
+
+        unique_summary = pd.DataFrame(
+            {
+                "Variable": data.columns,
+                "Unique values": [
+                    data[column].nunique(dropna=True)
+                    for column in data.columns
+                ],
+            }
+        )
+
+        st.dataframe(
+            unique_summary,
+            use_container_width=True,
+        )
+
+
+# ============================================================
 # DESCRIPTIVE STATISTICS
 # ============================================================
 
 elif page == "Descriptive Statistics":
+
     st.title("Descriptive Statistics")
-    st.caption(status_text(MODULES[page][0]))
-    st.write(
-        "Explore distributions, central tendency, variability and category "
-        "frequencies. Results describe the loaded data; they do not establish "
-        "causation or automatically account for survey weights or complex "
-        "sample designs."
-    )
 
-    df = get_dataset()
+    data = require_dataset()
 
-    if df is not None:
-        numeric_cols = list(df.select_dtypes(include="number").columns)
-        categorical_cols = [
-            col for col in df.columns
-            if not pd.api.types.is_numeric_dtype(df[col].dtype)
-        ]
+    if data is not None:
 
-        st.subheader("Dataset profile")
-        a, b, c, d = st.columns(4)
-        a.metric("Records", f"{len(df):,}")
-        b.metric("Variables", f"{df.shape[1]:,}")
-        c.metric("Numeric variables", f"{len(numeric_cols):,}")
-        d.metric("Other variables", f"{len(categorical_cols):,}")
-
-        st.caption(
-            "Variable types follow the types assigned during import. A number "
-            "stored as text will not be included in numeric summaries until "
-            "it is appropriately converted in a future data-preparation step."
+        numeric_data = data.select_dtypes(
+            include=np.number
         )
 
-        st.subheader("Numeric descriptive statistics")
-        if not numeric_cols:
-            st.info(
-                "No numeric columns were detected. Check whether numeric "
-                "values were imported as text."
-            )
-        else:
-            numeric_records = []
-            for col in numeric_cols:
-                series = pd.to_numeric(df[col], errors="coerce")
-                valid = series.dropna()
-                count = int(valid.count())
-                mean = valid.mean() if count else float("nan")
-                median = valid.median() if count else float("nan")
-                std = valid.std() if count > 1 else float("nan")
-                q1 = valid.quantile(0.25) if count else float("nan")
-                q3 = valid.quantile(0.75) if count else float("nan")
-                minimum = valid.min() if count else float("nan")
-                maximum = valid.max() if count else float("nan")
-                numeric_records.append({
-                    "Variable": str(col),
-                    "Valid n": count,
-                    "Missing n": int(series.isna().sum()),
-                    "Missing (%)": round(float(series.isna().mean() * 100), 2),
-                    "Mean": mean,
-                    "Median": median,
-                    "Standard deviation": std,
-                    "Variance": valid.var() if count > 1 else float("nan"),
-                    "Minimum": minimum,
-                    "Q1 (25%)": q1,
-                    "Q3 (75%)": q3,
-                    "Maximum": maximum,
-                    "Range": maximum - minimum if count else float("nan"),
-                    "IQR": q3 - q1 if count else float("nan"),
-                    "Skewness": valid.skew() if count > 2 else float("nan"),
-                    "Excess kurtosis": valid.kurt() if count > 3 else float("nan"),
-                    "Coefficient of variation (%)": (
-                        std / abs(mean) * 100
-                        if count > 1 and pd.notna(mean) and mean != 0
-                        else float("nan")
-                    ),
-                })
+        categorical_data = data.select_dtypes(
+            exclude=np.number
+        )
 
-            summary = pd.DataFrame(numeric_records)
-            st.dataframe(summary, hide_index=True, use_container_width=True)
-            st.download_button(
-                "Download full numeric summary",
-                data=summary.to_csv(index=False).encode("utf-8-sig"),
-                file_name="timan_descriptive_statistics.csv",
-                mime="text/csv",
-                key="download_numeric_summary",
-            )
+        st.subheader("Numerical variables")
 
-            st.caption(
-                "Interpretation guide: the mean is sensitive to extreme values; "
-                "the median is more resistant. Standard deviation describes "
-                "spread around the mean; IQR describes the middle 50% of values. "
-                "Skewness and excess kurtosis are exploratory distribution "
-                "indicators and should be interpreted with sample size and plots."
-            )
+        if not numeric_data.empty:
 
-            st.subheader("Explore one numeric variable")
-            selected_numeric = st.selectbox(
-                "Choose a numeric variable",
-                numeric_cols,
-                key="descriptive_numeric_variable",
-            )
-            values = pd.to_numeric(
-                df[selected_numeric], errors="coerce"
-            ).dropna()
-            if values.empty:
-                st.info("This variable has no valid numeric observations.")
-            else:
-                left, right = st.columns(2)
-                with left:
-                    st.markdown("**Distribution summary**")
-                    st.write({
-                        "Valid observations": int(values.count()),
-                        "Mean": round(float(values.mean()), 4),
-                        "Median": round(float(values.median()), 4),
-                        "Mode(s)": [
-                            str(value) for value in values.mode().head(5).tolist()
-                        ],
-                        "Minimum": float(values.min()),
-                        "Maximum": float(values.max()),
-                    })
-                with right:
-                    st.markdown("**Selected quantiles**")
-                    quantiles = values.quantile(
-                        [0.01, 0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95, 0.99]
-                    ).rename_axis("Quantile").reset_index(name="Value")
-                    quantiles["Quantile"] = (
-                        quantiles["Quantile"] * 100
-                    ).map(lambda value: f"P{value:g}")
-                    st.dataframe(
-                        quantiles,
-                        hide_index=True,
-                        use_container_width=True,
-                    )
-
-                st.markdown("**Distribution by value range**")
-                if values.nunique() > 1:
-                    bins = st.slider(
-                        "Number of histogram bins",
-                        min_value=5,
-                        max_value=40,
-                        value=15,
-                        key="descriptive_histogram_bins",
-                    )
-                    hist, edges = np.histogram(values, bins=bins)
-                    hist_df = pd.DataFrame({
-                        "Value range": [
-                            f"{edges[i]:.4g} – {edges[i + 1]:.4g}"
-                            for i in range(len(hist))
-                        ],
-                        "Frequency": hist,
-                    }).set_index("Value range")
-                    st.bar_chart(hist_df)
-                else:
-                    st.info(
-                        "All valid observations have the same value; a histogram "
-                        "would not show a meaningful distribution."
-                    )
-
-        st.divider()
-        st.subheader("Categorical frequency analysis")
-        if not categorical_cols:
-            st.info("No non-numeric variables were detected.")
-        else:
-            selected_col = st.selectbox(
-                "Select a categorical variable",
-                categorical_cols,
-                format_func=str,
-                key="descriptive_categorical_variable",
-            )
-            include_missing = st.checkbox(
-                "Include missing and blank values in the frequency table",
-                value=True,
-                key="descriptive_include_missing",
-            )
-            series = df[selected_col].astype("object")
-            blank_mask = series.notna() & series.astype(str).str.strip().eq("")
-            series = series.mask(blank_mask, "(Blank text)")
-            if include_missing:
-                series = series.where(series.notna(), "(Missing)")
-                denominator = len(series)
-                counts = series.value_counts(dropna=False)
-            else:
-                series = series[series.notna() & ~blank_mask]
-                denominator = len(series)
-                counts = series.value_counts(dropna=True)
-
-            frequencies = counts.rename_axis("Category").reset_index(
-                name="Frequency"
-            )
-            frequencies["Percentage (%)"] = (
-                (frequencies["Frequency"] / denominator * 100).round(2)
-                if denominator else 0.0
-            )
-            frequencies["Cumulative (%)"] = (
-                frequencies["Percentage (%)"].cumsum().round(2)
-            )
             st.dataframe(
-                frequencies,
-                hide_index=True,
+                numeric_data.describe().T,
                 use_container_width=True,
             )
-            st.caption(
-                f"Percentage denominator: {denominator:,} records. "
-                "Cumulative percentages follow the displayed frequency order. "
-                "If the variable has many unique values, the table may be long."
-            )
-            st.download_button(
-                "Download categorical frequency table",
-                data=frequencies.to_csv(index=False).encode("utf-8-sig"),
-                file_name="timan_frequency_table.csv",
-                mime="text/csv",
-                key="download_frequency_table",
-            )
 
-        st.divider()
-        st.subheader("Grouped numeric summaries")
-        if numeric_cols and categorical_cols:
-            group_col = st.selectbox(
-                "Group records by",
-                categorical_cols,
-                key="descriptive_group_column",
-            )
-            measure_col = st.selectbox(
-                "Summarise numeric variable",
-                numeric_cols,
-                key="descriptive_group_measure",
-            )
-            group_df = pd.DataFrame({
-                "Group": df[group_col].astype("object").where(
-                    df[group_col].notna(), "(Missing)"
-                ).astype(str),
-                "Value": pd.to_numeric(df[measure_col], errors="coerce"),
-            })
-            grouped = group_df.groupby("Group", dropna=False)["Value"].agg(
-                ["count", "mean", "median", "std", "min", "max"]
-            ).reset_index()
-            grouped = grouped.rename(columns={
-                "count": "Valid n",
-                "mean": "Mean",
-                "median": "Median",
-                "std": "Standard deviation",
-                "min": "Minimum",
-                "max": "Maximum",
-            })
-            st.dataframe(grouped, hide_index=True, use_container_width=True)
-            st.caption(
-                "Grouped summaries are descriptive comparisons only. Differences "
-                "between groups do not, by themselves, demonstrate that group "
-                "membership caused the observed outcome."
-            )
-            st.download_button(
-                "Download grouped summary",
-                data=grouped.to_csv(index=False).encode("utf-8-sig"),
-                file_name="timan_grouped_descriptive_summary.csv",
-                mime="text/csv",
-                key="download_grouped_summary",
-            )
         else:
             st.info(
-                "Grouped summaries require at least one numeric variable and "
-                "one non-numeric grouping variable."
+                "No numerical variables were detected."
             )
 
-        st.divider()
-        st.subheader("Exploratory correlation matrix")
-        if len(numeric_cols) >= 2:
-            corr_method = st.selectbox(
-                "Correlation method",
-                ["Pearson", "Spearman", "Kendall"],
-                key="descriptive_correlation_method",
+        st.subheader("Categorical variables")
+
+        if not categorical_data.empty:
+
+            selected_column = st.selectbox(
+                "Select a categorical variable",
+                categorical_data.columns,
             )
-            corr = df[numeric_cols].corr(method=corr_method.lower())
-            st.dataframe(corr.round(3), use_container_width=True)
-            st.caption(
-                "Correlation describes the strength and direction of association "
-                "between numeric variables. It does not establish causation; "
-                "Pearson measures linear association, while Spearman and Kendall "
-                "are rank-based measures."
+
+            frequency_table = (
+                data[selected_column]
+                .value_counts(dropna=False)
+                .rename_axis("Category")
+                .reset_index(name="Frequency")
             )
-            st.download_button(
-                "Download correlation matrix",
-                data=corr.to_csv().encode("utf-8-sig"),
-                file_name="timan_correlation_matrix.csv",
-                mime="text/csv",
-                key="download_correlation_matrix",
+
+            frequency_table["Percentage"] = (
+                frequency_table["Frequency"]
+                / len(data)
+                * 100
             )
+
+            st.dataframe(
+                frequency_table,
+                use_container_width=True,
+            )
+
         else:
             st.info(
-                "A correlation matrix requires at least two numeric variables."
+                "No categorical variables were detected."
             )
-            # ============================================================
+
+
+# ============================================================
+# STATISTICAL ANALYSIS
+# ============================================================
+
+elif page == "Statistical Analysis":
+
+    show_under_development(
+        page,
+        MODULES[page][1],
+    )
+
+
+# ============================================================
 # VISUALISATIONS
 # ============================================================
 
 elif page == "Visualisations":
-    st.title("Visualisations")
-    st.caption(status_text(MODULES[page][0]))
 
-    df = get_dataset()
+    st.title("Data Visualisations")
 
-    if df is not None:
-        numeric_cols = list(
-            df.select_dtypes(include="number").columns
-        )
-        all_cols = list(df.columns)
+    data = require_dataset()
 
-        chart_type = st.selectbox(
-            "Chart type",
-            [
-                "Bar chart",
-                "Histogram",
-                "Line chart",
-                "Scatter plot",
-            ],
-        )
+    if data is not None:
 
-        if chart_type == "Bar chart":
-            if not all_cols:
-                st.info("No columns are available to chart.")
+        numeric_columns = data.select_dtypes(
+            include=np.number
+        ).columns.tolist()
 
-            else:
-                col = st.selectbox(
-                    "Category or value column",
-                    all_cols,
-                    key="bar_col",
-                )
+        if len(numeric_columns) >= 1:
 
-                top_n = st.slider(
-                    "Number of categories to show",
-                    min_value=3,
-                    max_value=30,
-                    value=10,
-                )
+            st.subheader("Numerical variable distribution")
 
-                counts = (
-                    df[col]
-                    .astype("object")
-                    .where(df[col].notna(), "(Missing)")
-                    .value_counts()
-                    .head(top_n)
-                )
+            selected_variable = st.selectbox(
+                "Select a numerical variable",
+                numeric_columns,
+            )
 
-                st.bar_chart(counts)
+            st.bar_chart(
+                data[selected_variable].value_counts().sort_index()
+            )
 
-                st.caption(
-                    f"Showing up to {top_n} most frequent values "
-                    f"for {col}."
-                )
+            st.subheader("Numerical summary")
 
-        elif chart_type == "Histogram":
-            if not numeric_cols:
-                st.info(
-                    "A histogram requires at least one numeric column."
-                )
+            st.write(
+                data[selected_variable].describe()
+            )
 
-            else:
-                col = st.selectbox(
-                    "Numeric variable",
-                    numeric_cols,
-                    key="hist_col",
-                )
-
-                bins = st.slider(
-                    "Number of bins",
-                    min_value=5,
-                    max_value=50,
-                    value=20,
-                )
-
-                values = pd.to_numeric(
-                    df[col],
-                    errors="coerce",
-                ).dropna()
-
-                if values.empty:
-                    st.warning(
-                        "This column has no usable numeric values."
-                    )
-
-                else:
-                    hist, edges = np.histogram(
-                        values,
-                        bins=bins,
-                    )
-
-                    chart_df = pd.DataFrame(
-                        {
-                            "Bin range": [
-                                f"{edges[i]:.3g}–{edges[i + 1]:.3g}"
-                                for i in range(len(hist))
-                            ],
-                            "Frequency": hist,
-                        }
-                    ).set_index("Bin range")
-
-                    st.bar_chart(chart_df)
-
-        elif chart_type == "Line chart":
-            if not numeric_cols:
-                st.info(
-                    "A line chart requires at least one numeric column."
-                )
-
-            else:
-                col = st.selectbox(
-                    "Numeric variable",
-                    numeric_cols,
-                    key="line_col",
-                )
-
-                values = pd.to_numeric(
-                    df[col],
-                    errors="coerce",
-                ).reset_index(drop=True)
-
-                st.line_chart(values)
-
-                st.caption(
-                    "Points follow the dataset's current row order. "
-                    "No time variable is inferred."
-                )
-
-        elif chart_type == "Scatter plot":
-            if len(numeric_cols) < 2:
-                st.info(
-                    "A scatter plot requires at least two numeric columns."
-                )
-
-            else:
-                x_col = st.selectbox(
-                    "X-axis variable",
-                    numeric_cols,
-                    key="scatter_x",
-                )
-
-                y_options = [
-                    col for col in numeric_cols
-                    if col != x_col
-                ]
-
-                y_col = st.selectbox(
-                    "Y-axis variable",
-                    y_options,
-                    key="scatter_y",
-                )
-
-                plot_df = (
-                    df[[x_col, y_col]]
-                    .apply(pd.to_numeric, errors="coerce")
-                    .dropna()
-                )
-
-                if plot_df.empty:
-                    st.warning(
-                        "The selected variables have no paired "
-                        "numeric observations."
-                    )
-
-                else:
-                    st.scatter_chart(
-                        plot_df,
-                        x=x_col,
-                        y=y_col,
-                    )
+        else:
+            st.info(
+                "No numerical variables are available for plotting."
+            )
 
 
 # ============================================================
-# REPORTS AND EXPORTS
+# ASK YOUR DATA
 # ============================================================
 
-elif page == "Reports & Exports":
-    st.title("Reports & Exports")
-    st.caption(status_text(MODULES[page][0]))
+elif page == "Ask Your Data":
 
-    df = get_dataset()
+    show_under_development(
+        page,
+        MODULES[page][1],
+    )
 
-    if df is not None:
-        st.write(
-            "Download the currently loaded dataset and the "
-            "descriptive outputs available in this version."
-        )
 
-        st.download_button(
-            "Download current dataset as CSV",
-            data=df.to_csv(index=False).encode("utf-8-sig"),
-            file_name="timan_dataset_export.csv",
-            mime="text/csv",
-            key="download_dataset_reports",
-        )
+# ============================================================
+# REPORTS
+# ============================================================
 
-        summary = numeric_summary(df)
+elif page == "Reports":
 
-        st.download_button(
-            "Download numeric descriptive statistics",
-            data=summary.to_csv(index=False).encode("utf-8-sig"),
-            file_name="timan_descriptive_statistics.csv",
-            mime="text/csv",
-            key="download_summary_reports",
-        )
+    show_under_development(
+        page,
+        MODULES[page][1],
+    )
 
-        quality = variable_quality_profile(df)
 
-        st.download_button(
-            "Download data-quality profile",
-            data=quality.to_csv(index=False).encode("utf-8-sig"),
-            file_name="timan_data_quality.csv",
-            mime="text/csv",
-            key="download_quality_reports",
-        )
+# ============================================================
+# PROJECT STATUS DASHBOARD
+# ============================================================
 
-        st.info(
-            "Automated narrative report generation is under development."
-        )
+elif page == "Project Status":
 
-    else:
-        st.info(
-            "Upload a dataset in Data Management to enable these exports."
-        )
+    render_project_status_dashboard()
 
 
 # ============================================================
@@ -1429,19 +593,33 @@ elif page == "Reports & Exports":
 # ============================================================
 
 elif page == "About":
-    st.title(f"About {APP_NAME}")
-    st.caption(status_text(MODULES[page][0]))
 
-    st.write(SHORT_DESCRIPTION)
+    st.title(f"About {APP_NAME}")
+
+    st.subheader(APP_TAGLINE)
+
     st.write(APP_DESCRIPTION)
-    st.write(f"**Organisation:** {APP_ORGANISATION}")
-    st.write(f"**Tagline:** {APP_TAGLINE}")
-    st.write(f"**Version:** {APP_VERSION}")
+
+    st.markdown(
+        f"""
+        **Organisation:** {APP_ORGANISATION}
+
+        **Version:** {APP_VERSION}
+
+        **Description:** {SHORT_DESCRIPTION}
+        """
+    )
+
+    st.subheader("Development status")
 
     st.write(
-        "The current prototype supports CSV and Excel import, "
-        "worksheet selection, initial data-quality checks, core "
-        "descriptive statistics, basic charts and CSV exports. "
+        "TimanStat is being developed as a statistical support "
+        "platform for data exploration, statistical analysis, "
+        "visualisation and reporting."
+    )
+
+    st.warning(
+        "The application is under active development. "
         "Additional modules remain under development."
     )
 
@@ -1457,6 +635,7 @@ elif page == "About":
 # ============================================================
 
 else:
+
     show_under_development(
         page,
         MODULES[page][1],
