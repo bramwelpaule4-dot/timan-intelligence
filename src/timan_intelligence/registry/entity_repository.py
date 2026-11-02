@@ -46,31 +46,7 @@ class EntityRepository:
         self._entities: dict[str, RegistryEntity] = {}
 
     def register(self, entity: RegistryEntity) -> RegistryEntity:
-        """Validate and register an entity.
-
-        Classification validation occurs before canonical identity
-        registration. This prevents invalid entities from claiming
-        canonical IDs in the shared identity index.
-
-        The stored record is a deep copy, preventing callers from
-        mutating repository state through the original object.
-
-        Args:
-            entity: A RegistryEntity instance or subclass.
-
-        Returns:
-            A defensive copy of the registered entity.
-
-        Raises:
-            TypeError: If entity is not a RegistryEntity instance.
-            ValueError: If the entity is already registered locally.
-            VocabularyCompatibilityError: If its classification
-                structure is invalid.
-            VocabularyError: If a classification is not valid
-                against its controlled vocabulary.
-            RegistryIdentityError: If its canonical ID is invalid
-                or already registered globally.
-        """
+        """Validate and register an entity."""
         if not isinstance(entity, RegistryEntity):
             raise TypeError(
                 "entity must be a RegistryEntity instance."
@@ -84,8 +60,6 @@ class EntityRepository:
                 "in this repository."
             )
 
-        # Validate all controlled classifications before claiming
-        # the canonical identity.
         validate_entity_classifications(
             entity,
             self._vocabulary_repository,
@@ -93,8 +67,6 @@ class EntityRepository:
 
         stored_entity = copy.deepcopy(entity)
 
-        # RegistryIdentityIndex derives and verifies the entity type
-        # from the canonical statistical entity ID.
         self._identity_index.register(
             canonical_id=entity_id,
             namespace="statistical",
@@ -128,4 +100,3 @@ class EntityRepository:
     def count(self) -> int:
         """Return the number of stored entities."""
         return len(self._entities)
-```
