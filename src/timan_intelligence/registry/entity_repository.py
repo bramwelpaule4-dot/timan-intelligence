@@ -1,4 +1,4 @@
-```python
+
 """In-memory repository for TimanStat registry entities.
 
 The repository stores complete RegistryEntity records while delegating
