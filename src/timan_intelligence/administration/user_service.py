@@ -1,30 +1,47 @@
+"""Platform user administration services."""
 
-"""Platform user administration services for TimanStat."""
-
-from __future__ import annotations
-
+from datetime import datetime, timezone
 from typing import Any
 
-from timan_intelligence.database.connection import (
-    database_connection,
-    get_database_type,
-)
-from timan_intelligence.administration.permissions import (
-    normalise_role,
-)
+from timan_intelligence.administration.permissions import normalise_role
+from timan_intelligence.database.connection import database_connection
 
 
 def _placeholder() -> str:
-    """Return the parameter placeholder for the configured database."""
-    return "%s" if get_database_type() == "postgresql" else "?"
+    """Return the database-specific SQL placeholder."""
+    with database_connection() as connection:
+        if connection.__class__.__module__.startswith("psycopg"):
+            return "%s"
+    return "?"
 
 
 def _require_super_admin(actor_role: str) -> None:
-    """Restrict sensitive platform administration to Super Admins."""
-
-    if normalise_role(actor_role) != "super_admin":
+    """Require the super_admin platform role."""
+    try:
+        role = normalise_role(actor_role)
+    except ValueError as exc:
         raise PermissionError(
-            "Only a Super Admin can perform this action."
+            "Only a super administrator can perform this action."
+        ) from exc
+
+    if role != "super_admin":
+        raise PermissionError(
+            "Only a super administrator can perform this action."
+        )
+
+
+def _require_user_admin(actor_role: str) -> None:
+    """Require an admin or super_admin platform role."""
+    try:
+        role = normalise_role(actor_role)
+    except ValueError as exc:
+        raise PermissionError(
+            "You do not have permission to view platform users."
+        ) from exc
+
+    if role not in {"super_admin", "admin"}:
+        raise PermissionError(
+            "You do not have permission to view platform users."
         )
 
 
@@ -33,81 +50,71 @@ def list_users(
     limit: int = 100,
 ) -> list[dict[str, Any]]:
     """List platform users without exposing password hashes."""
+    _require_user_admin(actor_role)
 
-    if normalise_role(actor_role) not in {"super_admin", "admin"}:
-        raise PermissionError(
-            "You do not have permission to view platform users."
-        )
-
-    if not isinstance(limit, int) or isinstance(limit, bool):
+    if isinstance(limit, bool) or not isinstance(limit, int):
         raise ValueError("Limit must be an integer.")
 
-    if limit < 1 or limit > 1000:
+    if not 1 <= limit <= 1000:
         raise ValueError("Limit must be between 1 and 1000.")
 
-    p = _placeholder()
+    placeholder = _placeholder()
 
     with database_connection() as connection:
-        rows = connection.execute(
+        cursor = connection.cursor()
+        cursor.execute(
             f"""
             SELECT
                 id,
-                username,
                 email,
                 full_name,
                 role,
                 is_active,
                 email_verified,
                 created_at,
-                updated_at,
-                last_login_at
+                updated_at
             FROM users
             ORDER BY created_at DESC
-            LIMIT {p}
+            LIMIT {placeholder}
             """,
             (limit,),
-        ).fetchall()
-
-    return [dict(row) for row in rows]
+        )
+        return [dict(row) for row in cursor.fetchall()]
 
 
 def get_user_details(
     actor_role: str,
     user_id: str,
 ) -> dict[str, Any] | None:
-    """Retrieve a user's administrative account details."""
-
-    if normalise_role(actor_role) not in {"super_admin", "admin"}:
-        raise PermissionError(
-            "You do not have permission to view user details."
-        )
+    """Retrieve one platform user's details without password hashes."""
+    _require_user_admin(actor_role)
 
     if not isinstance(user_id, str) or not user_id.strip():
         raise ValueError("User ID is required.")
 
-    p = _placeholder()
+    placeholder = _placeholder()
 
     with database_connection() as connection:
-        user = connection.execute(
+        cursor = connection.cursor()
+        cursor.execute(
             f"""
             SELECT
                 id,
-                username,
                 email,
                 full_name,
                 role,
                 is_active,
                 email_verified,
                 created_at,
-                updated_at,
-                last_login_at
+                updated_at
             FROM users
-            WHERE id = {p}
+            WHERE id = {placeholder}
             """,
-            (user_id.strip(),),
-        ).fetchone()
+            (user_id,),
+        )
+        row = cursor.fetchone()
 
-    return dict(user) if user is not None else None
+    return dict(row) if row else None
 
 
 def change_user_role(
@@ -116,68 +123,69 @@ def change_user_role(
     target_user_id: str,
     new_role: str,
 ) -> None:
-    """Change a user's platform role under Super Admin authority."""
-
+    """Change a platform user's role."""
     _require_super_admin(actor_role)
 
-    if not actor_user_id or not actor_user_id.strip():
-        raise ValueError("Acting administrator ID is required.")
+    if not isinstance(actor_user_id, str) or not actor_user_id.strip():
+        raise ValueError("Actor user ID is required.")
 
-    if not target_user_id or not target_user_id.strip():
+    if not isinstance(target_user_id, str) or not target_user_id.strip():
         raise ValueError("Target user ID is required.")
 
-    new_role = normalise_role(new_role)
+    if actor_user_id == target_user_id and new_role != "super_admin":
+        raise PermissionError("You cannot demote your own account.")
 
-    if (
-        actor_user_id.strip() == target_user_id.strip()
-        and new_role != "super_admin"
-    ):
-        raise ValueError(
-            "A Super Admin cannot change their own role."
-        )
-
-    p = _placeholder()
+    validated_role = normalise_role(new_role)
+    placeholder = _placeholder()
 
     with database_connection() as connection:
-        target = connection.execute(
+        cursor = connection.cursor()
+
+        cursor.execute(
             f"""
             SELECT id, role, is_active
             FROM users
-            WHERE id = {p}
+            WHERE id = {placeholder}
             """,
-            (target_user_id.strip(),),
-        ).fetchone()
+            (target_user_id,),
+        )
+        target = cursor.fetchone()
 
-        if target is None:
-            raise ValueError("Target user account was not found.")
+        if not target:
+            raise ValueError("Target user does not exist.")
 
         if (
             target["role"] == "super_admin"
-            and target["is_active"]
-            and new_role != "super_admin"
+            and validated_role != "super_admin"
+            and bool(target["is_active"])
         ):
-            count = connection.execute(
+            cursor.execute(
                 """
                 SELECT COUNT(*) AS total
                 FROM users
                 WHERE role = 'super_admin'
-                  AND is_active = TRUE
+                  AND is_active = 1
                 """
-            ).fetchone()["total"]
+            )
+            result = cursor.fetchone()
 
-            if int(count) <= 1:
-                raise ValueError(
-                    "The last active Super Admin cannot be demoted."
+            if result["total"] <= 1:
+                raise PermissionError(
+                    "The last active super administrator cannot be demoted."
                 )
 
-        connection.execute(
+        cursor.execute(
             f"""
             UPDATE users
-            SET role = {p},
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = {p}
+            SET role = {placeholder},
+                updated_at = {placeholder}
+            WHERE id = {placeholder}
             """,
-            (new_role, target_user_id.strip()),
+            (
+                validated_role,
+                datetime.now(timezone.utc).isoformat(),
+                target_user_id,
+            ),
         )
 
 
@@ -187,59 +195,66 @@ def set_user_active_status(
     target_user_id: str,
     is_active: bool,
 ) -> None:
-    """Activate or deactivate a user account."""
-
+    """Activate or deactivate a platform user."""
     _require_super_admin(actor_role)
 
-    if not isinstance(is_active, bool):
-        raise ValueError("Account status must be True or False.")
+    if not isinstance(actor_user_id, str) or not actor_user_id.strip():
+        raise ValueError("Actor user ID is required.")
 
-    if not actor_user_id or not actor_user_id.strip():
-        raise ValueError("Acting administrator ID is required.")
-
-    if not target_user_id or not target_user_id.strip():
+    if not isinstance(target_user_id, str) or not target_user_id.strip():
         raise ValueError("Target user ID is required.")
 
-    p = _placeholder()
+    if not isinstance(is_active, bool):
+        raise ValueError("Active status must be a boolean.")
+
+    placeholder = _placeholder()
 
     with database_connection() as connection:
-        target = connection.execute(
+        cursor = connection.cursor()
+
+        cursor.execute(
             f"""
             SELECT id, role, is_active
             FROM users
-            WHERE id = {p}
+            WHERE id = {placeholder}
             """,
-            (target_user_id.strip(),),
-        ).fetchone()
+            (target_user_id,),
+        )
+        target = cursor.fetchone()
 
-        if target is None:
-            raise ValueError("Target user account was not found.")
+        if not target:
+            raise ValueError("Target user does not exist.")
 
         if (
-            not is_active
-            and target["role"] == "super_admin"
-            and target["is_active"]
+            target["role"] == "super_admin"
+            and bool(target["is_active"])
+            and not is_active
         ):
-            count = connection.execute(
+            cursor.execute(
                 """
                 SELECT COUNT(*) AS total
                 FROM users
                 WHERE role = 'super_admin'
-                  AND is_active = TRUE
+                  AND is_active = 1
                 """
-            ).fetchone()["total"]
+            )
+            result = cursor.fetchone()
 
-            if int(count) <= 1:
-                raise ValueError(
-                    "The last active Super Admin cannot be deactivated."
+            if result["total"] <= 1:
+                raise PermissionError(
+                    "The last active super administrator cannot be deactivated."
                 )
 
-        connection.execute(
+        cursor.execute(
             f"""
             UPDATE users
-            SET is_active = {p},
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = {p}
+            SET is_active = {placeholder},
+                updated_at = {placeholder}
+            WHERE id = {placeholder}
             """,
-            (is_active, target_user_id.strip()),
+            (
+                is_active,
+                datetime.now(timezone.utc).isoformat(),
+                target_user_id,
+            ),
         )
