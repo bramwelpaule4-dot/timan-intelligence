@@ -13,7 +13,7 @@ SCHEMA_STATEMENTS = [
         full_name TEXT NOT NULL,
         password_hash TEXT NOT NULL,
         role TEXT NOT NULL DEFAULT 'user'
-            CHECK (role IN ('super_admin', 'developer', 'user')),
+            CHECK (role IN ('super_admin', 'admin', 'developer', 'user')),
         is_active BOOLEAN NOT NULL DEFAULT TRUE,
         email_verified BOOLEAN NOT NULL DEFAULT FALSE,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -21,7 +21,6 @@ SCHEMA_STATEMENTS = [
         last_login_at TIMESTAMP
     )
     """,
-
     """
     CREATE TABLE IF NOT EXISTS organisations (
         id TEXT PRIMARY KEY,
@@ -37,7 +36,6 @@ SCHEMA_STATEMENTS = [
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
     """,
-
     """
     CREATE TABLE IF NOT EXISTS organisation_memberships (
         id TEXT PRIMARY KEY,
@@ -53,7 +51,6 @@ SCHEMA_STATEMENTS = [
         UNIQUE (organisation_id, user_id)
     )
     """,
-
     """
     CREATE TABLE IF NOT EXISTS audit_logs (
         id TEXT PRIMARY KEY,
@@ -68,22 +65,18 @@ SCHEMA_STATEMENTS = [
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
     """,
-
     """
     CREATE INDEX IF NOT EXISTS idx_memberships_user
     ON organisation_memberships(user_id)
     """,
-
     """
     CREATE INDEX IF NOT EXISTS idx_memberships_organisation
     ON organisation_memberships(organisation_id)
     """,
-
     """
     CREATE INDEX IF NOT EXISTS idx_audit_user
     ON audit_logs(user_id)
     """,
-
     """
     CREATE INDEX IF NOT EXISTS idx_audit_created
     ON audit_logs(created_at)
