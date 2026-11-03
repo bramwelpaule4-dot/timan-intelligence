@@ -24,7 +24,7 @@ def _new_id() -> str:
 
 def _placeholder() -> str:
     """Return the parameter placeholder for the configured database."""
-    return "%" if get_database_type() == "postgresql" else "?"
+    return "%s" if get_database_type() == "postgresql" else "?"
 
 
 def _normalise_text(value: str, field_name: str) -> str:
@@ -53,12 +53,38 @@ def _validate_email(email: str | None) -> str | None:
     return email
 
 
+def _require_active_user(
+    connection: Any,
+    user_id: str,
+) -> None:
+    """Verify that an individual user account exists and is active."""
+
+    p = _placeholder()
+
+    result = connection.execute(
+        f"""
+        SELECT id
+        FROM users
+        WHERE id = {p}
+          AND is_active = TRUE
+        """,
+        (user_id,),
+    ).fetchone()
+
+    if result is None:
+        raise PermissionError(
+            "The individual user account does not exist or is inactive."
+        )
+
+
 def _require_organisation_admin(
     connection: Any,
     organisation_id: str,
     user_id: str,
 ) -> None:
     """Verify that a user is an active administrator of an organisation."""
+
+    _require_active_user(connection, user_id)
 
     p = _placeholder()
 
@@ -100,28 +126,6 @@ def _require_active_organisation(
 
     if result is None:
         raise ValueError("Organisation does not exist or is inactive.")
-
-
-def _require_active_user(
-    connection: Any,
-    user_id: str,
-) -> None:
-    """Verify that an individual user account exists and is active."""
-
-    p = _placeholder()
-
-    result = connection.execute(
-        f"""
-        SELECT id
-        FROM users
-        WHERE id = {p}
-          AND is_active = TRUE
-        """,
-        (user_id,),
-    ).fetchone()
-
-    if result is None:
-        raise ValueError("The individual user does not exist or is inactive.")
 
 
 def _count_active_organisation_admins(
@@ -295,12 +299,14 @@ def add_organisation_member(
 
 
 def list_user_organisations(user_id: str) -> list[dict[str, Any]]:
-    """Return all active organisations associated with an individual user."""
+    """Return all active organisations associated with an active user."""
 
     user_id = _normalise_text(user_id, "User ID")
     p = _placeholder()
 
     with database_connection() as connection:
+        _require_active_user(connection, user_id)
+
         rows = connection.execute(
             f"""
             SELECT
