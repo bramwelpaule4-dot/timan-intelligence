@@ -66,6 +66,7 @@ def list_users(
             f"""
             SELECT
                 id,
+                username,
                 email,
                 full_name,
                 role,
@@ -79,6 +80,7 @@ def list_users(
             """,
             (limit,),
         )
+
         return [dict(row) for row in cursor.fetchall()]
 
 
@@ -100,6 +102,7 @@ def get_user_details(
             f"""
             SELECT
                 id,
+                username,
                 email,
                 full_name,
                 role,
@@ -112,6 +115,7 @@ def get_user_details(
             """,
             (user_id,),
         )
+
         row = cursor.fetchone()
 
     return dict(row) if row else None
@@ -132,10 +136,11 @@ def change_user_role(
     if not isinstance(target_user_id, str) or not target_user_id.strip():
         raise ValueError("Target user ID is required.")
 
-    if actor_user_id == target_user_id and new_role != "super_admin":
-        raise PermissionError("You cannot demote your own account.")
-
     validated_role = normalise_role(new_role)
+
+    if actor_user_id == target_user_id and validated_role != "super_admin":
+        raise ValueError("A super administrator cannot demote their own account.")
+
     placeholder = _placeholder()
 
     with database_connection() as connection:
@@ -149,6 +154,7 @@ def change_user_role(
             """,
             (target_user_id,),
         )
+
         target = cursor.fetchone()
 
         if not target:
@@ -164,13 +170,14 @@ def change_user_role(
                 SELECT COUNT(*) AS total
                 FROM users
                 WHERE role = 'super_admin'
-                  AND is_active = 1
+                  AND is_active = TRUE
                 """
             )
+
             result = cursor.fetchone()
 
             if result["total"] <= 1:
-                raise PermissionError(
+                raise ValueError(
                     "The last active super administrator cannot be demoted."
                 )
 
@@ -220,6 +227,7 @@ def set_user_active_status(
             """,
             (target_user_id,),
         )
+
         target = cursor.fetchone()
 
         if not target:
@@ -235,13 +243,14 @@ def set_user_active_status(
                 SELECT COUNT(*) AS total
                 FROM users
                 WHERE role = 'super_admin'
-                  AND is_active = 1
+                  AND is_active = TRUE
                 """
             )
+
             result = cursor.fetchone()
 
             if result["total"] <= 1:
-                raise PermissionError(
+                raise ValueError(
                     "The last active super administrator cannot be deactivated."
                 )
 
