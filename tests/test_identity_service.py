@@ -1,11 +1,10 @@
-
 """Tests for TimanStat individual registration and authentication."""
 
 import pytest
 
-from timanstat.database.initialise import initialise_database
-from timanstat.database.connection import database_connection
-from timanstat.identity.service import (
+from timan_intelligence.database.initialise import initialise_database
+from timan_intelligence.database.connection import database_connection
+from timan_intelligence.identity.service import (
     register_user,
     authenticate_user,
     get_user_by_id,
@@ -29,8 +28,6 @@ def test_database(tmp_path, monkeypatch):
 
 
 def test_register_user_creates_individual_account(test_database):
-    """A new account should be created with the normal user role."""
-
     user_id = register_user(
         username="bramwel",
         email="bramwel@example.com",
@@ -49,8 +46,6 @@ def test_register_user_creates_individual_account(test_database):
 
 
 def test_registration_does_not_store_plain_text_password(test_database):
-    """The database should store a password hash, not the original password."""
-
     password = "SecureTestPassword123!"
 
     user_id = register_user(
@@ -72,8 +67,6 @@ def test_registration_does_not_store_plain_text_password(test_database):
 
 
 def test_user_can_login_with_username(test_database):
-    """A registered user should be able to log in with their username."""
-
     register_user(
         username="testuser",
         email="testuser@example.com",
@@ -92,8 +85,6 @@ def test_user_can_login_with_username(test_database):
 
 
 def test_user_can_login_with_email(test_database):
-    """A registered user should be able to log in with their email."""
-
     register_user(
         username="testuser",
         email="testuser@example.com",
@@ -111,8 +102,6 @@ def test_user_can_login_with_email(test_database):
 
 
 def test_login_rejects_incorrect_password(test_database):
-    """An incorrect password should not authenticate the user."""
-
     register_user(
         username="testuser",
         email="testuser@example.com",
@@ -129,8 +118,6 @@ def test_login_rejects_incorrect_password(test_database):
 
 
 def test_login_rejects_unknown_user(test_database):
-    """An unknown account should not authenticate."""
-
     user = authenticate_user(
         "unknownuser",
         "SecureTestPassword123!",
@@ -140,8 +127,6 @@ def test_login_rejects_unknown_user(test_database):
 
 
 def test_registration_rejects_short_password(test_database):
-    """Passwords shorter than 12 characters should be rejected."""
-
     with pytest.raises(ValueError):
         register_user(
             username="testuser",
@@ -152,8 +137,6 @@ def test_registration_rejects_short_password(test_database):
 
 
 def test_registration_rejects_duplicate_username(test_database):
-    """A username must be unique."""
-
     register_user(
         username="testuser",
         email="first@example.com",
@@ -171,8 +154,6 @@ def test_registration_rejects_duplicate_username(test_database):
 
 
 def test_registration_rejects_duplicate_email(test_database):
-    """An email address must be unique."""
-
     register_user(
         username="firstuser",
         email="same@example.com",
@@ -190,8 +171,6 @@ def test_registration_rejects_duplicate_email(test_database):
 
 
 def test_inactive_user_cannot_login(test_database):
-    """Deactivated accounts should not be allowed to log in."""
-
     user_id = register_user(
         username="inactiveuser",
         email="inactive@example.com",
