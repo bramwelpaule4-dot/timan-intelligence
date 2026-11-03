@@ -385,7 +385,7 @@ def test_add_member_rejects_unknown_organisation(
     test_database,
     test_users,
 ):
-    with pytest.raises(ValueError):
+    with pytest.raises(PermissionError):
         add_organisation_member(
             organisation_id="unknown-organisation",
             user_id=test_users["member"],
