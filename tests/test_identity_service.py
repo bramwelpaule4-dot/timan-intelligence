@@ -3,9 +3,9 @@
 
 import pytest
 
-from timan_intelligence.database.initialise import initialise_database
-from timan_intelligence.database.connection import database_connection
-from timan_intelligence.identity.service import (
+from timanstat.database.initialise import initialise_database
+from timanstat.database.connection import database_connection
+from timanstat.identity.service import (
     register_user,
     authenticate_user,
     get_user_by_id,
@@ -45,7 +45,7 @@ def test_register_user_creates_individual_account(test_database):
     assert user["email"] == "bramwel@example.com"
     assert user["full_name"] == "Bramwel Paule"
     assert user["role"] == "user"
-    assert user["is_active"] is True
+    assert bool(user["is_active"]) is True
 
 
 def test_registration_does_not_store_plain_text_password(test_database):
