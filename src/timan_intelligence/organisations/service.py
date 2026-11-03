@@ -72,7 +72,7 @@ def _require_active_user(
     ).fetchone()
 
     if result is None:
-        raise PermissionError(
+        raise ValueError(
             "The individual user account does not exist or is inactive."
         )
 
@@ -84,7 +84,12 @@ def _require_organisation_admin(
 ) -> None:
     """Verify that a user is an active administrator of an organisation."""
 
-    _require_active_user(connection, user_id)
+    try:
+        _require_active_user(connection, user_id)
+    except ValueError as exc:
+        raise PermissionError(
+            "Only an active Organisation Admin can perform this action."
+        ) from exc
 
     p = _placeholder()
 
