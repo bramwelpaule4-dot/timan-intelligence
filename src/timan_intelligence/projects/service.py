@@ -6,7 +6,6 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-
 from timan_intelligence.database.connection import (
     database_connection,
     get_database_type,
@@ -218,8 +217,16 @@ def _require_project_admin(
 
     _require_active_organisation(connection, organisation_id)
 
+    # Organisation Admins have implicit access to projects
+    # within their active organisation.
     if _is_organisation_admin(connection, organisation_id, user_id):
         return
+
+    # A Project Admin must also remain an active member
+    # of the parent organisation.
+    _require_active_organisation_member(
+        connection, organisation_id, user_id
+    )
 
     p = _placeholder()
 
@@ -247,14 +254,20 @@ def _require_project_access(
     project_id: str,
     user_id: str,
 ) -> None:
-    """Require active project membership or Organisation Admin authority."""
+    """Require active project and organisation membership or Organisation Admin authority."""
     project = _get_project(connection, project_id)
     organisation_id = project["organisation_id"]
 
     _require_active_organisation(connection, organisation_id)
 
+    # Organisation Admins have implicit project access.
     if _is_organisation_admin(connection, organisation_id, user_id):
         return
+
+    # Other users must have active parent organisation membership.
+    _require_active_organisation_member(
+        connection, organisation_id, user_id
+    )
 
     p = _placeholder()
 
@@ -399,13 +412,18 @@ def list_user_projects(user_id: str) -> list[dict[str, Any]]:
             LEFT JOIN organisation_memberships om
                 ON om.organisation_id = p.organisation_id
                AND om.user_id = {p}
-               AND om.role = 'org_admin'
                AND om.status = 'active'
             WHERE o.status = 'active'
               AND p.status != 'archived'
               AND (
-                    pm.id IS NOT NULL
-                    OR om.id IS NOT NULL
+                    (
+                        om.id IS NOT NULL
+                        AND om.role = 'org_admin'
+                    )
+                    OR (
+                        om.id IS NOT NULL
+                        AND pm.id IS NOT NULL
+                    )
               )
             ORDER BY p.name
             """,
