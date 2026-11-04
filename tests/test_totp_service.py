@@ -3,13 +3,10 @@
 
 import pytest
 
-from timan_intelligence.database.initialise import initialise_database
 from timan_intelligence.database.connection import database_connection
-from timan_intelligence.identity.service import create_user
-from timan_intelligence.security.totp import (
-    generate_totp_code,
-    generate_totp_secret,
-)
+from timan_intelligence.database.initialise import initialise_database
+from timan_intelligence.identity.service import register_user
+from timan_intelligence.security.totp import generate_totp_code
 from timan_intelligence.security.totp_encryption import (
     generate_totp_encryption_key,
 )
@@ -25,7 +22,7 @@ TEST_TIMESTAMP = 1_700_000_000
 
 @pytest.fixture
 def totp_user(tmp_path, monkeypatch):
-    """Create an isolated database and a registered user for TOTP tests."""
+    """Create an isolated database and registered test user."""
 
     database_file = tmp_path / "test_timanstat_totp.db"
 
@@ -35,6 +32,7 @@ def totp_user(tmp_path, monkeypatch):
     )
 
     encryption_key = generate_totp_encryption_key()
+
     monkeypatch.setenv(
         "TIMANSTAT_TOTP_ENCRYPTION_KEY",
         encryption_key,
@@ -42,21 +40,17 @@ def totp_user(tmp_path, monkeypatch):
 
     initialise_database()
 
-    username = "totp_test_user"
-    email = "totp_test@example.com"
-    password = "SecureTestPassword123!"
-
-    user_id = create_user(
-        username=username,
-        email=email,
-        password=password,
+    user_id = register_user(
+        username="totp_test_user",
+        email="totp_test@example.com",
         full_name="TOTP Test User",
+        password="SecureTestPassword123!",
     )
 
     return {
         "user_id": user_id,
-        "username": username,
-        "email": email,
+        "username": "totp_test_user",
+        "email": "totp_test@example.com",
         "encryption_key": encryption_key,
         "database_file": database_file,
     }
@@ -67,6 +61,7 @@ def _get_user_totp_state(user_id):
 
     with database_connection() as connection:
         cursor = connection.cursor()
+
         cursor.execute(
             """
             SELECT
@@ -81,6 +76,7 @@ def _get_user_totp_state(user_id):
             """,
             (user_id,),
         )
+
         return cursor.fetchone()
 
 
@@ -115,8 +111,7 @@ def test_begin_totp_enrolment_rejects_inactive_user(totp_user):
     """An inactive account cannot begin enrolment."""
 
     with database_connection() as connection:
-        cursor = connection.cursor()
-        cursor.execute(
+        connection.execute(
             "UPDATE users SET is_active = ? WHERE id = ?",
             (False, totp_user["user_id"]),
         )
@@ -192,8 +187,8 @@ def test_confirm_totp_enrolment_enables_totp(totp_user):
     assert state[0] in (True, 1)
     assert state[1] is not None
     assert state[2] is None
-    assert state[4] is not None
     assert state[3] is not None
+    assert state[4] is not None
 
 
 def test_confirm_totp_enrolment_cannot_be_repeated(totp_user):
@@ -354,7 +349,10 @@ def test_verify_totp_for_user_rejects_replayed_code(totp_user):
         -1,
     ],
 )
-def test_totp_services_reject_invalid_user_ids(totp_user, invalid_user_id):
+def test_totp_services_reject_invalid_user_ids(
+    totp_user,
+    invalid_user_id,
+):
     """TOTP service functions reject malformed user identifiers."""
 
     assert begin_totp_enrolment(invalid_user_id) is None
