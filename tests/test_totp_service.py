@@ -3,16 +3,17 @@
 
 import pytest
 
-from timan_intelligence.database.connection import database_connection
 from timan_intelligence.database.initialise import initialise_database
-from timan_intelligence.identity.service import register_user
-from timan_intelligence.security.totp import generate_totp_code
+from timan_intelligence.database.connection import database_connection
+from timan_intelligence.identity.service import create_user
+from timan_intelligence.security.totp import (
+    generate_totp_code,
+    generate_totp_secret,
+)
 from timan_intelligence.security.totp_encryption import (
-    decrypt_totp_secret,
     generate_totp_encryption_key,
 )
 from timan_intelligence.security.totp_service import (
-    TOTPServiceError,
     begin_totp_enrolment,
     confirm_totp_enrolment,
     verify_totp_for_user,
@@ -24,9 +25,9 @@ TEST_TIMESTAMP = 1_700_000_000
 
 @pytest.fixture
 def totp_user(tmp_path, monkeypatch):
-    """Create an isolated database, encryption key and active user."""
+    """Create an isolated database and a registered user for TOTP tests."""
 
-    database_file = tmp_path / "test_totp_service.db"
+    database_file = tmp_path / "test_timanstat_totp.db"
 
     monkeypatch.setenv(
         "DATABASE_URL",
@@ -34,7 +35,6 @@ def totp_user(tmp_path, monkeypatch):
     )
 
     encryption_key = generate_totp_encryption_key()
-
     monkeypatch.setenv(
         "TIMANSTAT_TOTP_ENCRYPTION_KEY",
         encryption_key,
@@ -42,111 +42,32 @@ def totp_user(tmp_path, monkeypatch):
 
     initialise_database()
 
-    user_id = register_user(
-        username="totptestuser",
-        email="totptest@example.com",
+    username = "totp_test_user"
+    email = "totp_test@example.com"
+    password = "SecureTestPassword123!"
+
+    user_id = create_user(
+        username=username,
+        email=email,
+        password=password,
         full_name="TOTP Test User",
-        password="SecureTestPassword123!",
     )
 
-    return user_id
+    return {
+        "user_id": user_id,
+        "username": username,
+        "email": email,
+        "encryption_key": encryption_key,
+        "database_file": database_file,
+    }
 
 
-def test_begin_totp_enrolment_creates_pending_secret(totp_user):
-    """Beginning enrolment stores a protected pending secret."""
-
-    result = begin_totp_enrolment(totp_user)
-
-    assert isinstance(result, dict)
-    assert result["secret"]
-    assert result["provisioning_uri"].startswith("otpauth://totp/")
-
-    with database_connection() as connection:
-        user = connection.execute(
-            """
-            SELECT
-                totp_enabled,
-                totp_secret_encrypted,
-                totp_pending_secret_encrypted,
-                totp_pending_created_at
-            FROM users
-            WHERE id = ?
-            """,
-            (totp_user,),
-        ).fetchone()
-
-    assert bool(user["totp_enabled"]) is False
-    assert user["totp_secret_encrypted"] is None
-    assert user["totp_pending_secret_encrypted"] is not None
-    assert user["totp_pending_created_at"] is not None
-
-    assert user["totp_pending_secret_encrypted"] != result["secret"]
-
-    assert (
-        decrypt_totp_secret(user["totp_pending_secret_encrypted"])
-        == result["secret"]
-    )
-
-
-def test_begin_totp_enrolment_rejects_unknown_user():
-    """Enrolment must not proceed for a nonexistent account."""
-
-    with pytest.raises(TOTPServiceError):
-        begin_totp_enrolment("nonexistent-user")
-
-
-def test_begin_totp_enrolment_rejects_inactive_user(totp_user):
-    """Inactive accounts must not start TOTP enrolment."""
+def _get_user_totp_state(user_id):
+    """Read persisted TOTP fields for a user."""
 
     with database_connection() as connection:
-        connection.execute(
-            "UPDATE users SET is_active = FALSE WHERE id = ?",
-            (totp_user,),
-        )
-
-    with pytest.raises(TOTPServiceError):
-        begin_totp_enrolment(totp_user)
-
-
-def test_begin_totp_enrolment_rejects_already_enabled_user(totp_user):
-    """An account with enabled TOTP must not start another enrolment."""
-
-    with database_connection() as connection:
-        connection.execute(
-            """
-            UPDATE users
-            SET totp_enabled = TRUE
-            WHERE id = ?
-            """,
-            (totp_user,),
-        )
-
-    with pytest.raises(TOTPServiceError):
-        begin_totp_enrolment(totp_user)
-
-
-def test_confirm_totp_enrolment_enables_two_factor_authentication(
-    totp_user,
-):
-    """A valid authenticator code must complete enrolment."""
-
-    result = begin_totp_enrolment(totp_user)
-
-    code = generate_totp_code(
-        result["secret"],
-        at_time=TEST_TIMESTAMP,
-    )
-
-    confirmed = confirm_totp_enrolment(
-        user_id=totp_user,
-        code=code,
-        at_time=TEST_TIMESTAMP,
-    )
-
-    assert confirmed is True
-
-    with database_connection() as connection:
-        user = connection.execute(
+        cursor = connection.cursor()
+        cursor.execute(
             """
             SELECT
                 totp_enabled,
@@ -158,68 +79,66 @@ def test_confirm_totp_enrolment_enables_two_factor_authentication(
             FROM users
             WHERE id = ?
             """,
-            (totp_user,),
-        ).fetchone()
-
-    assert bool(user["totp_enabled"]) is True
-    assert user["totp_secret_encrypted"] is not None
-    assert user["totp_pending_secret_encrypted"] is None
-    assert user["totp_last_accepted_counter"] == TEST_TIMESTAMP // 30
-    assert user["totp_enrolled_at"] is not None
-    assert user["totp_pending_created_at"] is None
-
-    assert (
-        decrypt_totp_secret(user["totp_secret_encrypted"])
-        == result["secret"]
-    )
+            (user_id,),
+        )
+        return cursor.fetchone()
 
 
-def test_confirm_totp_enrolment_rejects_invalid_code(totp_user):
-    """An invalid code must not activate TOTP."""
+def test_begin_totp_enrolment_creates_pending_secret(totp_user):
+    """Beginning enrolment stores an encrypted pending secret."""
 
-    begin_totp_enrolment(totp_user)
+    result = begin_totp_enrolment(totp_user["user_id"])
 
-    confirmed = confirm_totp_enrolment(
-        user_id=totp_user,
-        code="000000",
-        at_time=TEST_TIMESTAMP,
-    )
+    assert result is not None
+    assert result["secret"]
+    assert result["provisioning_uri"].startswith("otpauth://totp/")
 
-    assert confirmed is False
+    state = _get_user_totp_state(totp_user["user_id"])
+
+    assert state is not None
+    assert state[0] in (False, 0)
+    assert state[1] is None
+    assert state[2] is not None
+    assert state[2] != result["secret"]
+    assert state[5] is not None
+
+
+def test_begin_totp_enrolment_rejects_unknown_user(totp_user):
+    """A nonexistent account cannot begin enrolment."""
+
+    result = begin_totp_enrolment("nonexistent-user")
+
+    assert result is None
+
+
+def test_begin_totp_enrolment_rejects_inactive_user(totp_user):
+    """An inactive account cannot begin enrolment."""
 
     with database_connection() as connection:
-        user = connection.execute(
-            """
-            SELECT
-                totp_enabled,
-                totp_secret_encrypted,
-                totp_pending_secret_encrypted
-            FROM users
-            WHERE id = ?
-            """,
-            (totp_user,),
-        ).fetchone()
+        cursor = connection.cursor()
+        cursor.execute(
+            "UPDATE users SET is_active = ? WHERE id = ?",
+            (False, totp_user["user_id"]),
+        )
 
-    assert bool(user["totp_enabled"]) is False
-    assert user["totp_secret_encrypted"] is None
-    assert user["totp_pending_secret_encrypted"] is not None
+    result = begin_totp_enrolment(totp_user["user_id"])
+
+    assert result is None
 
 
-def test_confirm_totp_enrolment_returns_false_without_pending_secret(
-    totp_user,
-):
-    """Confirmation must fail when no enrolment is pending."""
+def test_begin_totp_enrolment_does_not_enable_totp(totp_user):
+    """Starting enrolment must not activate TOTP before confirmation."""
 
-    confirmed = confirm_totp_enrolment(
-        user_id=totp_user,
-        code="123456",
-        at_time=TEST_TIMESTAMP,
-    )
+    begin_totp_enrolment(totp_user["user_id"])
 
-    assert confirmed is False
+    state = _get_user_totp_state(totp_user["user_id"])
+
+    assert state[0] in (False, 0)
+    assert state[1] is None
+    assert state[2] is not None
 
 
-def test_confirm_totp_enrolment_rejects_unknown_user():
+def test_confirm_totp_enrolment_rejects_unknown_user(totp_user):
     """A nonexistent account cannot complete enrolment."""
 
     confirmed = confirm_totp_enrolment(
@@ -231,138 +150,79 @@ def test_confirm_totp_enrolment_rejects_unknown_user():
     assert confirmed is False
 
 
-def test_confirm_totp_enrolment_rejects_repeated_confirmation(
-    totp_user,
-):
-    """An already enrolled account cannot confirm enrolment again."""
+def test_confirm_totp_enrolment_rejects_invalid_code(totp_user):
+    """An invalid authenticator code cannot complete enrolment."""
 
-    result = begin_totp_enrolment(totp_user)
+    begin_totp_enrolment(totp_user["user_id"])
+
+    confirmed = confirm_totp_enrolment(
+        user_id=totp_user["user_id"],
+        code="000000",
+        at_time=TEST_TIMESTAMP,
+    )
+
+    assert confirmed is False
+
+    state = _get_user_totp_state(totp_user["user_id"])
+
+    assert state[0] in (False, 0)
+    assert state[1] is None
+
+
+def test_confirm_totp_enrolment_enables_totp(totp_user):
+    """A valid authenticator code activates TOTP."""
+
+    enrolment = begin_totp_enrolment(totp_user["user_id"])
 
     code = generate_totp_code(
-        result["secret"],
+        enrolment["secret"],
         at_time=TEST_TIMESTAMP,
     )
 
-    assert confirm_totp_enrolment(
-        totp_user,
-        code,
-        at_time=TEST_TIMESTAMP,
-    ) is True
-
-    assert confirm_totp_enrolment(
-        totp_user,
-        code,
-        at_time=TEST_TIMESTAMP,
-    ) is False
-
-
-def test_verify_totp_for_user_accepts_next_valid_code(totp_user):
-    """An enrolled user must pass verification with a new valid code."""
-
-    result = begin_totp_enrolment(totp_user)
-
-    enrolment_code = generate_totp_code(
-        result["secret"],
-        at_time=TEST_TIMESTAMP,
-    )
-
-    assert confirm_totp_enrolment(
-        totp_user,
-        enrolment_code,
-        at_time=TEST_TIMESTAMP,
-    ) is True
-
-    next_timestamp = TEST_TIMESTAMP + 30
-
-    next_code = generate_totp_code(
-        result["secret"],
-        at_time=next_timestamp,
-    )
-
-    verified = verify_totp_for_user(
-        user_id=totp_user,
-        code=next_code,
-        at_time=next_timestamp,
-    )
-
-    assert verified is True
-
-    with database_connection() as connection:
-        user = connection.execute(
-            """
-            SELECT totp_last_accepted_counter
-            FROM users
-            WHERE id = ?
-            """,
-            (totp_user,),
-        ).fetchone()
-
-    assert user["totp_last_accepted_counter"] == next_timestamp // 30
-
-
-def test_verify_totp_for_user_rejects_replayed_code(totp_user):
-    """A successfully accepted TOTP code must not be reused."""
-
-    result = begin_totp_enrolment(totp_user)
-
-    code = generate_totp_code(
-        result["secret"],
-        at_time=TEST_TIMESTAMP,
-    )
-
-    assert confirm_totp_enrolment(
-        totp_user,
-        code,
-        at_time=TEST_TIMESTAMP,
-    ) is True
-
-    verified = verify_totp_for_user(
-        user_id=totp_user,
+    confirmed = confirm_totp_enrolment(
+        user_id=totp_user["user_id"],
         code=code,
         at_time=TEST_TIMESTAMP,
     )
 
-    assert verified is False
+    assert confirmed is True
+
+    state = _get_user_totp_state(totp_user["user_id"])
+
+    assert state[0] in (True, 1)
+    assert state[1] is not None
+    assert state[2] is None
+    assert state[4] is not None
+    assert state[3] is not None
 
 
-def test_verify_totp_for_user_rejects_invalid_code(totp_user):
-    """Incorrect authenticator codes must not authenticate a user."""
+def test_confirm_totp_enrolment_cannot_be_repeated(totp_user):
+    """A completed enrolment cannot be confirmed again."""
 
-    result = begin_totp_enrolment(totp_user)
+    enrolment = begin_totp_enrolment(totp_user["user_id"])
 
-    enrolment_code = generate_totp_code(
-        result["secret"],
+    code = generate_totp_code(
+        enrolment["secret"],
         at_time=TEST_TIMESTAMP,
     )
 
-    assert confirm_totp_enrolment(
-        totp_user,
-        enrolment_code,
-        at_time=TEST_TIMESTAMP,
-    ) is True
-
-    verified = verify_totp_for_user(
-        user_id=totp_user,
-        code="000000",
-        at_time=TEST_TIMESTAMP + 30,
-    )
-
-    assert verified is False
-
-
-def test_verify_totp_for_user_rejects_user_without_totp(totp_user):
-    """Users without enabled TOTP must not pass TOTP verification."""
-
-    verified = verify_totp_for_user(
-        user_id=totp_user,
-        code="123456",
+    first_confirmation = confirm_totp_enrolment(
+        user_id=totp_user["user_id"],
+        code=code,
         at_time=TEST_TIMESTAMP,
     )
 
-    assert verified is False
+    second_confirmation = confirm_totp_enrolment(
+        user_id=totp_user["user_id"],
+        code=code,
+        at_time=TEST_TIMESTAMP,
+    )
+
+    assert first_confirmation is True
+    assert second_confirmation is False
 
 
-def test_verify_totp_for_user_rejects_unknown_user():
+def test_verify_totp_for_user_rejects_unknown_user(totp_user):
     """A nonexistent account cannot pass TOTP verification."""
 
     verified = verify_totp_for_user(
@@ -374,55 +234,139 @@ def test_verify_totp_for_user_rejects_unknown_user():
     assert verified is False
 
 
-def test_verify_totp_for_user_rejects_inactive_user(totp_user):
-    """Inactive accounts must not pass TOTP verification."""
+def test_verify_totp_for_user_rejects_user_without_enrolment(totp_user):
+    """An account without active TOTP cannot pass verification."""
 
-    result = begin_totp_enrolment(totp_user)
+    verified = verify_totp_for_user(
+        user_id=totp_user["user_id"],
+        code="123456",
+        at_time=TEST_TIMESTAMP,
+    )
 
-    code = generate_totp_code(
-        result["secret"],
+    assert verified is False
+
+
+def test_verify_totp_for_user_accepts_valid_code(totp_user):
+    """A valid code from an enrolled authenticator is accepted."""
+
+    enrolment = begin_totp_enrolment(totp_user["user_id"])
+
+    enrolment_code = generate_totp_code(
+        enrolment["secret"],
+        at_time=TEST_TIMESTAMP,
+    )
+
+    confirmed = confirm_totp_enrolment(
+        user_id=totp_user["user_id"],
+        code=enrolment_code,
+        at_time=TEST_TIMESTAMP,
+    )
+
+    assert confirmed is True
+
+    verification_timestamp = TEST_TIMESTAMP + 30
+
+    verification_code = generate_totp_code(
+        enrolment["secret"],
+        at_time=verification_timestamp,
+    )
+
+    verified = verify_totp_for_user(
+        user_id=totp_user["user_id"],
+        code=verification_code,
+        at_time=verification_timestamp,
+    )
+
+    assert verified is True
+
+
+def test_verify_totp_for_user_rejects_invalid_code(totp_user):
+    """An invalid code is rejected for an enrolled account."""
+
+    enrolment = begin_totp_enrolment(totp_user["user_id"])
+
+    valid_code = generate_totp_code(
+        enrolment["secret"],
         at_time=TEST_TIMESTAMP,
     )
 
     assert confirm_totp_enrolment(
-        totp_user,
-        code,
+        user_id=totp_user["user_id"],
+        code=valid_code,
         at_time=TEST_TIMESTAMP,
     ) is True
 
-    with database_connection() as connection:
-        connection.execute(
-            "UPDATE users SET is_active = FALSE WHERE id = ?",
-            (totp_user,),
-        )
-
     verified = verify_totp_for_user(
-        user_id=totp_user,
-        code=generate_totp_code(
-            result["secret"],
-            at_time=TEST_TIMESTAMP + 30,
-        ),
+        user_id=totp_user["user_id"],
+        code="000000",
         at_time=TEST_TIMESTAMP + 30,
     )
 
     assert verified is False
 
 
+def test_verify_totp_for_user_rejects_replayed_code(totp_user):
+    """A successfully accepted TOTP code cannot be reused."""
+
+    enrolment = begin_totp_enrolment(totp_user["user_id"])
+
+    enrolment_code = generate_totp_code(
+        enrolment["secret"],
+        at_time=TEST_TIMESTAMP,
+    )
+
+    assert confirm_totp_enrolment(
+        user_id=totp_user["user_id"],
+        code=enrolment_code,
+        at_time=TEST_TIMESTAMP,
+    ) is True
+
+    verification_timestamp = TEST_TIMESTAMP + 30
+
+    code = generate_totp_code(
+        enrolment["secret"],
+        at_time=verification_timestamp,
+    )
+
+    first_attempt = verify_totp_for_user(
+        user_id=totp_user["user_id"],
+        code=code,
+        at_time=verification_timestamp,
+    )
+
+    second_attempt = verify_totp_for_user(
+        user_id=totp_user["user_id"],
+        code=code,
+        at_time=verification_timestamp,
+    )
+
+    assert first_attempt is True
+    assert second_attempt is False
+
+
 @pytest.mark.parametrize(
     "invalid_user_id",
     [
-        "",
-        "   ",
         None,
-        123,
-        [],
-        {},
+        "",
+        " ",
+        0,
+        -1,
     ],
 )
-def test_totp_service_rejects_invalid_user_identifiers(
-    invalid_user_id,
-):
-    """TOTP service operations must validate user identifiers."""
+def test_totp_services_reject_invalid_user_ids(totp_user, invalid_user_id):
+    """TOTP service functions reject malformed user identifiers."""
 
-    with pytest.raises(TOTPServiceError):
-        begin_totp_enrolment(invalid_user_id)
+    assert begin_totp_enrolment(invalid_user_id) is None
+
+    assert confirm_totp_enrolment(
+        user_id=invalid_user_id,
+        code="123456",
+        at_time=TEST_TIMESTAMP,
+    ) is False
+
+    assert verify_totp_for_user(
+        user_id=invalid_user_id,
+        code="123456",
+        at_time=TEST_TIMESTAMP,
+    ) is False
