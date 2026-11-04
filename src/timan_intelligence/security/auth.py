@@ -3,12 +3,13 @@
 
 from __future__ import annotations
 
-import hashlib
-import hmac
-import secrets
 from typing import Any
 
 import streamlit as st
+
+from timan_intelligence.identity.service import (
+    _verify_password as _verify_identity_password,
+)
 
 
 VALID_ROLES = {"developer", "admin", "user"}
@@ -60,34 +61,9 @@ def _get_users() -> dict[str, Any]:
 
 
 def _verify_password(password: str, stored_hash: str) -> bool:
-    """Verify a password against a stored scrypt hash.
+    """Verify a configured account password using the shared secure verifier."""
 
-    Hash format:
-    scrypt$n$r$p$salt_hex$hash_hex
-    """
-
-    try:
-        algorithm, n, r, p, salt_hex, hash_hex = stored_hash.split("$")
-
-        if algorithm != "scrypt":
-            return False
-
-        salt = bytes.fromhex(salt_hex)
-        expected_hash = bytes.fromhex(hash_hex)
-
-        actual_hash = hashlib.scrypt(
-            password.encode("utf-8"),
-            salt=salt,
-            n=int(n),
-            r=int(r),
-            p=int(p),
-            dklen=len(expected_hash),
-        )
-
-        return hmac.compare_digest(actual_hash, expected_hash)
-
-    except (ValueError, TypeError, MemoryError):
-        return False
+    return _verify_identity_password(password, stored_hash)
 
 
 def authenticate_user(username: str, password: str) -> bool:
