@@ -31,6 +31,8 @@ def create_legacy_schema(
     incorrect_membership_delete_rule: bool = False,
     missing_membership_unique_constraint: bool = False,
     missing_user_check_constraint: bool = False,
+    incorrect_user_role_check: bool = False,
+    incorrect_index_columns: bool = False,
 ) -> None:
     """Create a legacy database with optional structural defects."""
 
@@ -79,6 +81,26 @@ def create_legacy_schema(
                     "            CHECK (role IN "
                     "('super_admin', 'admin', 'developer', 'user'))",
                     "role TEXT NOT NULL DEFAULT 'user'",
+                )
+
+            if (
+                incorrect_user_role_check
+                and "CREATE TABLE IF NOT EXISTS users"
+                in statement
+            ):
+                statement = statement.replace(
+                    "('super_admin', 'admin', 'developer', 'user')",
+                    "('super_admin', 'admin', 'analyst', 'user')",
+                )
+
+            if (
+                incorrect_index_columns
+                and "CREATE INDEX IF NOT EXISTS idx_memberships_user"
+                in statement
+            ):
+                statement = statement.replace(
+                    "ON organisation_memberships(user_id)",
+                    "ON organisation_memberships(organisation_id)",
                 )
 
             if omit_index and omit_index in statement:
@@ -349,6 +371,20 @@ def test_missing_user_check_constraint_is_rejected(
         initialise_database()
 
 
+def test_incorrect_user_role_check_constraint_is_rejected(
+    migration_database,
+):
+    """An incorrect allowed-value list must prevent baselining."""
+
+    create_legacy_schema(incorrect_user_role_check=True)
+
+    with pytest.raises(
+        MigrationError,
+        match="incorrect CHECK constraint",
+    ):
+        initialise_database()
+
+
 def test_missing_required_index_is_rejected(
     migration_database,
 ):
@@ -359,5 +395,19 @@ def test_missing_required_index_is_rejected(
     with pytest.raises(
         MigrationError,
         match="missing required index",
+    ):
+        initialise_database()
+
+
+def test_index_on_incorrect_column_is_rejected(
+    migration_database,
+):
+    """An index with the correct name but wrong column must be rejected."""
+
+    create_legacy_schema(incorrect_index_columns=True)
+
+    with pytest.raises(
+        MigrationError,
+        match="incorrect definition",
     ):
         initialise_database()
