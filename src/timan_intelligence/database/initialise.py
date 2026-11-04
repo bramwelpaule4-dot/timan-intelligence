@@ -7,24 +7,19 @@ from timan_intelligence.database.connection import (
     database_connection,
     get_database_type,
 )
-from timan_intelligence.database.models import SCHEMA_STATEMENTS
+from timan_intelligence.database.migrations.runner import run_migrations
 
 
 def initialise_database() -> None:
-    """Create all registered database tables and indexes."""
+    """Initialise or upgrade the database using versioned migrations."""
 
     database_type = get_database_type()
 
+    if database_type not in {"sqlite", "postgresql"}:
+        raise RuntimeError("Unsupported database backend.")
+
     with database_connection() as connection:
-        for statement in SCHEMA_STATEMENTS:
-            sql = statement
-
-            # PostgreSQL uses BOOLEAN natively, as does SQLite.
-            # The current schema is compatible with both engines.
-            if database_type not in {"sqlite", "postgresql"}:
-                raise RuntimeError("Unsupported database backend.")
-
-            connection.execute(sql)
+        run_migrations(connection)
 
 
 def check_database_connection() -> bool:
@@ -32,10 +27,7 @@ def check_database_connection() -> bool:
 
     try:
         with database_connection() as connection:
-            if get_database_type() == "sqlite":
-                connection.execute("SELECT 1")
-            else:
-                connection.execute("SELECT 1")
+            connection.execute("SELECT 1")
 
         return True
 
