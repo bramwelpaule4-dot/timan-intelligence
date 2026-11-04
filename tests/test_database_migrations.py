@@ -25,6 +25,69 @@ def migration_database(tmp_path, monkeypatch):
     return database_path
 
 
+def create_legacy_schema(
+    *,
+    omit_index: str | None = None,
+    missing_membership_foreign_key: bool = False,
+    incorrect_membership_delete_rule: bool = False,
+    missing_membership_unique_constraint: bool = False,
+    missing_user_check_constraint: bool = False,
+) -> None:
+    """Create a legacy database with optional structural defects."""
+
+    with database_connection() as connection:
+        for original_statement in SCHEMA_STATEMENTS:
+            statement = original_statement
+
+            if (
+                missing_membership_foreign_key
+                and "CREATE TABLE IF NOT EXISTS organisation_memberships"
+                in statement
+            ):
+                statement = statement.replace(
+                    "REFERENCES organisations(id) ON DELETE CASCADE",
+                    "REFERENCES organisations(id) ON DELETE NO ACTION",
+                )
+
+            if (
+                incorrect_membership_delete_rule
+                and "CREATE TABLE IF NOT EXISTS organisation_memberships"
+                in statement
+            ):
+                statement = statement.replace(
+                    "REFERENCES organisations(id) ON DELETE CASCADE",
+                    "REFERENCES organisations(id) ON DELETE NO ACTION",
+                )
+
+            if (
+                missing_membership_unique_constraint
+                and "CREATE TABLE IF NOT EXISTS organisation_memberships"
+                in statement
+            ):
+                statement = statement.replace(
+                    "joined_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\n"
+                    "        UNIQUE (organisation_id, user_id)",
+                    "joined_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP",
+                )
+
+            if (
+                missing_user_check_constraint
+                and "CREATE TABLE IF NOT EXISTS users"
+                in statement
+            ):
+                statement = statement.replace(
+                    "role TEXT NOT NULL DEFAULT 'user'\n"
+                    "            CHECK (role IN "
+                    "('super_admin', 'admin', 'developer', 'user'))",
+                    "role TEXT NOT NULL DEFAULT 'user'",
+                )
+
+            if omit_index and omit_index in statement:
+                continue
+
+            connection.execute(statement)
+
+
 def get_migration_history():
     """Return the recorded migration history."""
 
@@ -94,10 +157,9 @@ def test_existing_unversioned_database_is_baselined(
 ):
     """A valid existing schema should be baselined without recreation."""
 
-    with database_connection() as connection:
-        for statement in SCHEMA_STATEMENTS:
-            connection.execute(statement)
+    create_legacy_schema()
 
+    with database_connection() as connection:
         connection.execute(
             """
             INSERT INTO users (
@@ -235,4 +297,65 @@ def test_migration_history_with_missing_versions_is_rejected(
         )
 
     with pytest.raises(MigrationError):
+        initialise_database()
+
+
+def test_missing_membership_foreign_key_is_rejected(
+    migration_database,
+):
+    """A membership foreign key with the wrong delete rule is rejected."""
+
+    create_legacy_schema(missing_membership_foreign_key=True)
+
+    with pytest.raises(MigrationError, match="missing required foreign keys"):
+        initialise_database()
+
+
+def test_incorrect_membership_delete_rule_is_rejected(
+    migration_database,
+):
+    """An incorrect foreign-key deletion rule must prevent baselining."""
+
+    create_legacy_schema(incorrect_membership_delete_rule=True)
+
+    with pytest.raises(MigrationError, match="missing required foreign keys"):
+        initialise_database()
+
+
+def test_missing_membership_unique_constraint_is_rejected(
+    migration_database,
+):
+    """A missing organisation membership uniqueness rule is rejected."""
+
+    create_legacy_schema(missing_membership_unique_constraint=True)
+
+    with pytest.raises(
+        MigrationError,
+        match="missing required unique constraints",
+    ):
+        initialise_database()
+
+
+def test_missing_user_check_constraint_is_rejected(
+    migration_database,
+):
+    """A missing user role check constraint must prevent baselining."""
+
+    create_legacy_schema(missing_user_check_constraint=True)
+
+    with pytest.raises(
+        MigrationError,
+        match="check constraints",
+    ):
+        initialise_database()
+
+
+def test_missing_required_index_is_rejected(
+    migration_database,
+):
+    """A missing required index must prevent baselining."""
+
+    create_legacy_schema(omit_index="idx_memberships_user")
+
+    with pytest.raises(MigrationError, match="missing required indexes"):
         initialise_database()
