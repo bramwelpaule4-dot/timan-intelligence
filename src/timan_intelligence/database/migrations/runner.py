@@ -10,6 +10,7 @@ from typing import Callable
 from timan_intelligence.database.connection import get_database_type
 from timan_intelligence.database.migrations.versions import (
     v0001_initial_schema,
+    v0002_totp_enrolment,
 )
 
 
@@ -28,6 +29,11 @@ MIGRATIONS = (
         name=v0001_initial_schema.NAME,
         upgrade=v0001_initial_schema.upgrade,
     ),
+    Migration(
+        version=v0002_totp_enrolment.VERSION,
+        name=v0002_totp_enrolment.NAME,
+        upgrade=v0002_totp_enrolment.upgrade,
+    ),
 )
 
 LATEST_SCHEMA_VERSION = max(
@@ -36,6 +42,9 @@ LATEST_SCHEMA_VERSION = max(
 )
 
 
+# These columns describe the original schema (v0001).
+# Keep them separate from later migration additions because this
+# definition is also used to validate unversioned legacy databases.
 EXPECTED_COLUMNS = {
     "users": {
         "id", "username", "email", "full_name", "password_hash",
@@ -599,7 +608,7 @@ def _get_existing_indexes(connection) -> dict[str, tuple[str, tuple[str, ...]]]:
 
 
 def _validate_existing_schema(connection) -> None:
-    """Validate tables, columns and structural constraints before baselining."""
+    """Validate the original schema before baselining a legacy database."""
 
     existing_tables = _get_existing_tables(connection)
 
@@ -714,6 +723,8 @@ def run_migrations(connection) -> None:
         existing_tables = _get_existing_tables(connection)
 
         if existing_tables:
+            # Validate against v0001 only. The subsequent migration loop
+            # will then upgrade the legacy database to the latest schema.
             _validate_existing_schema(connection)
 
             baseline = MIGRATIONS[0]
