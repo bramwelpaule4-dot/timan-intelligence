@@ -1,3 +1,4 @@
+
 """Authentication and role-based access control for TimanStat."""
 
 from __future__ import annotations
@@ -10,12 +11,16 @@ from timan_intelligence.identity.service import (
     _verify_password as _verify_identity_password,
 )
 from timan_intelligence.security.rate_limit import LoginRateLimiter
+from timan_intelligence.security.session import SessionManager
 
 
 VALID_ROLES = {"developer", "admin", "user"}
 
 # Five failed attempts within 15 minutes trigger a 15-minute lockout.
 LOGIN_RATE_LIMITER = LoginRateLimiter()
+
+# Manage authenticated session creation, validation and expiry.
+SESSION_MANAGER = SessionManager()
 
 # Permissions are deliberately explicit.
 ROLE_PERMISSIONS = {
@@ -115,20 +120,23 @@ def authenticate_user(username: str, password: str) -> bool:
     if not _verify_password(password, stored_hash):
         return _reject_login(username)
 
-    # Successful authentication clears the previous failure history.
+    # Successful password verification clears previous failure history.
     LOGIN_RATE_LIMITER.record_success(username)
 
-    st.session_state["authenticated"] = True
-    st.session_state["username"] = username
-    st.session_state["role"] = role
+    # Establish a managed session with idle and absolute expiry timestamps.
+    SESSION_MANAGER.create_session(
+        st.session_state,
+        username,
+        role,
+    )
 
     return True
 
 
 def is_authenticated() -> bool:
-    """Check whether the current session is authenticated."""
+    """Validate the current session and enforce session expiry."""
 
-    return bool(st.session_state.get("authenticated", False))
+    return SESSION_MANAGER.is_valid(st.session_state)
 
 
 def current_username() -> str | None:
@@ -155,7 +163,7 @@ def has_permission(permission: str) -> bool:
     if not is_authenticated():
         return False
 
-    role = current_role()
+    role = st.session_state.get("role")
 
     if role not in ROLE_PERMISSIONS:
         return False
@@ -174,10 +182,9 @@ def require_permission(permission: str) -> bool:
 
 
 def logout() -> None:
-    """Clear authentication information from the current session."""
+    """Clear all authentication information from the current session."""
 
-    for key in ("authenticated", "username", "role"):
-        st.session_state.pop(key, None)
+    SESSION_MANAGER.clear_session(st.session_state)
 
 
 def render_login() -> None:
