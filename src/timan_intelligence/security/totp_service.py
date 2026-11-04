@@ -1,0 +1,324 @@
+
+"""TOTP enrolment and verification services for TimanStat."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from timan_intelligence.database.connection import (
+    database_connection,
+    get_database_type,
+)
+from timan_intelligence.security.totp import (
+    DEFAULT_ISSUER,
+    TOTPError,
+    build_totp_provisioning_uri,
+    generate_totp_secret,
+    verify_totp_code,
+)
+from timan_intelligence.security.totp_encryption import (
+    SecretEncryptionError,
+    decrypt_totp_secret,
+    encrypt_totp_secret,
+)
+
+
+class TOTPServiceError(Exception):
+    """Raised when a TOTP enrolment or service operation fails."""
+
+
+def _placeholder() -> str:
+    """Return the correct database parameter placeholder."""
+
+    return "%s" if get_database_type() == "postgresql" else "?"
+
+
+def _validate_user_id(user_id: str) -> str:
+    """Validate and normalise a user identifier."""
+
+    if not isinstance(user_id, str) or not user_id.strip():
+        raise TOTPServiceError("A valid user ID is required.")
+
+    return user_id.strip()
+
+
+def _get_active_user(connection, user_id: str) -> Any:
+    """Retrieve an active user and their TOTP enrolment state."""
+
+    p = _placeholder()
+
+    return connection.execute(
+        f"""
+        SELECT
+            id,
+            username,
+            email,
+            is_active,
+            totp_enabled,
+            totp_secret_encrypted,
+            totp_pending_secret_encrypted,
+            totp_last_accepted_counter
+        FROM users
+        WHERE id = {p}
+          AND is_active = TRUE
+        """,
+        (user_id,),
+    ).fetchone()
+
+
+def begin_totp_enrolment(
+    user_id: str,
+    issuer: str = DEFAULT_ISSUER,
+) -> dict[str, str]:
+    """
+    Begin TOTP enrolment for an active user.
+
+    Generates a new secret, encrypts it, and stores it as a pending
+    enrolment secret.
+
+    The plaintext secret and provisioning URI are returned to the
+    caller for display to the user. They must not be stored in logs.
+
+    Returns:
+        A dictionary containing:
+        - secret: Base32 secret for authenticator enrolment.
+        - provisioning_uri: Standard otpauth URI.
+
+    Raises:
+        TOTPServiceError: If the user cannot begin enrolment.
+    """
+
+    user_id = _validate_user_id(user_id)
+
+    try:
+        secret = generate_totp_secret()
+        encrypted_secret = encrypt_totp_secret(secret)
+
+    except (TOTPError, SecretEncryptionError) as exc:
+        raise TOTPServiceError(
+            "Unable to generate or protect the TOTP enrolment secret."
+        ) from exc
+
+    p = _placeholder()
+
+    with database_connection() as connection:
+        user = _get_active_user(connection, user_id)
+
+        if user is None:
+            raise TOTPServiceError(
+                "The requested active user account was not found."
+            )
+
+        if bool(user["totp_enabled"]):
+            raise TOTPServiceError(
+                "Two-factor authentication is already enabled."
+            )
+
+        connection.execute(
+            f"""
+            UPDATE users
+            SET
+                totp_pending_secret_encrypted = {p},
+                totp_pending_created_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = {p}
+              AND is_active = TRUE
+              AND totp_enabled = FALSE
+            """,
+            (
+                encrypted_secret,
+                user_id,
+            ),
+        )
+
+        result = connection.execute(
+            f"""
+            SELECT totp_pending_secret_encrypted
+            FROM users
+            WHERE id = {p}
+            """,
+            (user_id,),
+        ).fetchone()
+
+        if (
+            result is None
+            or result["totp_pending_secret_encrypted"] != encrypted_secret
+        ):
+            raise TOTPServiceError(
+                "Unable to establish the pending TOTP enrolment."
+            )
+
+    try:
+        provisioning_uri = build_totp_provisioning_uri(
+            secret=secret,
+            account_name=user["email"],
+            issuer=issuer,
+        )
+
+    except TOTPError as exc:
+        raise TOTPServiceError(
+            "Unable to create the authenticator provisioning URI."
+        ) from exc
+
+    return {
+        "secret": secret,
+        "provisioning_uri": provisioning_uri,
+    }
+
+
+def confirm_totp_enrolment(
+    user_id: str,
+    code: str,
+    at_time: float | None = None,
+) -> bool:
+    """
+    Confirm TOTP enrolment using a valid authenticator code.
+
+    A successful confirmation promotes the encrypted pending secret
+    to the active secret, enables TOTP and records the accepted
+    counter to prevent immediate code replay.
+
+    Returns:
+        True if enrolment succeeds; otherwise False.
+    """
+
+    user_id = _validate_user_id(user_id)
+
+    p = _placeholder()
+
+    with database_connection() as connection:
+        user = _get_active_user(connection, user_id)
+
+        if user is None:
+            return False
+
+        if bool(user["totp_enabled"]):
+            return False
+
+        encrypted_secret = user["totp_pending_secret_encrypted"]
+
+        if not encrypted_secret:
+            return False
+
+        try:
+            secret = decrypt_totp_secret(encrypted_secret)
+
+            accepted_counter = verify_totp_code(
+                secret=secret,
+                code=code,
+                at_time=at_time,
+            )
+
+        except (TOTPError, SecretEncryptionError) as exc:
+            raise TOTPServiceError(
+                "Unable to verify the pending TOTP enrolment secret."
+            ) from exc
+
+        if accepted_counter is None:
+            return False
+
+        result = connection.execute(
+            f"""
+            UPDATE users
+            SET
+                totp_enabled = TRUE,
+                totp_secret_encrypted = {p},
+                totp_pending_secret_encrypted = NULL,
+                totp_last_accepted_counter = {p},
+                totp_enrolled_at = CURRENT_TIMESTAMP,
+                totp_pending_created_at = NULL,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = {p}
+              AND is_active = TRUE
+              AND totp_enabled = FALSE
+              AND totp_pending_secret_encrypted = {p}
+            """,
+            (
+                encrypted_secret,
+                accepted_counter,
+                user_id,
+                encrypted_secret,
+            ),
+        )
+
+        return result.rowcount == 1
+
+
+def verify_totp_for_user(
+    user_id: str,
+    code: str,
+    at_time: float | None = None,
+) -> bool:
+    """
+    Verify an authenticator code for an enrolled active user.
+
+    The accepted counter is updated atomically. This prevents the
+    same authenticator code from succeeding in concurrent requests.
+
+    Returns:
+        True if the code is valid and its counter is successfully
+        recorded; otherwise False.
+    """
+
+    user_id = _validate_user_id(user_id)
+
+    p = _placeholder()
+
+    with database_connection() as connection:
+        user = _get_active_user(connection, user_id)
+
+        if user is None:
+            return False
+
+        if not bool(user["totp_enabled"]):
+            return False
+
+        encrypted_secret = user["totp_secret_encrypted"]
+
+        if not encrypted_secret:
+            raise TOTPServiceError(
+                "The enrolled account has no protected TOTP secret."
+            )
+
+        try:
+            secret = decrypt_totp_secret(encrypted_secret)
+
+            accepted_counter = verify_totp_code(
+                secret=secret,
+                code=code,
+                at_time=at_time,
+                last_accepted_counter=user["totp_last_accepted_counter"],
+            )
+
+        except (TOTPError, SecretEncryptionError) as exc:
+            raise TOTPServiceError(
+                "Unable to verify the account's TOTP secret."
+            ) from exc
+
+        if accepted_counter is None:
+            return False
+
+        result = connection.execute(
+            f"""
+            UPDATE users
+            SET
+                totp_last_accepted_counter = {p},
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = {p}
+              AND is_active = TRUE
+              AND totp_enabled = TRUE
+              AND totp_secret_encrypted = {p}
+              AND (
+                  totp_last_accepted_counter IS NULL
+                  OR totp_last_accepted_counter < {p}
+              )
+            """,
+            (
+                accepted_counter,
+                user_id,
+                encrypted_secret,
+                accepted_counter,
+            ),
+        )
+
+        return result.rowcount == 1
