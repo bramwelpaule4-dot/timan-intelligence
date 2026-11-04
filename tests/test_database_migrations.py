@@ -1,4 +1,3 @@
-
 """Tests for TimanStat's versioned database migration system."""
 
 from __future__ import annotations
@@ -345,7 +344,7 @@ def test_missing_user_check_constraint_is_rejected(
 
     with pytest.raises(
         MigrationError,
-        match="check constraints",
+        match="missing the required CHECK constraint",
     ):
         initialise_database()
 
@@ -357,5 +356,8 @@ def test_missing_required_index_is_rejected(
 
     create_legacy_schema(omit_index="idx_memberships_user")
 
-    with pytest.raises(MigrationError, match="missing required indexes"):
+    with pytest.raises(
+        MigrationError,
+        match="missing required index",
+    ):
         initialise_database()
