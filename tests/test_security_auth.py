@@ -454,12 +454,21 @@ def test_absolute_timeout_is_enforced_through_authentication(
         "user",
     )
 
-    for _ in range(12):
-        controlled_session_manager.clock[0] += 3500
+    # Refresh activity every 25 minutes, within the 30-minute idle timeout.
+    for _ in range(28):
+        controlled_session_manager.clock[0] += 1500
 
         assert auth.is_authenticated() is True
 
-    controlled_session_manager.clock[0] += 600
+    # Total elapsed time is now 11 hours and 40 minutes.
+    assert (
+        controlled_session_manager.clock[0]
+        - mock_session["authenticated_at"]
+        == 42000
+    )
+
+    # Advance to exactly 12 hours after initial authentication.
+    controlled_session_manager.clock[0] += 1200
 
     assert auth.is_authenticated() is False
     assert mock_session == {}
