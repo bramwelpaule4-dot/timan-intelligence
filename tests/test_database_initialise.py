@@ -106,12 +106,12 @@ def test_users_table_has_required_columns(initialised_database):
 def test_organisations_table_has_required_columns(
     initialised_database,
 ):
-    """The organisations table should contain essential organisation fields."""
+    """The organisations table should contain essential fields."""
 
     expected_columns = {
         "id",
         "name",
-        "type",
+        "organisation_type",
         "registration_number",
         "contact_email",
         "country",
@@ -210,7 +210,7 @@ def test_membership_tables_enforce_unique_membership(
     table_name,
     expected_columns,
 ):
-    """A user should not have duplicate membership records."""
+    """Membership tables should enforce unique user-parent pairs."""
 
     with database_connection() as connection:
         indexes = connection.execute(
@@ -240,7 +240,17 @@ def test_membership_tables_enforce_unique_membership(
 def test_initialise_database_creates_expected_indexes(
     initialised_database,
 ):
-    """Initialisation should create indexes for common lookups."""
+    """Initialisation should create all declared lookup indexes."""
+
+    expected_indexes = {
+        "idx_memberships_user",
+        "idx_memberships_organisation",
+        "idx_projects_organisation",
+        "idx_project_memberships_user",
+        "idx_project_memberships_project",
+        "idx_audit_user",
+        "idx_audit_created",
+    }
 
     with database_connection() as connection:
         rows = connection.execute(
@@ -251,20 +261,9 @@ def test_initialise_database_creates_expected_indexes(
             """
         ).fetchall()
 
-    index_names = {row["name"] for row in rows}
+    actual_indexes = {row["name"] for row in rows}
 
-    expected_index_prefixes = (
-        "idx_organisation_memberships_",
-        "idx_project_memberships_",
-        "idx_projects_",
-        "idx_audit_logs_",
-    )
-
-    for prefix in expected_index_prefixes:
-        assert any(
-            name.startswith(prefix)
-            for name in index_names
-        ), f"No index found with prefix: {prefix}"
+    assert expected_indexes.issubset(actual_indexes)
 
 
 def test_check_database_connection_returns_true(
