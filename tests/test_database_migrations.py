@@ -1,3 +1,4 @@
+
 """Tests for TimanStat's versioned database migration system."""
 
 from __future__ import annotations
@@ -122,16 +123,42 @@ def get_migration_history():
         ).fetchall()
 
 
-def test_fresh_database_applies_initial_migration(migration_database):
-    """A fresh database should receive the initial schema and migration."""
+def assert_totp_schema():
+    """Verify that the TOTP migration added all expected user columns."""
+
+    expected_columns = {
+        "totp_enabled",
+        "totp_secret_encrypted",
+        "totp_pending_secret_encrypted",
+        "totp_last_accepted_counter",
+        "totp_enrolled_at",
+        "totp_pending_created_at",
+    }
+
+    with database_connection() as connection:
+        columns = {
+            row["name"]
+            for row in connection.execute(
+                "PRAGMA table_info(users)"
+            ).fetchall()
+        }
+
+    assert expected_columns.issubset(columns)
+
+
+def test_fresh_database_applies_all_migrations(migration_database):
+    """A fresh database should receive every registered migration."""
 
     initialise_database()
 
     history = get_migration_history()
 
-    assert len(history) == 1
-    assert history[0]["version"] == 1
-    assert history[0]["name"] == "initial_schema"
+    assert [(row["version"], row["name"]) for row in history] == [
+        (1, "initial_schema"),
+        (2, "totp_enrolment"),
+    ]
+
+    assert_totp_schema()
 
     with database_connection() as connection:
         tables = {
@@ -142,6 +169,13 @@ def test_fresh_database_applies_initial_migration(migration_database):
                 FROM sqlite_master
                 WHERE type = 'table'
                 """
+            ).fetchall()
+        }
+
+        user_columns = {
+            row["name"]: row
+            for row in connection.execute(
+                "PRAGMA table_info(users)"
             ).fetchall()
         }
 
@@ -156,6 +190,10 @@ def test_fresh_database_applies_initial_migration(migration_database):
     }
 
     assert expected_tables.issubset(tables)
+    assert user_columns["totp_enabled"]["dflt_value"] in (
+        "FALSE",
+        "0",
+    )
 
 
 def test_repeated_initialisation_does_not_repeat_migration(
@@ -169,14 +207,16 @@ def test_repeated_initialisation_does_not_repeat_migration(
 
     history = get_migration_history()
 
-    assert len(history) == 1
-    assert history[0]["version"] == 1
+    assert [(row["version"], row["name"]) for row in history] == [
+        (1, "initial_schema"),
+        (2, "totp_enrolment"),
+    ]
 
 
-def test_existing_unversioned_database_is_baselined(
+def test_existing_unversioned_database_is_baselined_and_upgraded(
     migration_database,
 ):
-    """A valid existing schema should be baselined without recreation."""
+    """A valid legacy schema should be baselined and upgraded safely."""
 
     create_legacy_schema()
 
@@ -205,18 +245,35 @@ def test_existing_unversioned_database_is_baselined(
 
     history = get_migration_history()
 
-    assert len(history) == 1
-    assert history[0]["version"] == 1
-    assert history[0]["name"] == "initial_schema"
+    assert [(row["version"], row["name"]) for row in history] == [
+        (1, "initial_schema"),
+        (2, "totp_enrolment"),
+    ]
+
+    assert_totp_schema()
 
     with database_connection() as connection:
         user = connection.execute(
-            "SELECT id, username FROM users WHERE id = ?",
+            """
+            SELECT
+                id,
+                username,
+                totp_enabled,
+                totp_secret_encrypted,
+                totp_pending_secret_encrypted,
+                totp_last_accepted_counter
+            FROM users
+            WHERE id = ?
+            """,
             ("existing-user",),
         ).fetchone()
 
     assert user is not None
     assert user["username"] == "existing"
+    assert user["totp_enabled"] in (0, False)
+    assert user["totp_secret_encrypted"] is None
+    assert user["totp_pending_secret_encrypted"] is None
+    assert user["totp_last_accepted_counter"] is None
 
 
 def test_incomplete_existing_database_is_rejected(
@@ -314,7 +371,7 @@ def test_migration_history_with_missing_versions_is_rejected(
             INSERT INTO schema_migrations (version, name)
             VALUES (?, ?)
             """,
-            (2, "future_migration"),
+            (2, "totp_enrolment"),
         )
 
     with pytest.raises(MigrationError):
