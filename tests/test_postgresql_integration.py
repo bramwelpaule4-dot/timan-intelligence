@@ -479,3 +479,71 @@ def test_postgresql_enforces_foreign_key_delete_behaviour(
 
     assert project is None
     assert audit["organisation_id"] is None
+
+
+def test_postgresql_transaction_rolls_back_all_changes_on_failure(
+    postgres_database,
+):
+    """A failed operation must roll back earlier writes in its transaction."""
+
+    from psycopg.errors import UniqueViolation
+
+    test_user_id = "pg-rollback-test-user"
+
+    with pytest.raises(UniqueViolation):
+        with database_connection() as connection:
+            # First write is valid.
+            connection.execute(
+                """
+                INSERT INTO users (
+                    id,
+                    username,
+                    email,
+                    full_name,
+                    password_hash
+                )
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                (
+                    test_user_id,
+                    "pg_rollback_test_user",
+                    "pg_rollback_test_user@example.com",
+                    "PostgreSQL Rollback Test",
+                    "test-hash",
+                ),
+            )
+
+            # Second write deliberately violates the unique username
+            # constraint. The first write must also be rolled back.
+            connection.execute(
+                """
+                INSERT INTO users (
+                    id,
+                    username,
+                    email,
+                    full_name,
+                    password_hash
+                )
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                (
+                    "pg-rollback-duplicate-user",
+                    "pg_rollback_test_user",
+                    "pg_rollback_duplicate@example.com",
+                    "Duplicate User",
+                    "test-hash",
+                ),
+            )
+
+    # Verify that the first insert did not survive the failed transaction.
+    with database_connection() as connection:
+        result = connection.execute(
+            """
+            SELECT id
+            FROM users
+            WHERE id = %s
+            """,
+            (test_user_id,),
+        ).fetchone()
+
+    assert result is None
