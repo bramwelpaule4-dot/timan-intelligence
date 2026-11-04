@@ -25,8 +25,12 @@ def initialised_database(tmp_path, monkeypatch):
     return database_file
 
 
-def create_user(connection, user_id="user-1", username="user1",
-                email="user1@example.com"):
+def create_user(
+    connection,
+    user_id="user-1",
+    username="user1",
+    email="user1@example.com",
+):
     """Insert a valid user record."""
 
     connection.execute(
@@ -49,7 +53,7 @@ def create_user(connection, user_id="user-1", username="user1",
 def create_organisation(
     connection,
     organisation_id="org-1",
-    created_by="user-1",
+    created_by=None,
 ):
     """Insert a valid organisation record."""
 
@@ -294,6 +298,38 @@ def test_organisation_rejects_nonexistent_creator(
             )
 
 
+def test_organisation_rejects_nonexistent_creator_reference(
+    initialised_database,
+):
+    """Organisation creator references must point to existing users."""
+
+    with pytest.raises(sqlite3.IntegrityError):
+        with database_connection() as connection:
+            create_organisation(
+                connection,
+                created_by="missing-user",
+            )
+
+
+def test_deleting_organisation_creator_is_restricted(
+    initialised_database,
+):
+    """An organisation creator cannot be deleted while referenced."""
+
+    with pytest.raises(sqlite3.IntegrityError):
+        with database_connection() as connection:
+            create_user(connection)
+            create_organisation(
+                connection,
+                created_by="user-1",
+            )
+
+            connection.execute(
+                "DELETE FROM users WHERE id = ?",
+                ("user-1",),
+            )
+
+
 def test_project_rejects_nonexistent_organisation(
     initialised_database,
 ):
@@ -502,7 +538,6 @@ def test_deleting_organisation_sets_audit_organisation_reference_to_null(
     """Audit records should remain when their organisation is deleted."""
 
     with database_connection() as connection:
-        create_user(connection)
         create_organisation(connection)
 
         connection.execute(
@@ -536,7 +571,10 @@ def test_deleting_project_creator_sets_reference_to_null(
 
     with database_connection() as connection:
         create_user(connection)
+
+        # The organisation has no creator reference to this user.
         create_organisation(connection)
+
         create_project(connection)
 
         connection.execute(
