@@ -1,4 +1,3 @@
-
 """Authentication and role-based access control for TimanStat."""
 
 from __future__ import annotations
@@ -10,9 +9,13 @@ import streamlit as st
 from timan_intelligence.identity.service import (
     _verify_password as _verify_identity_password,
 )
+from timan_intelligence.security.rate_limit import LoginRateLimiter
 
 
 VALID_ROLES = {"developer", "admin", "user"}
+
+# Five failed attempts within 15 minutes trigger a 15-minute lockout.
+LOGIN_RATE_LIMITER = LoginRateLimiter()
 
 # Permissions are deliberately explicit.
 ROLE_PERMISSIONS = {
@@ -66,34 +69,54 @@ def _verify_password(password: str, stored_hash: str) -> bool:
     return _verify_identity_password(password, stored_hash)
 
 
+def _reject_login(username: str) -> bool:
+    """Record a failed login attempt and reject authentication."""
+
+    LOGIN_RATE_LIMITER.record_failure(username)
+    return False
+
+
 def authenticate_user(username: str, password: str) -> bool:
-    """Authenticate an active account and establish its session."""
+    """Authenticate an active account with login rate limiting."""
+
+    if not isinstance(username, str):
+        return False
 
     username = username.strip().casefold()
-    users = _get_users()
 
+    if not username:
+        return False
+
+    # Reject locked identifiers before performing password verification.
+    if LOGIN_RATE_LIMITER.is_locked(username):
+        return False
+
+    users = _get_users()
     account = users.get(username)
 
     if not account:
-        return False
+        return _reject_login(username)
 
     try:
         account = dict(account)
     except (TypeError, ValueError):
-        return False
+        return _reject_login(username)
 
     if not account.get("active", False):
-        return False
+        return _reject_login(username)
 
     role = str(account.get("role", "")).strip().casefold()
 
     if role not in VALID_ROLES:
-        return False
+        return _reject_login(username)
 
     stored_hash = str(account.get("password_hash", ""))
 
     if not _verify_password(password, stored_hash):
-        return False
+        return _reject_login(username)
+
+    # Successful authentication clears the previous failure history.
+    LOGIN_RATE_LIMITER.record_success(username)
 
     st.session_state["authenticated"] = True
     st.session_state["username"] = username
