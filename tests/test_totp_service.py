@@ -11,6 +11,7 @@ from timan_intelligence.security.totp_encryption import (
     generate_totp_encryption_key,
 )
 from timan_intelligence.security.totp_service import (
+    TOTPServiceError,
     begin_totp_enrolment,
     confirm_totp_enrolment,
     verify_totp_for_user,
@@ -100,11 +101,13 @@ def test_begin_totp_enrolment_creates_pending_secret(totp_user):
 
 
 def test_begin_totp_enrolment_rejects_unknown_user(totp_user):
-    """A nonexistent account cannot begin enrolment."""
+    """An unknown account cannot begin enrolment."""
 
-    result = begin_totp_enrolment("nonexistent-user")
-
-    assert result is None
+    with pytest.raises(
+        TOTPServiceError,
+        match="active user account was not found",
+    ):
+        begin_totp_enrolment("nonexistent-user")
 
 
 def test_begin_totp_enrolment_rejects_inactive_user(totp_user):
@@ -116,9 +119,11 @@ def test_begin_totp_enrolment_rejects_inactive_user(totp_user):
             (False, totp_user["user_id"]),
         )
 
-    result = begin_totp_enrolment(totp_user["user_id"])
-
-    assert result is None
+    with pytest.raises(
+        TOTPServiceError,
+        match="active user account was not found",
+    ):
+        begin_totp_enrolment(totp_user["user_id"])
 
 
 def test_begin_totp_enrolment_does_not_enable_totp(totp_user):
@@ -131,6 +136,29 @@ def test_begin_totp_enrolment_does_not_enable_totp(totp_user):
     assert state[0] in (False, 0)
     assert state[1] is None
     assert state[2] is not None
+
+
+def test_begin_totp_enrolment_rejects_already_enabled_user(totp_user):
+    """An account with active TOTP cannot start another enrolment."""
+
+    enrolment = begin_totp_enrolment(totp_user["user_id"])
+
+    code = generate_totp_code(
+        enrolment["secret"],
+        at_time=TEST_TIMESTAMP,
+    )
+
+    assert confirm_totp_enrolment(
+        user_id=totp_user["user_id"],
+        code=code,
+        at_time=TEST_TIMESTAMP,
+    ) is True
+
+    with pytest.raises(
+        TOTPServiceError,
+        match="already enabled",
+    ):
+        begin_totp_enrolment(totp_user["user_id"])
 
 
 def test_confirm_totp_enrolment_rejects_unknown_user(totp_user):
@@ -162,6 +190,7 @@ def test_confirm_totp_enrolment_rejects_invalid_code(totp_user):
 
     assert state[0] in (False, 0)
     assert state[1] is None
+    assert state[2] is not None
 
 
 def test_confirm_totp_enrolment_enables_totp(totp_user):
@@ -189,6 +218,7 @@ def test_confirm_totp_enrolment_enables_totp(totp_user):
     assert state[2] is None
     assert state[3] is not None
     assert state[4] is not None
+    assert state[5] is None
 
 
 def test_confirm_totp_enrolment_cannot_be_repeated(totp_user):
@@ -353,18 +383,21 @@ def test_totp_services_reject_invalid_user_ids(
     totp_user,
     invalid_user_id,
 ):
-    """TOTP service functions reject malformed user identifiers."""
+    """All TOTP service operations reject malformed user identifiers."""
 
-    assert begin_totp_enrolment(invalid_user_id) is None
+    with pytest.raises(TOTPServiceError):
+        begin_totp_enrolment(invalid_user_id)
 
-    assert confirm_totp_enrolment(
-        user_id=invalid_user_id,
-        code="123456",
-        at_time=TEST_TIMESTAMP,
-    ) is False
+    with pytest.raises(TOTPServiceError):
+        confirm_totp_enrolment(
+            user_id=invalid_user_id,
+            code="123456",
+            at_time=TEST_TIMESTAMP,
+        )
 
-    assert verify_totp_for_user(
-        user_id=invalid_user_id,
-        code="123456",
-        at_time=TEST_TIMESTAMP,
-    ) is False
+    with pytest.raises(TOTPServiceError):
+        verify_totp_for_user(
+            user_id=invalid_user_id,
+            code="123456",
+            at_time=TEST_TIMESTAMP,
+        )
