@@ -6,6 +6,12 @@ import os
 
 import pytest
 
+from psycopg.errors import (
+    CheckViolation,
+    ForeignKeyViolation,
+    UniqueViolation,
+)
+
 from timan_intelligence.database.connection import database_connection
 from timan_intelligence.database.initialise import initialise_database
 from timan_intelligence.database.migrations.runner import (
@@ -132,8 +138,6 @@ def test_postgresql_enforces_user_role_check_constraint(
 ):
     """PostgreSQL should reject user roles outside the allowed values."""
 
-    from psycopg.errors import CheckViolation
-
     with pytest.raises(CheckViolation):
         with database_connection() as connection:
             connection.execute(
@@ -162,9 +166,7 @@ def test_postgresql_enforces_user_role_check_constraint(
 def test_postgresql_enforces_membership_foreign_keys(
     postgres_database,
 ):
-    """PostgreSQL should reject membership references to missing users."""
-
-    from psycopg.errors import ForeignKeyViolation
+    """PostgreSQL should reject membership references to missing records."""
 
     with pytest.raises(ForeignKeyViolation):
         with database_connection() as connection:
@@ -183,3 +185,316 @@ def test_postgresql_enforces_membership_foreign_keys(
                     "missing-user",
                 ),
             )
+
+
+def test_postgresql_enforces_organisation_membership_uniqueness(
+    postgres_database,
+):
+    """A user cannot have duplicate memberships in one organisation."""
+
+    with database_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO users (
+                id, username, email, full_name, password_hash
+            )
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (
+                "pg-unique-org-user",
+                "pg_unique_org_user",
+                "pg_unique_org_user@example.com",
+                "PostgreSQL Unique Test",
+                "test-hash",
+            ),
+        )
+
+        connection.execute(
+            """
+            INSERT INTO organisations (id, name)
+            VALUES (%s, %s)
+            """,
+            (
+                "pg-unique-org",
+                "PostgreSQL Unique Test Organisation",
+            ),
+        )
+
+        connection.execute(
+            """
+            INSERT INTO organisation_memberships (
+                id, organisation_id, user_id
+            )
+            VALUES (%s, %s, %s)
+            """,
+            (
+                "pg-unique-org-membership-1",
+                "pg-unique-org",
+                "pg-unique-org-user",
+            ),
+        )
+
+    with pytest.raises(UniqueViolation):
+        with database_connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO organisation_memberships (
+                    id, organisation_id, user_id
+                )
+                VALUES (%s, %s, %s)
+                """,
+                (
+                    "pg-unique-org-membership-2",
+                    "pg-unique-org",
+                    "pg-unique-org-user",
+                ),
+            )
+
+
+def test_postgresql_enforces_project_membership_uniqueness(
+    postgres_database,
+):
+    """A user cannot have duplicate memberships in one project."""
+
+    with database_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO users (
+                id, username, email, full_name, password_hash
+            )
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (
+                "pg-unique-project-user",
+                "pg_unique_project_user",
+                "pg_unique_project_user@example.com",
+                "PostgreSQL Project Test",
+                "test-hash",
+            ),
+        )
+
+        connection.execute(
+            """
+            INSERT INTO organisations (id, name)
+            VALUES (%s, %s)
+            """,
+            (
+                "pg-unique-project-org",
+                "PostgreSQL Project Test Organisation",
+            ),
+        )
+
+        connection.execute(
+            """
+            INSERT INTO projects (
+                id, organisation_id, name
+            )
+            VALUES (%s, %s, %s)
+            """,
+            (
+                "pg-unique-project",
+                "pg-unique-project-org",
+                "PostgreSQL Unique Test Project",
+            ),
+        )
+
+        connection.execute(
+            """
+            INSERT INTO project_memberships (
+                id, project_id, user_id
+            )
+            VALUES (%s, %s, %s)
+            """,
+            (
+                "pg-unique-project-membership-1",
+                "pg-unique-project",
+                "pg-unique-project-user",
+            ),
+        )
+
+    with pytest.raises(UniqueViolation):
+        with database_connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO project_memberships (
+                    id, project_id, user_id
+                )
+                VALUES (%s, %s, %s)
+                """,
+                (
+                    "pg-unique-project-membership-2",
+                    "pg-unique-project",
+                    "pg-unique-project-user",
+                ),
+            )
+
+
+def test_postgresql_enforces_foreign_key_delete_behaviour(
+    postgres_database,
+):
+    """PostgreSQL should enforce CASCADE and SET NULL delete actions."""
+
+    with database_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO users (
+                id, username, email, full_name, password_hash
+            )
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (
+                "pg-delete-test-user",
+                "pg_delete_test_user",
+                "pg_delete_test_user@example.com",
+                "PostgreSQL Delete Test",
+                "test-hash",
+            ),
+        )
+
+        connection.execute(
+            """
+            INSERT INTO organisations (id, name)
+            VALUES (%s, %s)
+            """,
+            (
+                "pg-delete-test-org",
+                "PostgreSQL Delete Test Organisation",
+            ),
+        )
+
+        connection.execute(
+            """
+            INSERT INTO organisation_memberships (
+                id, organisation_id, user_id
+            )
+            VALUES (%s, %s, %s)
+            """,
+            (
+                "pg-delete-test-org-membership",
+                "pg-delete-test-org",
+                "pg-delete-test-user",
+            ),
+        )
+
+        connection.execute(
+            """
+            INSERT INTO projects (
+                id, organisation_id, name, created_by
+            )
+            VALUES (%s, %s, %s, %s)
+            """,
+            (
+                "pg-delete-test-project",
+                "pg-delete-test-org",
+                "PostgreSQL Delete Test Project",
+                "pg-delete-test-user",
+            ),
+        )
+
+        connection.execute(
+            """
+            INSERT INTO project_memberships (
+                id, project_id, user_id
+            )
+            VALUES (%s, %s, %s)
+            """,
+            (
+                "pg-delete-test-project-membership",
+                "pg-delete-test-project",
+                "pg-delete-test-user",
+            ),
+        )
+
+        connection.execute(
+            """
+            INSERT INTO audit_logs (
+                id, user_id, organisation_id, action
+            )
+            VALUES (%s, %s, %s, %s)
+            """,
+            (
+                "pg-delete-test-audit",
+                "pg-delete-test-user",
+                "pg-delete-test-org",
+                "delete_test",
+            ),
+        )
+
+    # Deleting the user should cascade memberships and preserve
+    # audit/project records by setting their user references to NULL.
+    with database_connection() as connection:
+        connection.execute(
+            "DELETE FROM users WHERE id = %s",
+            ("pg-delete-test-user",),
+        )
+
+        org_membership = connection.execute(
+            """
+            SELECT id
+            FROM organisation_memberships
+            WHERE id = %s
+            """,
+            ("pg-delete-test-org-membership",),
+        ).fetchone()
+
+        project_membership = connection.execute(
+            """
+            SELECT id
+            FROM project_memberships
+            WHERE id = %s
+            """,
+            ("pg-delete-test-project-membership",),
+        ).fetchone()
+
+        project = connection.execute(
+            """
+            SELECT created_by
+            FROM projects
+            WHERE id = %s
+            """,
+            ("pg-delete-test-project",),
+        ).fetchone()
+
+        audit = connection.execute(
+            """
+            SELECT user_id, organisation_id
+            FROM audit_logs
+            WHERE id = %s
+            """,
+            ("pg-delete-test-audit",),
+        ).fetchone()
+
+    assert org_membership is None
+    assert project_membership is None
+    assert project["created_by"] is None
+    assert audit["user_id"] is None
+    assert audit["organisation_id"] == "pg-delete-test-org"
+
+    # Deleting the organisation should cascade its projects and
+    # set the audit record's organisation reference to NULL.
+    with database_connection() as connection:
+        connection.execute(
+            "DELETE FROM organisations WHERE id = %s",
+            ("pg-delete-test-org",),
+        )
+
+        project = connection.execute(
+            """
+            SELECT id
+            FROM projects
+            WHERE id = %s
+            """,
+            ("pg-delete-test-project",),
+        ).fetchone()
+
+        audit = connection.execute(
+            """
+            SELECT organisation_id
+            FROM audit_logs
+            WHERE id = %s
+            """,
+            ("pg-delete-test-audit",),
+        ).fetchone()
+
+    assert project is None
+    assert audit["organisation_id"] is None
