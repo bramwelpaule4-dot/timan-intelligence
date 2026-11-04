@@ -1,4 +1,3 @@
-
 """Tests for TimanStat database connection management."""
 
 import sqlite3
@@ -112,6 +111,112 @@ def test_database_connection_rolls_back_failed_transaction(
         ).fetchone()
 
     assert result["total"] == 0
+
+
+def test_database_connection_rolls_back_all_writes_after_constraint_failure(
+    sqlite_database,
+):
+    """A constraint violation should roll back all writes in a transaction."""
+
+    with database_module.database_connection() as connection:
+        connection.execute(
+            """
+            CREATE TABLE transaction_atomicity_test (
+                id INTEGER PRIMARY KEY,
+                username TEXT NOT NULL UNIQUE,
+                email TEXT NOT NULL UNIQUE
+            )
+            """
+        )
+
+    with pytest.raises(sqlite3.IntegrityError):
+        with database_module.database_connection() as connection:
+            # First insert is valid.
+            connection.execute(
+                """
+                INSERT INTO transaction_atomicity_test (
+                    username,
+                    email
+                )
+                VALUES (?, ?)
+                """,
+                (
+                    "rollback_user",
+                    "rollback_user@example.com",
+                ),
+            )
+
+            # Second insert violates the unique username constraint.
+            connection.execute(
+                """
+                INSERT INTO transaction_atomicity_test (
+                    username,
+                    email
+                )
+                VALUES (?, ?)
+                """,
+                (
+                    "rollback_user",
+                    "duplicate@example.com",
+                ),
+            )
+
+    # The first insert must also have been rolled back.
+    with database_module.database_connection() as connection:
+        result = connection.execute(
+            """
+            SELECT COUNT(*) AS total
+            FROM transaction_atomicity_test
+            """
+        ).fetchone()
+
+    assert result["total"] == 0
+
+
+def test_sqlite_connection_remains_usable_after_failed_transaction(
+    sqlite_database,
+):
+    """A fresh connection should remain usable after a rollback."""
+
+    with database_module.database_connection() as connection:
+        connection.execute(
+            """
+            CREATE TABLE connection_recovery_test (
+                id INTEGER PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+            """
+        )
+
+    with pytest.raises(RuntimeError, match="Simulated failure"):
+        with database_module.database_connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO connection_recovery_test (value)
+                VALUES (?)
+                """,
+                ("temporary",),
+            )
+
+            raise RuntimeError("Simulated failure")
+
+    with database_module.database_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO connection_recovery_test (value)
+            VALUES (?)
+            """,
+            ("recovered",),
+        )
+
+        result = connection.execute(
+            """
+            SELECT value
+            FROM connection_recovery_test
+            """
+        ).fetchone()
+
+    assert result["value"] == "recovered"
 
 
 def test_database_connection_enforces_foreign_key_constraints(
