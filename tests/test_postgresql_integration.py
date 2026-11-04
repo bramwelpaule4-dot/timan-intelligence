@@ -6,12 +6,6 @@ import os
 
 import pytest
 
-from psycopg.errors import (
-    CheckViolation,
-    ForeignKeyViolation,
-    UniqueViolation,
-)
-
 from timan_intelligence.database.connection import database_connection
 from timan_intelligence.database.initialise import initialise_database
 from timan_intelligence.database.migrations.runner import (
@@ -32,9 +26,7 @@ def postgres_database():
             "TIMANSTAT_TEST_POSTGRES_URL."
         )
 
-    if not database_url.startswith(
-        ("postgresql://", "postgres://")
-    ):
+    if not database_url.startswith(("postgresql://", "postgres://")):
         pytest.fail(
             "TIMANSTAT_TEST_POSTGRES_URL must be a PostgreSQL URL."
         )
@@ -72,9 +64,7 @@ def test_postgresql_initial_migration_is_recorded(postgres_database):
     assert history[0]["name"] == "initial_schema"
 
 
-def test_postgresql_schema_contains_required_tables(
-    postgres_database,
-):
+def test_postgresql_schema_contains_required_tables(postgres_database):
     """All required application tables should exist."""
 
     expected_tables = {
@@ -97,10 +87,7 @@ def test_postgresql_schema_contains_required_tables(
             """
         ).fetchall()
 
-    actual_tables = {
-        row["table_name"]
-        for row in rows
-    }
+    actual_tables = {row["table_name"] for row in rows}
 
     assert expected_tables.issubset(actual_tables)
 
@@ -138,6 +125,8 @@ def test_postgresql_enforces_user_role_check_constraint(
 ):
     """PostgreSQL should reject user roles outside the allowed values."""
 
+    from psycopg.errors import CheckViolation
+
     with pytest.raises(CheckViolation):
         with database_connection() as connection:
             connection.execute(
@@ -163,10 +152,10 @@ def test_postgresql_enforces_user_role_check_constraint(
             )
 
 
-def test_postgresql_enforces_membership_foreign_keys(
-    postgres_database,
-):
+def test_postgresql_enforces_membership_foreign_keys(postgres_database):
     """PostgreSQL should reject membership references to missing records."""
+
+    from psycopg.errors import ForeignKeyViolation
 
     with pytest.raises(ForeignKeyViolation):
         with database_connection() as connection:
@@ -191,6 +180,8 @@ def test_postgresql_enforces_organisation_membership_uniqueness(
     postgres_database,
 ):
     """A user cannot have duplicate memberships in one organisation."""
+
+    from psycopg.errors import UniqueViolation
 
     with database_connection() as connection:
         connection.execute(
@@ -255,6 +246,8 @@ def test_postgresql_enforces_project_membership_uniqueness(
     postgres_database,
 ):
     """A user cannot have duplicate memberships in one project."""
+
+    from psycopg.errors import UniqueViolation
 
     with database_connection() as connection:
         connection.execute(
@@ -420,8 +413,6 @@ def test_postgresql_enforces_foreign_key_delete_behaviour(
             ),
         )
 
-    # Deleting the user should cascade memberships and preserve
-    # audit/project records by setting their user references to NULL.
     with database_connection() as connection:
         connection.execute(
             "DELETE FROM users WHERE id = %s",
@@ -430,27 +421,21 @@ def test_postgresql_enforces_foreign_key_delete_behaviour(
 
         org_membership = connection.execute(
             """
-            SELECT id
-            FROM organisation_memberships
-            WHERE id = %s
+            SELECT id FROM organisation_memberships WHERE id = %s
             """,
             ("pg-delete-test-org-membership",),
         ).fetchone()
 
         project_membership = connection.execute(
             """
-            SELECT id
-            FROM project_memberships
-            WHERE id = %s
+            SELECT id FROM project_memberships WHERE id = %s
             """,
             ("pg-delete-test-project-membership",),
         ).fetchone()
 
         project = connection.execute(
             """
-            SELECT created_by
-            FROM projects
-            WHERE id = %s
+            SELECT created_by FROM projects WHERE id = %s
             """,
             ("pg-delete-test-project",),
         ).fetchone()
@@ -470,8 +455,6 @@ def test_postgresql_enforces_foreign_key_delete_behaviour(
     assert audit["user_id"] is None
     assert audit["organisation_id"] == "pg-delete-test-org"
 
-    # Deleting the organisation should cascade its projects and
-    # set the audit record's organisation reference to NULL.
     with database_connection() as connection:
         connection.execute(
             "DELETE FROM organisations WHERE id = %s",
@@ -480,9 +463,7 @@ def test_postgresql_enforces_foreign_key_delete_behaviour(
 
         project = connection.execute(
             """
-            SELECT id
-            FROM projects
-            WHERE id = %s
+            SELECT id FROM projects WHERE id = %s
             """,
             ("pg-delete-test-project",),
         ).fetchone()
