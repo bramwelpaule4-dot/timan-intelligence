@@ -1,12 +1,14 @@
 
 """Tests for TimanStat Streamlit authentication security."""
 
+import time
 from types import SimpleNamespace
 
 import pytest
 
 from timan_intelligence.identity.service import _hash_password
 from timan_intelligence.security import auth
+from timan_intelligence.security.session import SessionManager
 
 
 VALID_PASSWORD = "SecureTestPassword123!"
@@ -36,6 +38,26 @@ def valid_account():
         "role": "user",
         "password_hash": _hash_password(VALID_PASSWORD),
     }
+
+
+@pytest.fixture
+def controlled_session_manager(monkeypatch):
+    """Provide a session manager with a controllable clock."""
+
+    current_time = [1_000_000.0]
+
+    manager = SessionManager(
+        idle_timeout_seconds=1800,
+        absolute_timeout_seconds=43200,
+        clock=lambda: current_time[0],
+    )
+
+    monkeypatch.setattr(auth, "SESSION_MANAGER", manager)
+
+    return SimpleNamespace(
+        manager=manager,
+        clock=current_time,
+    )
 
 
 def test_password_verification_accepts_correct_password(valid_account):
@@ -94,8 +116,9 @@ def test_authentication_accepts_valid_active_account(
     monkeypatch,
     mock_session,
     valid_account,
+    controlled_session_manager,
 ):
-    """A valid active account should establish an authenticated session."""
+    """A valid active account should establish a managed session."""
 
     monkeypatch.setattr(
         auth,
@@ -112,12 +135,17 @@ def test_authentication_accepts_valid_active_account(
     assert mock_session["authenticated"] is True
     assert mock_session["username"] == "testuser"
     assert mock_session["role"] == "user"
+    assert mock_session["authenticated_at"] == 1_000_000.0
+    assert mock_session["last_activity_at"] == 1_000_000.0
+
+    assert auth.is_authenticated() is True
 
 
 def test_authentication_normalises_username(
     monkeypatch,
     mock_session,
     valid_account,
+    controlled_session_manager,
 ):
     """Username matching should be case-insensitive and trim whitespace."""
 
@@ -266,6 +294,8 @@ def test_logout_clears_authentication_session(mock_session):
             "authenticated": True,
             "username": "testuser",
             "role": "admin",
+            "authenticated_at": time.monotonic(),
+            "last_activity_at": time.monotonic(),
             "unrelated_setting": "preserve",
         }
     )
@@ -275,6 +305,8 @@ def test_logout_clears_authentication_session(mock_session):
     assert "authenticated" not in mock_session
     assert "username" not in mock_session
     assert "role" not in mock_session
+    assert "authenticated_at" not in mock_session
+    assert "last_activity_at" not in mock_session
     assert mock_session["unrelated_setting"] == "preserve"
 
 
@@ -291,12 +323,10 @@ def test_authenticated_user_receives_only_assigned_permissions(
 ):
     """A normal user should receive only explicitly assigned permissions."""
 
-    mock_session.update(
-        {
-            "authenticated": True,
-            "username": "testuser",
-            "role": "user",
-        }
+    auth.SESSION_MANAGER.create_session(
+        mock_session,
+        "testuser",
+        "user",
     )
 
     assert auth.has_permission("use_application") is True
@@ -313,8 +343,123 @@ def test_unknown_session_role_receives_no_permissions(mock_session):
             "authenticated": True,
             "username": "testuser",
             "role": "superuser",
+            "authenticated_at": time.monotonic(),
+            "last_activity_at": time.monotonic(),
         }
     )
 
     assert auth.has_permission("use_application") is False
     assert auth.has_permission("manage_users") is False
+
+
+def test_is_authenticated_rejects_and_clears_expired_session(
+    mock_session,
+    controlled_session_manager,
+):
+    """The authentication interface must enforce session expiry."""
+
+    auth.SESSION_MANAGER.create_session(
+        mock_session,
+        "testuser",
+        "user",
+    )
+
+    controlled_session_manager.clock[0] += 1800
+
+    assert auth.is_authenticated() is False
+    assert mock_session == {}
+
+
+def test_permission_check_rejects_expired_session(
+    mock_session,
+    controlled_session_manager,
+):
+    """Expired sessions must not retain application permissions."""
+
+    auth.SESSION_MANAGER.create_session(
+        mock_session,
+        "testuser",
+        "admin",
+    )
+
+    controlled_session_manager.clock[0] += 1800
+
+    assert auth.has_permission("manage_users") is False
+    assert mock_session == {}
+
+
+def test_current_username_rejects_expired_session(
+    mock_session,
+    controlled_session_manager,
+):
+    """An expired session must not expose the current username."""
+
+    auth.SESSION_MANAGER.create_session(
+        mock_session,
+        "testuser",
+        "user",
+    )
+
+    controlled_session_manager.clock[0] += 1800
+
+    assert auth.current_username() is None
+    assert mock_session == {}
+
+
+def test_current_role_rejects_expired_session(
+    mock_session,
+    controlled_session_manager,
+):
+    """An expired session must not expose the current role."""
+
+    auth.SESSION_MANAGER.create_session(
+        mock_session,
+        "testuser",
+        "admin",
+    )
+
+    controlled_session_manager.clock[0] += 1800
+
+    assert auth.current_role() is None
+    assert mock_session == {}
+
+
+def test_valid_session_activity_refreshes_idle_timeout(
+    mock_session,
+    controlled_session_manager,
+):
+    """Authenticated activity should refresh the idle timeout."""
+
+    auth.SESSION_MANAGER.create_session(
+        mock_session,
+        "testuser",
+        "user",
+    )
+
+    controlled_session_manager.clock[0] += 600
+
+    assert auth.is_authenticated() is True
+    assert mock_session["last_activity_at"] == 1_000_600.0
+
+
+def test_absolute_timeout_is_enforced_through_authentication(
+    mock_session,
+    controlled_session_manager,
+):
+    """Repeated activity must not extend the absolute session lifetime."""
+
+    auth.SESSION_MANAGER.create_session(
+        mock_session,
+        "testuser",
+        "user",
+    )
+
+    for _ in range(12):
+        controlled_session_manager.clock[0] += 3500
+
+        assert auth.is_authenticated() is True
+
+    controlled_session_manager.clock[0] += 600
+
+    assert auth.is_authenticated() is False
+    assert mock_session == {}
