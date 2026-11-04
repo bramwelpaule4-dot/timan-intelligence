@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Callable
 
@@ -83,23 +84,60 @@ EXPECTED_UNIQUE_CONSTRAINTS = {
 }
 
 
-EXPECTED_CHECK_COUNTS = {
-    "users": 1,
-    "organisations": 1,
-    "organisation_memberships": 2,
-    "projects": 1,
-    "project_memberships": 2,
+EXPECTED_CHECK_CONSTRAINTS = {
+    ("users", "role"): {
+        "super_admin", "admin", "developer", "user",
+    },
+    ("organisations", "status"): {
+        "active", "suspended", "closed",
+    },
+    ("organisation_memberships", "role"): {
+        "org_admin", "org_member",
+    },
+    ("organisation_memberships", "status"): {
+        "active", "pending", "suspended",
+    },
+    ("projects", "status"): {
+        "active", "on_hold", "completed", "archived",
+    },
+    ("project_memberships", "role"): {
+        "project_admin", "project_member",
+    },
+    ("project_memberships", "status"): {
+        "active", "pending", "suspended",
+    },
 }
 
 
 EXPECTED_INDEXES = {
-    "idx_memberships_user",
-    "idx_memberships_organisation",
-    "idx_projects_organisation",
-    "idx_project_memberships_user",
-    "idx_project_memberships_project",
-    "idx_audit_user",
-    "idx_audit_created",
+    "idx_memberships_user": (
+        "organisation_memberships",
+        ("user_id",),
+    ),
+    "idx_memberships_organisation": (
+        "organisation_memberships",
+        ("organisation_id",),
+    ),
+    "idx_projects_organisation": (
+        "projects",
+        ("organisation_id",),
+    ),
+    "idx_project_memberships_user": (
+        "project_memberships",
+        ("user_id",),
+    ),
+    "idx_project_memberships_project": (
+        "project_memberships",
+        ("project_id",),
+    ),
+    "idx_audit_user": (
+        "audit_logs",
+        ("user_id",),
+    ),
+    "idx_audit_created": (
+        "audit_logs",
+        ("created_at",),
+    ),
 }
 
 
@@ -338,7 +376,7 @@ def _get_unique_constraints(connection) -> set[tuple]:
     rows = connection.execute(
         """
         SELECT
-            constraint_row.conrelid::regclass::text AS table_name,
+            relation.relname AS table_name,
             ARRAY(
                 SELECT attribute.attname
                 FROM unnest(constraint_row.conkey)
@@ -364,11 +402,11 @@ def _get_unique_constraints(connection) -> set[tuple]:
     }
 
 
-def _get_check_constraint_counts(connection) -> dict[str, int]:
-    """Return the number of check constraints for each expected table."""
+def _get_check_constraint_definitions(connection) -> list[tuple[str, str]]:
+    """Return check-constraint definitions for expected application tables."""
 
     if get_database_type() == "sqlite":
-        counts = {}
+        definitions = []
 
         for table_name in EXPECTED_COLUMNS:
             row = connection.execute(
@@ -380,16 +418,27 @@ def _get_check_constraint_counts(connection) -> dict[str, int]:
                 (table_name,),
             ).fetchone()
 
-            sql = (row["sql"] or "").upper() if row else ""
-            counts[table_name] = sql.count("CHECK")
+            if not row or not row["sql"]:
+                continue
 
-        return counts
+            # The current schema uses simple IN-list CHECK expressions.
+            pattern = re.compile(
+                r"CHECK\s*\(\s*"
+                r"(?:\"?)([a-zA-Z_][a-zA-Z0-9_]*)(?:\"?)"
+                r"\s+IN\s*\(([^()]*)\)\s*\)",
+                re.IGNORECASE,
+            )
+
+            for match in pattern.finditer(row["sql"]):
+                definitions.append((table_name, match.group(0)))
+
+        return definitions
 
     rows = connection.execute(
         """
         SELECT
-            constraint_row.conrelid::regclass::text AS table_name,
-            COUNT(*) AS constraint_count
+            relation.relname AS table_name,
+            pg_get_constraintdef(constraint_row.oid) AS definition
         FROM pg_constraint AS constraint_row
         JOIN pg_class AS relation
             ON relation.oid = constraint_row.conrelid
@@ -397,37 +446,156 @@ def _get_check_constraint_counts(connection) -> dict[str, int]:
             ON namespace.oid = relation.relnamespace
         WHERE constraint_row.contype = 'c'
           AND namespace.nspname = current_schema()
-        GROUP BY constraint_row.conrelid
         """
     ).fetchall()
 
-    return {
-        row["table_name"]: int(row["constraint_count"])
+    return [
+        (row["table_name"], row["definition"])
         for row in rows
+    ]
+
+
+def _parse_check_constraint(
+    table_name: str,
+    definition: str,
+) -> tuple[str, set[str]] | None:
+    """Extract the checked column and allowed string values."""
+
+    expected_columns = {
+        column
+        for table, column in EXPECTED_CHECK_CONSTRAINTS
+        if table == table_name
     }
 
+    for column_name in expected_columns:
+        column_pattern = (
+            rf'(?<![a-zA-Z0-9_])"?{re.escape(column_name)}"?(?![a-zA-Z0-9_])'
+        )
 
-def _get_existing_indexes(connection) -> set[str]:
-    """Return the names of explicitly required database indexes."""
+        if not re.search(column_pattern, definition, re.IGNORECASE):
+            continue
+
+        # SQLite uses IN (...); PostgreSQL commonly represents this as
+        # equality against ANY (ARRAY[...]).
+        if not re.search(r"\b(IN|ANY)\b", definition, re.IGNORECASE):
+            continue
+
+        values = re.findall(
+            r"'((?:''|[^'])*)'",
+            definition,
+        )
+
+        if not values:
+            continue
+
+        decoded_values = {
+            value.replace("''", "'")
+            for value in values
+        }
+
+        return column_name, decoded_values
+
+    return None
+
+
+def _get_check_constraints(connection) -> dict[tuple[str, str], set[str]]:
+    """Return check constraints mapped to their exact allowed values."""
+
+    actual_constraints = {}
+
+    for table_name, definition in _get_check_constraint_definitions(
+        connection
+    ):
+        parsed = _parse_check_constraint(table_name, definition)
+
+        if parsed is None:
+            continue
+
+        column_name, allowed_values = parsed
+        key = (table_name, column_name)
+
+        if key in actual_constraints:
+            raise MigrationError(
+                f"Existing table '{table_name}' has duplicate or "
+                f"unexpected CHECK constraints for '{column_name}'."
+            )
+
+        actual_constraints[key] = allowed_values
+
+    return actual_constraints
+
+
+def _get_existing_indexes(connection) -> dict[str, tuple[str, tuple[str, ...]]]:
+    """Return index names mapped to their table and ordered key columns."""
+
+    indexes = {}
 
     if get_database_type() == "sqlite":
         rows = connection.execute(
             """
-            SELECT name
+            SELECT name, tbl_name
             FROM sqlite_master
             WHERE type = 'index'
-            """
-        ).fetchall()
-    else:
-        rows = connection.execute(
-            """
-            SELECT indexname AS name
-            FROM pg_indexes
-            WHERE schemaname = current_schema()
+              AND name NOT LIKE 'sqlite_%'
             """
         ).fetchall()
 
-    return {row["name"] for row in rows}
+        for row in rows:
+            index_name = row["name"].replace("'", "''")
+
+            columns = connection.execute(
+                f"PRAGMA index_info('{index_name}')"
+            ).fetchall()
+
+            ordered_columns = tuple(
+                column["name"]
+                for column in sorted(
+                    columns,
+                    key=lambda item: item["seqno"],
+                )
+                if column["name"] is not None
+            )
+
+            indexes[row["name"]] = (
+                row["tbl_name"],
+                ordered_columns,
+            )
+
+        return indexes
+
+    rows = connection.execute(
+        """
+        SELECT
+            index_class.relname AS name,
+            table_class.relname AS table_name,
+            ARRAY(
+                SELECT attribute.attname
+                FROM unnest(index_row.indkey)
+                    WITH ORDINALITY AS index_key(attnum, position)
+                JOIN pg_attribute AS attribute
+                    ON attribute.attrelid = index_row.indrelid
+                   AND attribute.attnum = index_key.attnum
+                WHERE index_key.position <= index_row.indnkeyatts
+                ORDER BY index_key.position
+            ) AS columns
+        FROM pg_index AS index_row
+        JOIN pg_class AS index_class
+            ON index_class.oid = index_row.indexrelid
+        JOIN pg_class AS table_class
+            ON table_class.oid = index_row.indrelid
+        JOIN pg_namespace AS namespace
+            ON namespace.oid = table_class.relnamespace
+        WHERE namespace.nspname = current_schema()
+        """
+    ).fetchall()
+
+    for row in rows:
+        indexes[row["name"]] = (
+            row["table_name"],
+            tuple(row["columns"]),
+        )
+
+    return indexes
 
 
 def _validate_existing_schema(connection) -> None:
@@ -473,25 +641,50 @@ def _validate_existing_schema(connection) -> None:
             f"{sorted(missing_unique_constraints)}."
         )
 
-    check_counts = _get_check_constraint_counts(connection)
+    actual_checks = _get_check_constraints(connection)
 
-    for table_name, required_count in EXPECTED_CHECK_COUNTS.items():
-        actual_count = check_counts.get(table_name, 0)
+    for key, expected_values in EXPECTED_CHECK_CONSTRAINTS.items():
+        actual_values = actual_checks.get(key)
 
-        if actual_count < required_count:
+        if actual_values is None:
             raise MigrationError(
-                f"Existing table '{table_name}' has {actual_count} "
-                f"check constraints; at least {required_count} are required."
+                f"Existing table '{key[0]}' is missing the required "
+                f"CHECK constraint for column '{key[1]}'."
             )
 
-    existing_indexes = _get_existing_indexes(connection)
-    missing_indexes = EXPECTED_INDEXES - existing_indexes
+        if actual_values != expected_values:
+            raise MigrationError(
+                f"Existing table '{key[0]}' has an incorrect CHECK "
+                f"constraint for column '{key[1]}'. "
+                f"Expected values: {sorted(expected_values)}; "
+                f"found: {sorted(actual_values)}."
+            )
 
-    if missing_indexes:
+    unexpected_checks = set(actual_checks) - set(EXPECTED_CHECK_CONSTRAINTS)
+
+    if unexpected_checks:
         raise MigrationError(
-            "Existing database is missing required indexes: "
-            f"{', '.join(sorted(missing_indexes))}."
+            "Existing database contains unexpected CHECK constraints: "
+            f"{sorted(unexpected_checks)}."
         )
+
+    existing_indexes = _get_existing_indexes(connection)
+
+    for index_name, expected_definition in EXPECTED_INDEXES.items():
+        actual_definition = existing_indexes.get(index_name)
+
+        if actual_definition is None:
+            raise MigrationError(
+                f"Existing database is missing required index "
+                f"'{index_name}'."
+            )
+
+        if actual_definition != expected_definition:
+            raise MigrationError(
+                f"Existing index '{index_name}' has an incorrect "
+                f"definition. Expected {expected_definition}; "
+                f"found {actual_definition}."
+            )
 
 
 def _record_migration(connection, migration: Migration) -> None:
