@@ -6,6 +6,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
+from timan_intelligence.database.connection import get_database_type
 from timan_intelligence.database.migrations.versions import (
     v0001_initial_schema,
 )
@@ -33,13 +34,47 @@ LATEST_SCHEMA_VERSION = max(
     default=0,
 )
 
+EXPECTED_COLUMNS = {
+    "users": {
+        "id", "username", "email", "full_name", "password_hash",
+        "role", "is_active", "email_verified", "created_at",
+        "updated_at", "last_login_at",
+    },
+    "organisations": {
+        "id", "name", "organisation_type", "registration_number",
+        "contact_email", "country", "status", "created_by",
+        "created_at", "updated_at",
+    },
+    "organisation_memberships": {
+        "id", "organisation_id", "user_id", "role", "status",
+        "joined_at",
+    },
+    "projects": {
+        "id", "organisation_id", "name", "description", "status",
+        "created_by", "created_at", "updated_at",
+    },
+    "project_memberships": {
+        "id", "project_id", "user_id", "role", "status", "joined_at",
+    },
+    "audit_logs": {
+        "id", "user_id", "organisation_id", "action", "resource_type",
+        "resource_id", "details", "ip_address", "created_at",
+    },
+}
+
 
 class MigrationError(RuntimeError):
-    """Raised when database migration cannot proceed."""
+    """Raised when a database migration cannot proceed."""
+
+
+def _placeholder() -> str:
+    """Return the parameter placeholder for the configured database."""
+
+    return "%s" if get_database_type() == "postgresql" else "?"
 
 
 def _create_migration_table(connection) -> None:
-    """Create the schema migration history table."""
+    """Create the migration history table if it does not exist."""
 
     connection.execute(
         """
@@ -50,6 +85,34 @@ def _create_migration_table(connection) -> None:
         )
         """
     )
+
+
+def _get_existing_tables(connection) -> set[str]:
+    """Return application table names for the configured backend."""
+
+    if get_database_type() == "sqlite":
+        rows = connection.execute(
+            """
+            SELECT name
+            FROM sqlite_master
+            WHERE type = 'table'
+              AND name NOT LIKE 'sqlite_%'
+              AND name != 'schema_migrations'
+            """
+        ).fetchall()
+
+    else:
+        rows = connection.execute(
+            """
+            SELECT table_name AS name
+            FROM information_schema.tables
+            WHERE table_schema = current_schema()
+              AND table_type = 'BASE TABLE'
+              AND table_name != 'schema_migrations'
+            """
+        ).fetchall()
+
+    return {row["name"] for row in rows}
 
 
 def _get_applied_migrations(connection) -> dict[int, str]:
@@ -103,30 +166,37 @@ def _validate_migration_history(
             )
 
 
-def _validate_existing_schema(connection) -> None:
-    """Check whether an unversioned existing database has the expected schema."""
+def _get_table_columns(connection, table_name: str) -> set[str]:
+    """Return column names for a table."""
 
-    required_tables = {
-        "users",
-        "organisations",
-        "organisation_memberships",
-        "projects",
-        "project_memberships",
-        "audit_logs",
-    }
+    if get_database_type() == "sqlite":
+        rows = connection.execute(
+            f"PRAGMA table_info('{table_name}')"
+        ).fetchall()
+
+        return {row["name"] for row in rows}
+
+    placeholder = _placeholder()
 
     rows = connection.execute(
-        """
-        SELECT name
-        FROM sqlite_master
-        WHERE type = 'table'
-          AND name NOT LIKE 'sqlite_%'
-        """
+        f"""
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = {placeholder}
+        """,
+        (table_name,),
     ).fetchall()
 
-    existing_tables = {row["name"] for row in rows}
+    return {row["column_name"] for row in rows}
 
-    missing_tables = required_tables - existing_tables
+
+def _validate_existing_schema(connection) -> None:
+    """Validate the required tables and columns before baselining."""
+
+    existing_tables = _get_existing_tables(connection)
+
+    missing_tables = set(EXPECTED_COLUMNS) - existing_tables
 
     if missing_tables:
         raise MigrationError(
@@ -134,24 +204,36 @@ def _validate_existing_schema(connection) -> None:
             f"Missing tables: {', '.join(sorted(missing_tables))}."
         )
 
+    for table_name, required_columns in EXPECTED_COLUMNS.items():
+        existing_columns = _get_table_columns(connection, table_name)
+        missing_columns = required_columns - existing_columns
+
+        if missing_columns:
+            raise MigrationError(
+                f"Existing table '{table_name}' cannot be baselined. "
+                f"Missing columns: {', '.join(sorted(missing_columns))}."
+            )
+
 
 def _record_migration(
     connection,
     migration: Migration,
 ) -> None:
-    """Record a successfully executed migration."""
+    """Record a successfully applied migration."""
+
+    placeholder = _placeholder()
 
     connection.execute(
-        """
+        f"""
         INSERT INTO schema_migrations (version, name)
-        VALUES (?, ?)
+        VALUES ({placeholder}, {placeholder})
         """,
         (migration.version, migration.name),
     )
 
 
 def run_migrations(connection) -> None:
-    """Apply pending database migrations in version order."""
+    """Apply pending migrations in version order."""
 
     _create_migration_table(connection)
 
@@ -159,17 +241,8 @@ def run_migrations(connection) -> None:
 
     _validate_migration_history(applied)
 
-    # Handle databases created before migration tracking existed.
     if not applied:
-        existing_tables = connection.execute(
-            """
-            SELECT name
-            FROM sqlite_master
-            WHERE type = 'table'
-              AND name NOT LIKE 'sqlite_%'
-              AND name != 'schema_migrations'
-            """
-        ).fetchall()
+        existing_tables = _get_existing_tables(connection)
 
         if existing_tables:
             _validate_existing_schema(connection)
