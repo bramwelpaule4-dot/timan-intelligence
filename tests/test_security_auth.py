@@ -8,6 +8,7 @@ import pytest
 
 from timan_intelligence.identity.service import _hash_password
 from timan_intelligence.security import auth
+from timan_intelligence.security.rate_limit import LoginRateLimiter
 from timan_intelligence.security.session import SessionManager
 
 
@@ -16,7 +17,7 @@ VALID_PASSWORD = "SecureTestPassword123!"
 
 @pytest.fixture
 def mock_session(monkeypatch):
-    """Provide isolated Streamlit session state."""
+    """Provide isolated Streamlit session state and login rate limiter."""
 
     session_state = {}
 
@@ -24,6 +25,14 @@ def mock_session(monkeypatch):
         auth,
         "st",
         SimpleNamespace(session_state=session_state),
+    )
+
+    # Each test gets a fresh limiter. This prevents failed attempts in one
+    # test from locking out valid logins in another test.
+    monkeypatch.setattr(
+        auth,
+        "LOGIN_RATE_LIMITER",
+        LoginRateLimiter(),
     )
 
     return session_state
