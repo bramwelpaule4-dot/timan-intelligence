@@ -1,5 +1,5 @@
 
-"""Tests for TimanStat Streamlit authentication security."""
+"""Tests for TimanStat authentication and access-control security."""
 
 import time
 from types import SimpleNamespace
@@ -16,7 +16,7 @@ VALID_PASSWORD = "SecureTestPassword123!"
 
 @pytest.fixture
 def mock_session(monkeypatch):
-    """Provide isolated session state for authentication tests."""
+    """Provide isolated Streamlit session state."""
 
     session_state = {}
 
@@ -31,13 +31,44 @@ def mock_session(monkeypatch):
 
 @pytest.fixture
 def valid_account():
-    """Return an active account with a valid password hash."""
+    """Return a valid database identity-service account record."""
 
     return {
-        "active": True,
+        "id": "test-user-id",
+        "username": "testuser",
+        "email": "testuser@example.com",
         "role": "user",
-        "password_hash": _hash_password(VALID_PASSWORD),
+        "totp_enabled": False,
     }
+
+
+@pytest.fixture
+def mock_identity_authentication(monkeypatch, valid_account):
+    """Mock the database identity-service authentication boundary."""
+
+    calls = []
+
+    def authenticate(identifier, password):
+        calls.append((identifier, password))
+
+        if (
+            identifier == "testuser"
+            and password == VALID_PASSWORD
+        ):
+            return dict(valid_account)
+
+        return None
+
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        authenticate,
+    )
+
+    return SimpleNamespace(
+        account=valid_account,
+        calls=calls,
+    )
 
 
 @pytest.fixture
@@ -60,21 +91,25 @@ def controlled_session_manager(monkeypatch):
     )
 
 
-def test_password_verification_accepts_correct_password(valid_account):
-    """The configured account password should verify successfully."""
+def test_password_verification_accepts_correct_password():
+    """The shared password verifier should accept a correct password."""
+
+    password_hash = _hash_password(VALID_PASSWORD)
 
     assert auth._verify_password(
         VALID_PASSWORD,
-        valid_account["password_hash"],
+        password_hash,
     ) is True
 
 
-def test_password_verification_rejects_incorrect_password(valid_account):
-    """An incorrect password must be rejected."""
+def test_password_verification_rejects_incorrect_password():
+    """The shared password verifier should reject an incorrect password."""
+
+    password_hash = _hash_password(VALID_PASSWORD)
 
     assert auth._verify_password(
         "DifferentSecurePassword123!",
-        valid_account["password_hash"],
+        password_hash,
     ) is False
 
 
@@ -89,7 +124,7 @@ def test_password_verification_rejects_incorrect_password(valid_account):
     ],
 )
 def test_password_verification_rejects_malformed_hashes(stored_hash):
-    """Malformed or unsupported stored hashes must fail safely."""
+    """Malformed or unsupported password hashes must fail safely."""
 
     assert auth._verify_password(
         VALID_PASSWORD,
@@ -113,18 +148,11 @@ def test_password_verification_rejects_modified_scrypt_parameters():
 
 
 def test_authentication_accepts_valid_active_account(
-    monkeypatch,
     mock_session,
-    valid_account,
+    mock_identity_authentication,
     controlled_session_manager,
 ):
-    """A valid active account should establish a managed session."""
-
-    monkeypatch.setattr(
-        auth,
-        "_get_users",
-        lambda: {"testuser": valid_account},
-    )
+    """A valid database account should establish a managed session."""
 
     result = auth.authenticate_user(
         "testuser",
@@ -142,18 +170,11 @@ def test_authentication_accepts_valid_active_account(
 
 
 def test_authentication_normalises_username(
-    monkeypatch,
     mock_session,
-    valid_account,
+    mock_identity_authentication,
     controlled_session_manager,
 ):
-    """Username matching should be case-insensitive and trim whitespace."""
-
-    monkeypatch.setattr(
-        auth,
-        "_get_users",
-        lambda: {"testuser": valid_account},
-    )
+    """Login identifiers should be trimmed and case-normalised."""
 
     result = auth.authenticate_user(
         "  TESTUSER  ",
@@ -163,17 +184,21 @@ def test_authentication_normalises_username(
     assert result is True
     assert mock_session["username"] == "testuser"
 
+    assert mock_identity_authentication.calls == [
+        ("testuser", VALID_PASSWORD)
+    ]
+
 
 def test_authentication_rejects_unknown_user(
     monkeypatch,
     mock_session,
 ):
-    """Unknown accounts must not authenticate."""
+    """Unknown database accounts must not authenticate."""
 
     monkeypatch.setattr(
         auth,
-        "_get_users",
-        lambda: {},
+        "authenticate_identity_user",
+        lambda identifier, password: None,
     )
 
     result = auth.authenticate_user(
@@ -188,16 +213,13 @@ def test_authentication_rejects_unknown_user(
 def test_authentication_rejects_inactive_account(
     monkeypatch,
     mock_session,
-    valid_account,
 ):
-    """Inactive accounts must not establish authenticated sessions."""
-
-    valid_account["active"] = False
+    """An inactive account rejected by the identity service cannot sign in."""
 
     monkeypatch.setattr(
         auth,
-        "_get_users",
-        lambda: {"testuser": valid_account},
+        "authenticate_identity_user",
+        lambda identifier, password: None,
     )
 
     result = auth.authenticate_user(
@@ -226,12 +248,13 @@ def test_authentication_rejects_unsupported_roles(
 ):
     """Accounts with unsupported roles must not authenticate."""
 
-    valid_account["role"] = role
+    account = dict(valid_account)
+    account["role"] = role
 
     monkeypatch.setattr(
         auth,
-        "_get_users",
-        lambda: {"testuser": valid_account},
+        "authenticate_identity_user",
+        lambda identifier, password: account,
     )
 
     result = auth.authenticate_user(
@@ -246,14 +269,13 @@ def test_authentication_rejects_unsupported_roles(
 def test_authentication_rejects_incorrect_password(
     monkeypatch,
     mock_session,
-    valid_account,
 ):
-    """An incorrect password must not establish a session."""
+    """An incorrect password rejected by the identity service cannot sign in."""
 
     monkeypatch.setattr(
         auth,
-        "_get_users",
-        lambda: {"testuser": valid_account},
+        "authenticate_identity_user",
+        lambda identifier, password: None,
     )
 
     result = auth.authenticate_user(
@@ -265,16 +287,25 @@ def test_authentication_rejects_incorrect_password(
     assert mock_session == {}
 
 
+@pytest.mark.parametrize(
+    "malformed_account",
+    [
+        None,
+        [],
+        "invalid-account",
+    ],
+)
 def test_authentication_rejects_malformed_account(
     monkeypatch,
     mock_session,
+    malformed_account,
 ):
-    """An account that cannot be converted to a mapping must be rejected."""
+    """Malformed identity-service responses must be rejected."""
 
     monkeypatch.setattr(
         auth,
-        "_get_users",
-        lambda: {"testuser": None},
+        "authenticate_identity_user",
+        lambda identifier, password: malformed_account,
     )
 
     result = auth.authenticate_user(
@@ -286,8 +317,255 @@ def test_authentication_rejects_malformed_account(
     assert mock_session == {}
 
 
-def test_logout_clears_authentication_session(mock_session):
-    """Logout should remove all authentication session fields."""
+def test_authentication_rejects_account_without_valid_user_id(
+    monkeypatch,
+    mock_session,
+    valid_account,
+):
+    """An account without a valid database identifier must be rejected."""
+
+    account = dict(valid_account)
+    account["id"] = ""
+
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        lambda identifier, password: account,
+    )
+
+    result = auth.authenticate_user(
+        "testuser",
+        VALID_PASSWORD,
+    )
+
+    assert result is False
+    assert mock_session == {}
+
+
+def test_authentication_rejects_account_without_valid_username(
+    monkeypatch,
+    mock_session,
+    valid_account,
+):
+    """An account without a valid username must be rejected."""
+
+    account = dict(valid_account)
+    account["username"] = ""
+
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        lambda identifier, password: account,
+    )
+
+    result = auth.authenticate_user(
+        "testuser",
+        VALID_PASSWORD,
+    )
+
+    assert result is False
+    assert mock_session == {}
+
+
+def test_totp_enabled_account_receives_pending_authentication(
+    monkeypatch,
+    mock_session,
+    valid_account,
+):
+    """A TOTP-enabled account must not receive a full session after password login."""
+
+    account = dict(valid_account)
+    account["totp_enabled"] = True
+
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        lambda identifier, password: account,
+    )
+
+    result = auth.authenticate_user(
+        "testuser",
+        VALID_PASSWORD,
+    )
+
+    assert result is False
+    assert mock_session["pending_authentication"] is True
+    assert mock_session["pending_user_id"] == "test-user-id"
+    assert mock_session["pending_username"] == "testuser"
+    assert mock_session["pending_role"] == "user"
+
+    assert "authenticated" not in mock_session
+    assert auth.is_authenticated() is False
+    assert auth.has_permission("use_application") is False
+
+
+def test_totp_disabled_account_receives_full_session(
+    mock_session,
+    mock_identity_authentication,
+):
+    """An account without TOTP should receive a full session after password login."""
+
+    assert auth.authenticate_user(
+        "testuser",
+        VALID_PASSWORD,
+    ) is True
+
+    assert mock_session["authenticated"] is True
+    assert "pending_authentication" not in mock_session
+
+
+def test_pending_totp_authentication_can_be_promoted(
+    monkeypatch,
+    mock_session,
+    valid_account,
+):
+    """A valid second factor should promote pending authentication."""
+
+    account = dict(valid_account)
+    account["totp_enabled"] = True
+
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        lambda identifier, password: account,
+    )
+    monkeypatch.setattr(
+        auth,
+        "verify_totp_for_user",
+        lambda user_id, code: (
+            user_id == "test-user-id" and code == "123456"
+        ),
+    )
+
+    assert auth.authenticate_user(
+        "testuser",
+        VALID_PASSWORD,
+    ) is False
+
+    assert auth.is_authenticated() is False
+
+    assert auth.verify_pending_totp("123456") is True
+
+    assert mock_session["authenticated"] is True
+    assert mock_session["username"] == "testuser"
+    assert mock_session["role"] == "user"
+    assert "pending_authentication" not in mock_session
+
+    assert auth.is_authenticated() is True
+
+
+def test_invalid_totp_does_not_create_authenticated_session(
+    monkeypatch,
+    mock_session,
+    valid_account,
+):
+    """An incorrect authenticator code must not establish a full session."""
+
+    account = dict(valid_account)
+    account["totp_enabled"] = True
+
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        lambda identifier, password: account,
+    )
+    monkeypatch.setattr(
+        auth,
+        "verify_totp_for_user",
+        lambda user_id, code: False,
+    )
+
+    assert auth.authenticate_user(
+        "testuser",
+        VALID_PASSWORD,
+    ) is False
+
+    assert auth.verify_pending_totp("000000") is False
+
+    assert mock_session["pending_authentication"] is True
+    assert "authenticated" not in mock_session
+    assert auth.is_authenticated() is False
+    assert auth.has_permission("use_application") is False
+
+
+def test_totp_service_error_does_not_create_session(
+    monkeypatch,
+    mock_session,
+    valid_account,
+):
+    """A TOTP service failure must fail closed."""
+
+    account = dict(valid_account)
+    account["totp_enabled"] = True
+
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        lambda identifier, password: account,
+    )
+
+    def raise_totp_error(user_id, code):
+        raise auth.TOTPServiceError("Verification unavailable.")
+
+    monkeypatch.setattr(
+        auth,
+        "verify_totp_for_user",
+        raise_totp_error,
+    )
+
+    assert auth.authenticate_user(
+        "testuser",
+        VALID_PASSWORD,
+    ) is False
+
+    assert auth.verify_pending_totp("123456") is False
+
+    assert mock_session["pending_authentication"] is True
+    assert "authenticated" not in mock_session
+
+
+def test_expired_pending_authentication_is_rejected(
+    monkeypatch,
+    mock_session,
+    valid_account,
+):
+    """An expired pending challenge must not be promoted."""
+
+    account = dict(valid_account)
+    account["totp_enabled"] = True
+
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        lambda identifier, password: account,
+    )
+
+    verification_calls = []
+
+    monkeypatch.setattr(
+        auth,
+        "verify_totp_for_user",
+        lambda user_id, code: verification_calls.append(
+            (user_id, code)
+        ) or True,
+    )
+
+    assert auth.authenticate_user(
+        "testuser",
+        VALID_PASSWORD,
+    ) is False
+
+    mock_session["pending_expires_at"] = time.monotonic() - 1
+
+    assert auth.is_totp_pending() is False
+    assert auth.verify_pending_totp("123456") is False
+
+    assert verification_calls == []
+    assert mock_session == {}
+
+
+def test_logout_clears_full_and_pending_authentication(mock_session):
+    """Logout must clear authentication while preserving unrelated state."""
 
     mock_session.update(
         {
@@ -296,17 +574,33 @@ def test_logout_clears_authentication_session(mock_session):
             "role": "admin",
             "authenticated_at": time.monotonic(),
             "last_activity_at": time.monotonic(),
+            "pending_authentication": True,
+            "pending_user_id": "test-user-id",
+            "pending_username": "testuser",
+            "pending_role": "user",
+            "pending_authenticated_at": time.monotonic(),
+            "pending_expires_at": time.monotonic() + 300,
             "unrelated_setting": "preserve",
         }
     )
 
     auth.logout()
 
-    assert "authenticated" not in mock_session
-    assert "username" not in mock_session
-    assert "role" not in mock_session
-    assert "authenticated_at" not in mock_session
-    assert "last_activity_at" not in mock_session
+    for key in (
+        "authenticated",
+        "username",
+        "role",
+        "authenticated_at",
+        "last_activity_at",
+        "pending_authentication",
+        "pending_user_id",
+        "pending_username",
+        "pending_role",
+        "pending_authenticated_at",
+        "pending_expires_at",
+    ):
+        assert key not in mock_session
+
     assert mock_session["unrelated_setting"] == "preserve"
 
 
@@ -454,20 +748,16 @@ def test_absolute_timeout_is_enforced_through_authentication(
         "user",
     )
 
-    # Refresh activity every 25 minutes, within the 30-minute idle timeout.
     for _ in range(28):
         controlled_session_manager.clock[0] += 1500
-
         assert auth.is_authenticated() is True
 
-    # Total elapsed time is now 11 hours and 40 minutes.
     assert (
         controlled_session_manager.clock[0]
         - mock_session["authenticated_at"]
         == 42000
     )
 
-    # Advance to exactly 12 hours after initial authentication.
     controlled_session_manager.clock[0] += 1200
 
     assert auth.is_authenticated() is False
