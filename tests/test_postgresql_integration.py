@@ -63,6 +63,7 @@ def test_postgresql_migrations_are_recorded(postgres_database):
     assert [(row["version"], row["name"]) for row in history] == [
         (1, "initial_schema"),
         (2, "totp_enrolment"),
+        (3, "email_verification"),
     ]
 
     assert history[-1]["version"] == LATEST_SCHEMA_VERSION
@@ -77,6 +78,16 @@ def test_postgresql_migrations_are_recorded(postgres_database):
             """
         ).fetchall()
 
+        verification_table = connection.execute(
+            """
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = current_schema()
+              AND table_name = 'email_verification_tokens'
+              AND table_type = 'BASE TABLE'
+            """
+        ).fetchone()
+
     actual_columns = {row["column_name"] for row in columns}
 
     expected_totp_columns = {
@@ -89,6 +100,7 @@ def test_postgresql_migrations_are_recorded(postgres_database):
     }
 
     assert expected_totp_columns.issubset(actual_columns)
+    assert verification_table is not None
 
 
 def test_postgresql_schema_contains_required_tables(postgres_database):
@@ -102,6 +114,7 @@ def test_postgresql_schema_contains_required_tables(postgres_database):
         "project_memberships",
         "audit_logs",
         "schema_migrations",
+        "email_verification_tokens",
     }
 
     with database_connection() as connection:
@@ -146,6 +159,7 @@ def test_postgresql_migration_is_idempotent(postgres_database):
     assert [(row["version"], row["name"]) for row in history] == [
         (1, "initial_schema"),
         (2, "totp_enrolment"),
+        (3, "email_verification"),
     ]
 
     assert history[-1]["version"] == LATEST_SCHEMA_VERSION
