@@ -1,10 +1,10 @@
+
 """Integration tests for TimanStat authentication rate limiting."""
 
 from types import SimpleNamespace
 
 import pytest
 
-from timan_intelligence.identity.service import _hash_password
 from timan_intelligence.security import auth
 from timan_intelligence.security.rate_limit import LoginRateLimiter
 
@@ -14,7 +14,7 @@ VALID_PASSWORD = "SecureTestPassword123!"
 
 @pytest.fixture
 def rate_limit_environment(monkeypatch):
-    """Provide an isolated authentication environment and controllable clock."""
+    """Provide isolated database authentication and a controllable clock."""
 
     current_time = [1_000.0]
     session_state = {}
@@ -27,21 +27,40 @@ def rate_limit_environment(monkeypatch):
     )
 
     account = {
-        "active": True,
+        "id": "test-user-id",
+        "username": "testuser",
+        "email": "testuser@example.com",
         "role": "user",
-        "password_hash": _hash_password(VALID_PASSWORD),
+        "totp_enabled": False,
     }
+
+    def authenticate_identity_user(identifier, password):
+        """Simulate the database identity-service boundary."""
+
+        if (
+            identifier == "testuser"
+            and password == VALID_PASSWORD
+        ):
+            return dict(account)
+
+        return None
 
     monkeypatch.setattr(
         auth,
         "st",
         SimpleNamespace(session_state=session_state),
     )
-    monkeypatch.setattr(auth, "LOGIN_RATE_LIMITER", limiter)
+
     monkeypatch.setattr(
         auth,
-        "_get_users",
-        lambda: {"testuser": account},
+        "LOGIN_RATE_LIMITER",
+        limiter,
+    )
+
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        authenticate_identity_user,
     )
 
     return SimpleNamespace(
@@ -84,10 +103,12 @@ def test_locked_account_rejects_correct_password(
     environment = rate_limit_environment
 
     for _ in range(5):
-        auth.authenticate_user(
+        assert auth.authenticate_user(
             "testuser",
             "WrongPassword123!",
-        )
+        ) is False
+
+    assert environment.limiter.is_locked("testuser") is True
 
     assert auth.authenticate_user(
         "testuser",
@@ -105,10 +126,10 @@ def test_lockout_expires_after_fifteen_minutes(
     environment = rate_limit_environment
 
     for _ in range(5):
-        auth.authenticate_user(
+        assert auth.authenticate_user(
             "testuser",
             "WrongPassword123!",
-        )
+        ) is False
 
     assert environment.limiter.is_locked("testuser") is True
 
