@@ -5,10 +5,9 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
+from timan_intelligence.database.connection import database_connection
 from timan_intelligence.database.initialise import initialise_database
-from timan_intelligence.identity.email_delivery import (
-    OutboundEmail,
-)
+from timan_intelligence.identity.email_delivery import OutboundEmail
 from timan_intelligence.identity.email_notifications import (
     EMAIL_VERIFICATION_SUBJECT,
     send_email_verification,
@@ -90,6 +89,7 @@ def test_verification_link_contains_valid_token(test_user):
     )
 
     message = sender.sent_messages[0]
+
     url_line = next(
         line
         for line in message.body.splitlines()
@@ -214,7 +214,9 @@ def test_accepts_valid_application_urls(test_user, base_url):
     assert len(sender.sent_messages) == 1
 
 
-def test_rejects_unknown_user():
+def test_rejects_unknown_user(test_database):
+    """Unknown-user checks must run against an initialised database."""
+
     sender = RecordingEmailSender()
 
     with pytest.raises(ValueError, match="does not exist"):
@@ -230,7 +232,6 @@ def test_rejects_unknown_user():
 def test_rejects_already_verified_user(test_user):
     sender = RecordingEmailSender()
 
-    # First notification creates a valid token.
     send_email_verification(
         user_id=test_user,
         base_url="https://timanstat.example.com",
@@ -245,9 +246,9 @@ def test_rejects_already_verified_user(test_user):
         if "verify_email=" in line
     )
 
-    token = parse_qs(urlsplit(url_line.strip()).query)[
-        "verify_email"
-    ][0]
+    token = parse_qs(
+        urlsplit(url_line.strip()).query
+    )["verify_email"][0]
 
     assert verify_email_token(token) is True
 
@@ -276,8 +277,6 @@ def test_rejects_invalid_token_expiry(test_user):
 
 
 def test_rejects_inactive_user(test_user):
-    from timan_intelligence.database.connection import database_connection
-
     with database_connection() as connection:
         connection.execute(
             """
