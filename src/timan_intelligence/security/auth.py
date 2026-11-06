@@ -1,424 +1,764 @@
 
-"""Authentication and role-based access control for TimanStat."""
+"""Tests for TimanStat authentication and access-control security."""
 
-from __future__ import annotations
-
-import math
 import time
-from typing import Any, MutableMapping
+from types import SimpleNamespace
 
-import streamlit as st
+import pytest
 
-from timan_intelligence.identity.service import (
-    _verify_password as _verify_identity_password,
-    authenticate_user as authenticate_identity_user,
-)
-from timan_intelligence.security.rate_limit import LoginRateLimiter
+from timan_intelligence.identity.service import _hash_password
+from timan_intelligence.security import auth
 from timan_intelligence.security.session import SessionManager
-from timan_intelligence.security.totp_service import (
-    TOTPServiceError,
-    verify_totp_for_user,
-)
 
 
-VALID_ROLES = {"developer", "admin", "user"}
-
-# Five failed password attempts within 15 minutes trigger a 15-minute lockout.
-LOGIN_RATE_LIMITER = LoginRateLimiter()
-
-# Manage authenticated session creation, validation and expiry.
-SESSION_MANAGER = SessionManager()
-
-# A pending second-factor challenge expires after five minutes.
-PENDING_TOTP_TIMEOUT_SECONDS = 5 * 60
-
-PENDING_AUTHENTICATION_KEYS = (
-    "pending_authentication",
-    "pending_user_id",
-    "pending_username",
-    "pending_role",
-    "pending_authenticated_at",
-    "pending_expires_at",
-)
-
-# Permissions are deliberately explicit.
-ROLE_PERMISSIONS = {
-    "user": {
-        "use_application",
-        "manage_own_data",
-    },
-    "developer": {
-        "use_application",
-        "manage_own_data",
-        "view_project_status",
-        "access_developer_tools",
-    },
-    "admin": {
-        "use_application",
-        "manage_own_data",
-        "view_project_status",
-        "manage_users",
-        "view_system_monitoring",
-        "manage_governance",
-        "view_audit_logs",
-    },
-}
+VALID_PASSWORD = "SecureTestPassword123!"
 
 
-def _verify_password(password: str, stored_hash: str) -> bool:
-    """Verify a password using the shared secure password verifier."""
+@pytest.fixture
+def mock_session(monkeypatch):
+    """Provide isolated Streamlit session state."""
 
-    return _verify_identity_password(password, stored_hash)
+    session_state = {}
 
-
-def _reject_login(identifier: str) -> bool:
-    """Record a failed password attempt and reject authentication."""
-
-    LOGIN_RATE_LIMITER.record_failure(identifier)
-    return False
-
-
-def _clear_pending_authentication(
-    session_state: MutableMapping[str, Any],
-) -> None:
-    """Remove all pending second-factor authentication information."""
-
-    for key in PENDING_AUTHENTICATION_KEYS:
-        session_state.pop(key, None)
-
-
-def _create_pending_authentication(
-    session_state: MutableMapping[str, Any],
-    user: dict[str, Any],
-) -> None:
-    """Create a short-lived pending authentication challenge."""
-
-    user_id = user.get("id")
-    username = user.get("username")
-    role = user.get("role")
-
-    if (
-        not isinstance(user_id, str)
-        or not user_id.strip()
-        or not isinstance(username, str)
-        or not username.strip()
-        or not isinstance(role, str)
-        or role not in VALID_ROLES
-    ):
-        raise ValueError("The authenticated account record is invalid.")
-
-    now = time.monotonic()
-
-    session_state["pending_authentication"] = True
-    session_state["pending_user_id"] = user_id.strip()
-    session_state["pending_username"] = username.strip().casefold()
-    session_state["pending_role"] = role
-    session_state["pending_authenticated_at"] = now
-    session_state["pending_expires_at"] = (
-        now + PENDING_TOTP_TIMEOUT_SECONDS
+    monkeypatch.setattr(
+        auth,
+        "st",
+        SimpleNamespace(session_state=session_state),
     )
 
-
-def is_totp_pending() -> bool:
-    """Return whether a valid second-factor challenge is pending."""
-
-    session_state = st.session_state
-
-    if session_state.get("pending_authentication") is not True:
-        _clear_pending_authentication(session_state)
-        return False
-
-    username = session_state.get("pending_username")
-    user_id = session_state.get("pending_user_id")
-    role = session_state.get("pending_role")
-    authenticated_at = session_state.get("pending_authenticated_at")
-    expires_at = session_state.get("pending_expires_at")
-
-    timestamps_valid = all(
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(value)
-        for value in (authenticated_at, expires_at)
-    )
-
-    if (
-        not isinstance(user_id, str)
-        or not user_id.strip()
-        or not isinstance(username, str)
-        or not username.strip()
-        or role not in VALID_ROLES
-        or not timestamps_valid
-    ):
-        _clear_pending_authentication(session_state)
-        return False
-
-    now = time.monotonic()
-
-    if (
-        authenticated_at > now
-        or expires_at <= now
-        or expires_at <= authenticated_at
-    ):
-        _clear_pending_authentication(session_state)
-        return False
-
-    # A pending challenge must never coexist with a full session.
-    SESSION_MANAGER.clear_session(session_state)
-
-    return True
+    return session_state
 
 
-def authenticate_user(username: str, password: str) -> bool:
-    """
-    Authenticate using the database-backed identity service.
+@pytest.fixture
+def valid_account():
+    """Return a valid database identity-service account record."""
 
-    Accounts without TOTP receive a full authenticated session after
-    successful password verification.
-
-    Accounts with TOTP receive only a pending second-factor challenge.
-    They are not authenticated until the authenticator code is verified.
-
-    Returns:
-        True only when a full authenticated session is established.
-        False for failed login attempts and pending TOTP challenges.
-    """
-
-    if not isinstance(username, str) or not isinstance(password, str):
-        return False
-
-    identifier = username.strip().casefold()
-
-    if not identifier or not password:
-        return False
-
-    # Never allow an existing authenticated session to survive a new
-    # password-login attempt.
-    SESSION_MANAGER.clear_session(st.session_state)
-    _clear_pending_authentication(st.session_state)
-
-    if LOGIN_RATE_LIMITER.is_locked(identifier):
-        return False
-
-    try:
-        user = authenticate_identity_user(identifier, password)
-    except (TypeError, ValueError):
-        return _reject_login(identifier)
-
-    if user is None:
-        return _reject_login(identifier)
-
-    if not isinstance(user, dict):
-        return _reject_login(identifier)
-
-    role = str(user.get("role", "")).strip().casefold()
-
-    if role not in VALID_ROLES:
-        return _reject_login(identifier)
-
-    actual_username = user.get("username")
-    user_id = user.get("id")
-
-    if (
-        not isinstance(actual_username, str)
-        or not actual_username.strip()
-        or not isinstance(user_id, str)
-        or not user_id.strip()
-    ):
-        return _reject_login(identifier)
-
-    LOGIN_RATE_LIMITER.record_success(identifier)
-
-    # Password authentication succeeded. TOTP-enabled accounts must
-    # complete the second factor before receiving a full session.
-    if bool(user.get("totp_enabled")):
-        _create_pending_authentication(
-            st.session_state,
-            {
-                "id": user_id,
-                "username": actual_username,
-                "role": role,
-            },
-        )
-        return False
-
-    SESSION_MANAGER.create_session(
-        st.session_state,
-        actual_username,
-        role,
-    )
-
-    return True
+    return {
+        "id": "test-user-id",
+        "username": "testuser",
+        "email": "testuser@example.com",
+        "role": "user",
+        "totp_enabled": False,
+    }
 
 
-def verify_pending_totp(code: str) -> bool:
-    """
-    Verify the authenticator code for a pending login.
+@pytest.fixture
+def mock_identity_authentication(monkeypatch, valid_account):
+    """Mock the database identity-service authentication boundary."""
 
-    A successful verification promotes the pending challenge to a
-    fully authenticated session. Failed verification leaves the
-    challenge pending, subject to the TOTP service's rate limiter.
-    """
+    calls = []
 
-    if not isinstance(code, str):
-        return False
+    def authenticate(identifier, password):
+        calls.append((identifier, password))
 
-    if not is_totp_pending():
-        return False
+        if (
+            identifier == "testuser"
+            and password == VALID_PASSWORD
+        ):
+            return dict(valid_account)
 
-    session_state = st.session_state
-
-    user_id = session_state.get("pending_user_id")
-    username = session_state.get("pending_username")
-    role = session_state.get("pending_role")
-
-    if (
-        not isinstance(user_id, str)
-        or not isinstance(username, str)
-        or role not in VALID_ROLES
-    ):
-        _clear_pending_authentication(session_state)
-        return False
-
-    try:
-        verified = verify_totp_for_user(user_id, code.strip())
-    except TOTPServiceError:
-        # Fail closed. Do not create a session when verification cannot
-        # be completed reliably.
-        return False
-
-    if not verified:
-        return False
-
-    # Recheck the challenge before promoting it.
-    if not is_totp_pending():
-        return False
-
-    # Remove the pending state before creating the full session.
-    _clear_pending_authentication(session_state)
-
-    SESSION_MANAGER.create_session(
-        session_state,
-        username,
-        role,
-    )
-
-    return True
-
-
-def is_authenticated() -> bool:
-    """Validate the current full session and enforce session expiry."""
-
-    if is_totp_pending():
-        SESSION_MANAGER.clear_session(st.session_state)
-        return False
-
-    return SESSION_MANAGER.is_valid(st.session_state)
-
-
-def current_username() -> str | None:
-    """Return the authenticated username."""
-
-    if not is_authenticated():
         return None
 
-    return st.session_state.get("username")
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        authenticate,
+    )
+
+    return SimpleNamespace(
+        account=valid_account,
+        calls=calls,
+    )
 
 
-def current_role() -> str | None:
-    """Return the authenticated user's role."""
+@pytest.fixture
+def controlled_session_manager(monkeypatch):
+    """Provide a session manager with a controllable clock."""
 
-    if not is_authenticated():
-        return None
+    current_time = [1_000_000.0]
 
-    return st.session_state.get("role")
+    manager = SessionManager(
+        idle_timeout_seconds=1800,
+        absolute_timeout_seconds=43200,
+        clock=lambda: current_time[0],
+    )
 
+    monkeypatch.setattr(auth, "SESSION_MANAGER", manager)
 
-def has_permission(permission: str) -> bool:
-    """Check whether the current account has a specific permission."""
-
-    if not is_authenticated():
-        return False
-
-    role = st.session_state.get("role")
-
-    if role not in ROLE_PERMISSIONS:
-        return False
-
-    return permission in ROLE_PERMISSIONS[role]
+    return SimpleNamespace(
+        manager=manager,
+        clock=current_time,
+    )
 
 
-def require_permission(permission: str) -> bool:
-    """Display an access-denied message when permission is missing."""
+def test_password_verification_accepts_correct_password():
+    """The shared password verifier should accept a correct password."""
 
-    if has_permission(permission):
-        return True
+    password_hash = _hash_password(VALID_PASSWORD)
 
-    st.error("Access denied. You do not have permission to view this page.")
-    return False
-
-
-def logout() -> None:
-    """Clear full and pending authentication information."""
-
-    SESSION_MANAGER.clear_session(st.session_state)
-    _clear_pending_authentication(st.session_state)
+    assert auth._verify_password(
+        VALID_PASSWORD,
+        password_hash,
+    ) is True
 
 
-def render_login() -> None:
-    """Render the TimanStat password and TOTP login interfaces."""
+def test_password_verification_rejects_incorrect_password():
+    """The shared password verifier should reject an incorrect password."""
 
-    st.title("TimanStat Sign In")
+    password_hash = _hash_password(VALID_PASSWORD)
 
-    if is_authenticated():
-        st.success("You are already signed in.")
-        return
+    assert auth._verify_password(
+        "DifferentSecurePassword123!",
+        password_hash,
+    ) is False
 
-    if is_totp_pending():
-        st.caption("Password accepted. Complete two-factor verification.")
 
-        st.info(
-            "Enter the six-digit code from your authenticator application."
-        )
+@pytest.mark.parametrize(
+    "stored_hash",
+    [
+        "",
+        "invalid",
+        "md5$invalid",
+        "scrypt$invalid",
+        "scrypt$16384$8$1$not-hex$not-hex",
+    ],
+)
+def test_password_verification_rejects_malformed_hashes(stored_hash):
+    """Malformed or unsupported password hashes must fail safely."""
 
-        with st.form("timanstat_totp_login_form"):
-            code = st.text_input(
-                "Authenticator code",
-                max_chars=6,
-                placeholder="000000",
-            )
-            submitted = st.form_submit_button("Verify and sign in")
+    assert auth._verify_password(
+        VALID_PASSWORD,
+        stored_hash,
+    ) is False
 
-        if submitted:
-            if verify_pending_totp(code):
-                st.success("Authentication successful.")
-                st.rerun()
-            else:
-                st.error(
-                    "The authenticator code could not be verified. "
-                    "Check the code or sign in again if the challenge expired."
-                )
 
-        if st.button("Cancel sign in"):
-            logout()
-            st.rerun()
+def test_password_verification_rejects_modified_scrypt_parameters():
+    """Stored parameters must not override application security settings."""
 
-        return
+    password_hash = _hash_password(VALID_PASSWORD)
+    parts = password_hash.split("$")
+    parts[1] = "2"
 
-    st.caption("Sign in using your authorised account.")
+    tampered_hash = "$".join(parts)
 
-    with st.form("timanstat_login_form"):
-        username = st.text_input("Username or email")
-        password = st.text_input("Password", type="password")
-        submitted = st.form_submit_button("Sign in")
+    assert auth._verify_password(
+        VALID_PASSWORD,
+        tampered_hash,
+    ) is False
 
-    if submitted:
-        if authenticate_user(username, password):
-            st.success("Authentication successful.")
-            st.rerun()
-        elif is_totp_pending():
-            st.rerun()
-        else:
-            st.error(
-                "Invalid username, password or inactive account. "
-                "You may also be temporarily locked out after repeated failures."
-            )
+
+def test_authentication_accepts_valid_active_account(
+    mock_session,
+    mock_identity_authentication,
+    controlled_session_manager,
+):
+    """A valid database account should establish a managed session."""
+
+    result = auth.authenticate_user(
+        "testuser",
+        VALID_PASSWORD,
+    )
+
+    assert result is True
+    assert mock_session["authenticated"] is True
+    assert mock_session["username"] == "testuser"
+    assert mock_session["role"] == "user"
+    assert mock_session["authenticated_at"] == 1_000_000.0
+    assert mock_session["last_activity_at"] == 1_000_000.0
+
+    assert auth.is_authenticated() is True
+
+
+def test_authentication_normalises_username(
+    mock_session,
+    mock_identity_authentication,
+    controlled_session_manager,
+):
+    """Login identifiers should be trimmed and case-normalised."""
+
+    result = auth.authenticate_user(
+        "  TESTUSER  ",
+        VALID_PASSWORD,
+    )
+
+    assert result is True
+    assert mock_session["username"] == "testuser"
+
+    assert mock_identity_authentication.calls == [
+        ("testuser", VALID_PASSWORD)
+    ]
+
+
+def test_authentication_rejects_unknown_user(
+    monkeypatch,
+    mock_session,
+):
+    """Unknown database accounts must not authenticate."""
+
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        lambda identifier, password: None,
+    )
+
+    result = auth.authenticate_user(
+        "unknownuser",
+        VALID_PASSWORD,
+    )
+
+    assert result is False
+    assert mock_session == {}
+
+
+def test_authentication_rejects_inactive_account(
+    monkeypatch,
+    mock_session,
+):
+    """An inactive account rejected by the identity service cannot sign in."""
+
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        lambda identifier, password: None,
+    )
+
+    result = auth.authenticate_user(
+        "testuser",
+        VALID_PASSWORD,
+    )
+
+    assert result is False
+    assert mock_session == {}
+
+
+@pytest.mark.parametrize(
+    "role",
+    [
+        "",
+        "superuser",
+        "owner",
+        "invalid",
+    ],
+)
+def test_authentication_rejects_unsupported_roles(
+    monkeypatch,
+    mock_session,
+    valid_account,
+    role,
+):
+    """Accounts with unsupported roles must not authenticate."""
+
+    account = dict(valid_account)
+    account["role"] = role
+
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        lambda identifier, password: account,
+    )
+
+    result = auth.authenticate_user(
+        "testuser",
+        VALID_PASSWORD,
+    )
+
+    assert result is False
+    assert mock_session == {}
+
+
+def test_authentication_rejects_incorrect_password(
+    monkeypatch,
+    mock_session,
+):
+    """An incorrect password rejected by the identity service cannot sign in."""
+
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        lambda identifier, password: None,
+    )
+
+    result = auth.authenticate_user(
+        "testuser",
+        "WrongPassword123!",
+    )
+
+    assert result is False
+    assert mock_session == {}
+
+
+@pytest.mark.parametrize(
+    "malformed_account",
+    [
+        None,
+        [],
+        "invalid-account",
+    ],
+)
+def test_authentication_rejects_malformed_account(
+    monkeypatch,
+    mock_session,
+    malformed_account,
+):
+    """Malformed identity-service responses must be rejected."""
+
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        lambda identifier, password: malformed_account,
+    )
+
+    result = auth.authenticate_user(
+        "testuser",
+        VALID_PASSWORD,
+    )
+
+    assert result is False
+    assert mock_session == {}
+
+
+def test_authentication_rejects_account_without_valid_user_id(
+    monkeypatch,
+    mock_session,
+    valid_account,
+):
+    """An account without a valid database identifier must be rejected."""
+
+    account = dict(valid_account)
+    account["id"] = ""
+
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        lambda identifier, password: account,
+    )
+
+    result = auth.authenticate_user(
+        "testuser",
+        VALID_PASSWORD,
+    )
+
+    assert result is False
+    assert mock_session == {}
+
+
+def test_authentication_rejects_account_without_valid_username(
+    monkeypatch,
+    mock_session,
+    valid_account,
+):
+    """An account without a valid username must be rejected."""
+
+    account = dict(valid_account)
+    account["username"] = ""
+
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        lambda identifier, password: account,
+    )
+
+    result = auth.authenticate_user(
+        "testuser",
+        VALID_PASSWORD,
+    )
+
+    assert result is False
+    assert mock_session == {}
+
+
+def test_totp_enabled_account_receives_pending_authentication(
+    monkeypatch,
+    mock_session,
+    valid_account,
+):
+    """A TOTP-enabled account must not receive a full session after password login."""
+
+    account = dict(valid_account)
+    account["totp_enabled"] = True
+
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        lambda identifier, password: account,
+    )
+
+    result = auth.authenticate_user(
+        "testuser",
+        VALID_PASSWORD,
+    )
+
+    assert result is False
+    assert mock_session["pending_authentication"] is True
+    assert mock_session["pending_user_id"] == "test-user-id"
+    assert mock_session["pending_username"] == "testuser"
+    assert mock_session["pending_role"] == "user"
+
+    assert "authenticated" not in mock_session
+    assert auth.is_authenticated() is False
+    assert auth.has_permission("use_application") is False
+
+
+def test_totp_disabled_account_receives_full_session(
+    mock_session,
+    mock_identity_authentication,
+):
+    """An account without TOTP should receive a full session after password login."""
+
+    assert auth.authenticate_user(
+        "testuser",
+        VALID_PASSWORD,
+    ) is True
+
+    assert mock_session["authenticated"] is True
+    assert "pending_authentication" not in mock_session
+
+
+def test_pending_totp_authentication_can_be_promoted(
+    monkeypatch,
+    mock_session,
+    valid_account,
+):
+    """A valid second factor should promote pending authentication."""
+
+    account = dict(valid_account)
+    account["totp_enabled"] = True
+
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        lambda identifier, password: account,
+    )
+    monkeypatch.setattr(
+        auth,
+        "verify_totp_for_user",
+        lambda user_id, code: (
+            user_id == "test-user-id" and code == "123456"
+        ),
+    )
+
+    assert auth.authenticate_user(
+        "testuser",
+        VALID_PASSWORD,
+    ) is False
+
+    assert auth.is_authenticated() is False
+
+    assert auth.verify_pending_totp("123456") is True
+
+    assert mock_session["authenticated"] is True
+    assert mock_session["username"] == "testuser"
+    assert mock_session["role"] == "user"
+    assert "pending_authentication" not in mock_session
+
+    assert auth.is_authenticated() is True
+
+
+def test_invalid_totp_does_not_create_authenticated_session(
+    monkeypatch,
+    mock_session,
+    valid_account,
+):
+    """An incorrect authenticator code must not establish a full session."""
+
+    account = dict(valid_account)
+    account["totp_enabled"] = True
+
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        lambda identifier, password: account,
+    )
+    monkeypatch.setattr(
+        auth,
+        "verify_totp_for_user",
+        lambda user_id, code: False,
+    )
+
+    assert auth.authenticate_user(
+        "testuser",
+        VALID_PASSWORD,
+    ) is False
+
+    assert auth.verify_pending_totp("000000") is False
+
+    assert mock_session["pending_authentication"] is True
+    assert "authenticated" not in mock_session
+    assert auth.is_authenticated() is False
+    assert auth.has_permission("use_application") is False
+
+
+def test_totp_service_error_does_not_create_session(
+    monkeypatch,
+    mock_session,
+    valid_account,
+):
+    """A TOTP service failure must fail closed."""
+
+    account = dict(valid_account)
+    account["totp_enabled"] = True
+
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        lambda identifier, password: account,
+    )
+
+    def raise_totp_error(user_id, code):
+        raise auth.TOTPServiceError("Verification unavailable.")
+
+    monkeypatch.setattr(
+        auth,
+        "verify_totp_for_user",
+        raise_totp_error,
+    )
+
+    assert auth.authenticate_user(
+        "testuser",
+        VALID_PASSWORD,
+    ) is False
+
+    assert auth.verify_pending_totp("123456") is False
+
+    assert mock_session["pending_authentication"] is True
+    assert "authenticated" not in mock_session
+
+
+def test_expired_pending_authentication_is_rejected(
+    monkeypatch,
+    mock_session,
+    valid_account,
+):
+    """An expired pending challenge must not be promoted."""
+
+    account = dict(valid_account)
+    account["totp_enabled"] = True
+
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        lambda identifier, password: account,
+    )
+
+    verification_calls = []
+
+    monkeypatch.setattr(
+        auth,
+        "verify_totp_for_user",
+        lambda user_id, code: verification_calls.append(
+            (user_id, code)
+        ) or True,
+    )
+
+    assert auth.authenticate_user(
+        "testuser",
+        VALID_PASSWORD,
+    ) is False
+
+    mock_session["pending_expires_at"] = time.monotonic() - 1
+
+    assert auth.is_totp_pending() is False
+    assert auth.verify_pending_totp("123456") is False
+
+    assert verification_calls == []
+    assert mock_session == {}
+
+
+def test_logout_clears_full_and_pending_authentication(mock_session):
+    """Logout must clear authentication while preserving unrelated state."""
+
+    mock_session.update(
+        {
+            "authenticated": True,
+            "username": "testuser",
+            "role": "admin",
+            "authenticated_at": time.monotonic(),
+            "last_activity_at": time.monotonic(),
+            "pending_authentication": True,
+            "pending_user_id": "test-user-id",
+            "pending_username": "testuser",
+            "pending_role": "user",
+            "pending_authenticated_at": time.monotonic(),
+            "pending_expires_at": time.monotonic() + 300,
+            "unrelated_setting": "preserve",
+        }
+    )
+
+    auth.logout()
+
+    for key in (
+        "authenticated",
+        "username",
+        "role",
+        "authenticated_at",
+        "last_activity_at",
+        "pending_authentication",
+        "pending_user_id",
+        "pending_username",
+        "pending_role",
+        "pending_authenticated_at",
+        "pending_expires_at",
+    ):
+        assert key not in mock_session
+
+    assert mock_session["unrelated_setting"] == "preserve"
+
+
+def test_unauthenticated_session_has_no_permissions(mock_session):
+    """Unauthenticated sessions must not receive permissions."""
+
+    assert auth.is_authenticated() is False
+    assert auth.has_permission("use_application") is False
+    assert auth.has_permission("manage_users") is False
+
+
+def test_authenticated_user_receives_only_assigned_permissions(
+    mock_session,
+):
+    """A normal user should receive only explicitly assigned permissions."""
+
+    auth.SESSION_MANAGER.create_session(
+        mock_session,
+        "testuser",
+        "user",
+    )
+
+    assert auth.has_permission("use_application") is True
+    assert auth.has_permission("manage_own_data") is True
+    assert auth.has_permission("manage_users") is False
+    assert auth.has_permission("view_audit_logs") is False
+
+
+def test_unknown_session_role_receives_no_permissions(mock_session):
+    """An unrecognised session role must not receive permissions."""
+
+    mock_session.update(
+        {
+            "authenticated": True,
+            "username": "testuser",
+            "role": "superuser",
+            "authenticated_at": time.monotonic(),
+            "last_activity_at": time.monotonic(),
+        }
+    )
+
+    assert auth.has_permission("use_application") is False
+    assert auth.has_permission("manage_users") is False
+
+
+def test_is_authenticated_rejects_and_clears_expired_session(
+    mock_session,
+    controlled_session_manager,
+):
+    """The authentication interface must enforce session expiry."""
+
+    auth.SESSION_MANAGER.create_session(
+        mock_session,
+        "testuser",
+        "user",
+    )
+
+    controlled_session_manager.clock[0] += 1800
+
+    assert auth.is_authenticated() is False
+    assert mock_session == {}
+
+
+def test_permission_check_rejects_expired_session(
+    mock_session,
+    controlled_session_manager,
+):
+    """Expired sessions must not retain application permissions."""
+
+    auth.SESSION_MANAGER.create_session(
+        mock_session,
+        "testuser",
+        "admin",
+    )
+
+    controlled_session_manager.clock[0] += 1800
+
+    assert auth.has_permission("manage_users") is False
+    assert mock_session == {}
+
+
+def test_current_username_rejects_expired_session(
+    mock_session,
+    controlled_session_manager,
+):
+    """An expired session must not expose the current username."""
+
+    auth.SESSION_MANAGER.create_session(
+        mock_session,
+        "testuser",
+        "user",
+    )
+
+    controlled_session_manager.clock[0] += 1800
+
+    assert auth.current_username() is None
+    assert mock_session == {}
+
+
+def test_current_role_rejects_expired_session(
+    mock_session,
+    controlled_session_manager,
+):
+    """An expired session must not expose the current role."""
+
+    auth.SESSION_MANAGER.create_session(
+        mock_session,
+        "testuser",
+        "admin",
+    )
+
+    controlled_session_manager.clock[0] += 1800
+
+    assert auth.current_role() is None
+    assert mock_session == {}
+
+
+def test_valid_session_activity_refreshes_idle_timeout(
+    mock_session,
+    controlled_session_manager,
+):
+    """Authenticated activity should refresh the idle timeout."""
+
+    auth.SESSION_MANAGER.create_session(
+        mock_session,
+        "testuser",
+        "user",
+    )
+
+    controlled_session_manager.clock[0] += 600
+
+    assert auth.is_authenticated() is True
+    assert mock_session["last_activity_at"] == 1_000_600.0
+
+
+def test_absolute_timeout_is_enforced_through_authentication(
+    mock_session,
+    controlled_session_manager,
+):
+    """Repeated activity must not extend the absolute session lifetime."""
+
+    auth.SESSION_MANAGER.create_session(
+        mock_session,
+        "testuser",
+        "user",
+    )
+
+    for _ in range(28):
+        controlled_session_manager.clock[0] += 1500
+        assert auth.is_authenticated() is True
+
+    assert (
+        controlled_session_manager.clock[0]
+        - mock_session["authenticated_at"]
+        == 42000
+    )
+
+    controlled_session_manager.clock[0] += 1200
+
+    assert auth.is_authenticated() is False
+    assert mock_session == {}
