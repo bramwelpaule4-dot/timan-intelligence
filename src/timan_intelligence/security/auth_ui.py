@@ -42,12 +42,15 @@ def _log_email_delivery_failure(exc: Exception) -> None:
 
     smtp_code = getattr(cause, "smtp_code", None)
     error_number = getattr(cause, "errno", None)
+    failure_stage = getattr(exc, "stage", None) or "unknown"
 
     logger.error(
         "TimanStat verification email delivery failed. "
-        "error_type=%s cause_type=%s smtp_code=%s errno=%s",
+        "error_type=%s cause_type=%s failure_stage=%s "
+        "smtp_code=%s errno=%s",
         type(exc).__name__,
         type(cause).__name__ if cause else "None",
+        failure_stage,
         smtp_code,
         error_number,
     )
