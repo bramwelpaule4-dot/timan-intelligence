@@ -1,0 +1,358 @@
+"""Tests for the TimanStat Streamlit authentication interface."""
+
+from contextlib import nullcontext
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+import pytest
+
+from timan_intelligence.security import auth_ui
+
+
+class FakeStreamlit:
+    """Minimal Streamlit test double for authentication UI tests."""
+
+    def __init__(self, inputs=None, submitted=True, secrets=None):
+        self.inputs = list(inputs or [])
+        self.submitted = submitted
+        self.secrets = secrets or {}
+        self.session_state = {}
+        self.errors = []
+        self.warnings = []
+        self.successes = []
+        self.titles = []
+        self.captions = []
+        self.subheaders = []
+        self.writes = []
+
+    def subheader(self, value):
+        self.subheaders.append(value)
+
+    def write(self, value):
+        self.writes.append(value)
+
+    def form(self, *args, **kwargs):
+        return nullcontext()
+
+    def text_input(self, *args, **kwargs):
+        if self.inputs:
+            return self.inputs.pop(0)
+        return ""
+
+    def form_submit_button(self, *args, **kwargs):
+        return self.submitted
+
+    def error(self, value):
+        self.errors.append(value)
+
+    def warning(self, value):
+        self.warnings.append(value)
+
+    def success(self, value):
+        self.successes.append(value)
+
+    def title(self, value):
+        self.titles.append(value)
+
+    def caption(self, value):
+        self.captions.append(value)
+
+    def tabs(self, labels):
+        return (nullcontext(), nullcontext())
+
+
+@pytest.fixture
+def valid_registration_inputs():
+    return [
+        "Test User",
+        "testuser",
+        "testuser@example.com",
+        "SecureTestPassword123!",
+        "SecureTestPassword123!",
+    ]
+
+
+@pytest.fixture
+def fake_streamlit(monkeypatch):
+    fake = FakeStreamlit(
+        secrets={
+            "TIMAN_APP_BASE_URL": "https://timanstat.example.com"
+        }
+    )
+    monkeypatch.setattr(auth_ui, "st", fake)
+    return fake
+
+
+def test_application_base_url_uses_streamlit_secrets(
+    fake_streamlit,
+    monkeypatch,
+):
+    monkeypatch.delenv("TIMAN_APP_BASE_URL", raising=False)
+
+    assert auth_ui._application_base_url() == (
+        "https://timanstat.example.com"
+    )
+
+
+def test_application_base_url_falls_back_to_environment(
+    fake_streamlit,
+    monkeypatch,
+):
+    fake_streamlit.secrets = {}
+    monkeypatch.setenv(
+        "TIMAN_APP_BASE_URL",
+        "https://environment.example.com",
+    )
+
+    assert auth_ui._application_base_url() == (
+        "https://environment.example.com"
+    )
+
+
+def test_registration_does_not_submit_when_form_is_not_submitted(
+    fake_streamlit,
+    monkeypatch,
+):
+    fake_streamlit.submitted = False
+    register = Mock()
+    monkeypatch.setattr(auth_ui, "register_user", register)
+
+    auth_ui.render_registration()
+
+    register.assert_not_called()
+    assert fake_streamlit.errors == []
+
+
+def test_registration_rejects_missing_required_fields(
+    fake_streamlit,
+    monkeypatch,
+):
+    fake_streamlit.inputs = [
+        "",
+        "testuser",
+        "testuser@example.com",
+        "SecureTestPassword123!",
+        "SecureTestPassword123!",
+    ]
+    register = Mock()
+    monkeypatch.setattr(auth_ui, "register_user", register)
+
+    auth_ui.render_registration()
+
+    assert fake_streamlit.errors == [
+        "Complete all required fields."
+    ]
+    register.assert_not_called()
+
+
+def test_registration_rejects_password_mismatch(
+    fake_streamlit,
+    monkeypatch,
+    valid_registration_inputs,
+):
+    fake_streamlit.inputs = valid_registration_inputs.copy()
+    fake_streamlit.inputs[-1] = "DifferentPassword123!"
+    register = Mock()
+    monkeypatch.setattr(auth_ui, "register_user", register)
+
+    auth_ui.render_registration()
+
+    assert fake_streamlit.errors == [
+        "The passwords do not match."
+    ]
+    register.assert_not_called()
+
+
+def test_registration_rejects_short_password(
+    fake_streamlit,
+    monkeypatch,
+):
+    fake_streamlit.inputs = [
+        "Test User",
+        "testuser",
+        "testuser@example.com",
+        "short",
+        "short",
+    ]
+    register = Mock()
+    monkeypatch.setattr(auth_ui, "register_user", register)
+
+    auth_ui.render_registration()
+
+    assert fake_streamlit.errors == [
+        "Your password must contain at least 12 characters."
+    ]
+    register.assert_not_called()
+
+
+def test_registration_requires_application_base_url(
+    fake_streamlit,
+    monkeypatch,
+    valid_registration_inputs,
+):
+    fake_streamlit.inputs = valid_registration_inputs.copy()
+    fake_streamlit.secrets = {}
+    monkeypatch.delenv("TIMAN_APP_BASE_URL", raising=False)
+    register = Mock()
+    monkeypatch.setattr(auth_ui, "register_user", register)
+
+    auth_ui.render_registration()
+
+    assert len(fake_streamlit.errors) == 1
+    assert "application URL has not been configured" in (
+        fake_streamlit.errors[0]
+    )
+    register.assert_not_called()
+
+
+def test_registration_creates_account_and_sends_verification(
+    fake_streamlit,
+    monkeypatch,
+    valid_registration_inputs,
+):
+    fake_streamlit.inputs = valid_registration_inputs.copy()
+    register = Mock(return_value="user-123")
+    send_verification = Mock()
+
+    monkeypatch.setattr(auth_ui, "register_user", register)
+    monkeypatch.setattr(
+        auth_ui,
+        "send_email_verification",
+        send_verification,
+    )
+
+    auth_ui.render_registration()
+
+    register.assert_called_once_with(
+        username="testuser",
+        email="testuser@example.com",
+        full_name="Test User",
+        password="SecureTestPassword123!",
+    )
+    send_verification.assert_called_once_with(
+        user_id="user-123",
+        base_url="https://timanstat.example.com",
+    )
+    assert len(fake_streamlit.successes) == 1
+    assert "Check your email" in fake_streamlit.successes[0]
+
+
+def test_registration_displays_validation_error_from_service(
+    fake_streamlit,
+    monkeypatch,
+    valid_registration_inputs,
+):
+    fake_streamlit.inputs = valid_registration_inputs.copy()
+    register = Mock(side_effect=ValueError("Email is already registered."))
+    send_verification = Mock()
+
+    monkeypatch.setattr(auth_ui, "register_user", register)
+    monkeypatch.setattr(
+        auth_ui,
+        "send_email_verification",
+        send_verification,
+    )
+
+    auth_ui.render_registration()
+
+    assert fake_streamlit.errors == [
+        "Email is already registered."
+    ]
+    send_verification.assert_not_called()
+
+
+def test_registration_handles_email_delivery_failure(
+    fake_streamlit,
+    monkeypatch,
+    valid_registration_inputs,
+):
+    fake_streamlit.inputs = valid_registration_inputs.copy()
+    register = Mock(return_value="user-123")
+    send_verification = Mock(
+        side_effect=auth_ui.EmailDeliveryError("SMTP unavailable")
+    )
+
+    monkeypatch.setattr(auth_ui, "register_user", register)
+    monkeypatch.setattr(
+        auth_ui,
+        "send_email_verification",
+        send_verification,
+    )
+
+    auth_ui.render_registration()
+
+    register.assert_called_once()
+    assert len(fake_streamlit.warnings) == 1
+    assert "account has been created" in fake_streamlit.warnings[0]
+    assert fake_streamlit.successes == []
+
+
+def test_registration_handles_unexpected_email_error(
+    fake_streamlit,
+    monkeypatch,
+    valid_registration_inputs,
+):
+    fake_streamlit.inputs = valid_registration_inputs.copy()
+    register = Mock(return_value="user-123")
+    send_verification = Mock(
+        side_effect=RuntimeError("Unexpected provider error")
+    )
+
+    monkeypatch.setattr(auth_ui, "register_user", register)
+    monkeypatch.setattr(
+        auth_ui,
+        "send_email_verification",
+        send_verification,
+    )
+
+    auth_ui.render_registration()
+
+    assert len(fake_streamlit.warnings) == 1
+    assert "email delivery could not be completed" in (
+        fake_streamlit.warnings[0]
+    )
+
+
+def test_authentication_page_renders_login_and_registration_tabs(
+    fake_streamlit,
+    monkeypatch,
+):
+    render_login = Mock()
+    render_registration = Mock()
+
+    monkeypatch.setattr(auth_ui, "render_login", render_login)
+    monkeypatch.setattr(
+        auth_ui,
+        "render_registration",
+        render_registration,
+    )
+
+    auth_ui.render_authentication()
+
+    assert fake_streamlit.titles == ["Welcome to TimanStat"]
+    render_login.assert_called_once()
+    render_registration.assert_called_once()
+
+
+def test_registration_does_not_leak_unexpected_account_error(
+    fake_streamlit,
+    monkeypatch,
+    valid_registration_inputs,
+):
+    fake_streamlit.inputs = valid_registration_inputs.copy()
+    register = Mock(side_effect=RuntimeError("Database credentials leaked"))
+    send_verification = Mock()
+
+    monkeypatch.setattr(auth_ui, "register_user", register)
+    monkeypatch.setattr(
+        auth_ui,
+        "send_email_verification",
+        send_verification,
+    )
+
+    auth_ui.render_registration()
+
+    assert len(fake_streamlit.errors) == 1
+    assert "system error" in fake_streamlit.errors[0]
+    assert "Database credentials leaked" not in fake_streamlit.errors[0]
+    send_verification.assert_not_called()
