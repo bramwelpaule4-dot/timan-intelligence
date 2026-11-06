@@ -1,10 +1,8 @@
 
 """Provider-independent email delivery services for TimanStat.
 
-Supports:
-- Mock delivery for development and automated testing.
-- SMTP delivery for Gmail and other SMTP providers.
-- Environment-based configuration so credentials are never hardcoded.
+Supports mock delivery and authenticated SMTP providers.
+SMTP errors retain a safe failure-stage label for diagnostics.
 """
 
 from __future__ import annotations
@@ -23,6 +21,10 @@ DEFAULT_SMTP_PORT = 587
 
 class EmailDeliveryError(Exception):
     """Raised when an email cannot be delivered."""
+
+    def __init__(self, message: str, stage: str | None = None) -> None:
+        super().__init__(message)
+        self.stage = stage
 
 
 @dataclass(frozen=True)
@@ -89,7 +91,9 @@ class EmailDeliverySettings:
             raise ValueError("SMTP port must be between 1 and 65535.")
 
         if not 1 <= timeout <= 120:
-            raise ValueError("Email timeout must be between 1 and 120 seconds.")
+            raise ValueError(
+                "Email timeout must be between 1 and 120 seconds."
+            )
 
         use_starttls_value = env.get(
             "TIMAN_EMAIL_USE_STARTTLS",
@@ -158,10 +162,7 @@ def _validate_message(message: OutboundEmail) -> None:
 
 
 class MockEmailSender:
-    """In-memory email sender for development and automated tests.
-
-    Messages are retained only in memory and are not actually delivered.
-    """
+    """In-memory email sender for development and automated tests."""
 
     def __init__(self) -> None:
         self.sent_messages: list[OutboundEmail] = []
@@ -174,7 +175,7 @@ class MockEmailSender:
 
 
 class SMTPEmailSender:
-    """SMTP email sender compatible with Gmail and other SMTP providers."""
+    """SMTP email sender compatible with Gmail and other providers."""
 
     def __init__(self, settings: EmailDeliverySettings) -> None:
         self.settings = settings
@@ -211,6 +212,8 @@ class SMTPEmailSender:
         email_message["To"] = message.recipient.strip()
         email_message.set_content(message.body)
 
+        stage = "connect"
+
         try:
             with smtplib.SMTP(
                 self.settings.smtp_host,
@@ -218,27 +221,37 @@ class SMTPEmailSender:
                 timeout=self.settings.timeout,
             ) as server:
 
+                stage = "initial_ehlo"
                 server.ehlo()
 
                 if self.settings.use_starttls:
+                    stage = "starttls"
                     server.starttls()
+
+                    stage = "post_tls_ehlo"
                     server.ehlo()
 
+                stage = "authentication"
                 server.login(
                     self.settings.smtp_username,
                     self.settings.smtp_password,
                 )
 
+                stage = "send_message"
                 refused = server.send_message(email_message)
 
                 if refused:
                     raise EmailDeliveryError(
                         "The email provider refused delivery to the "
-                        "recipient."
+                        "recipient.",
+                        stage=stage,
                     )
+
+                stage = "disconnect"
 
         except EmailDeliveryError:
             raise
+
         except (
             smtplib.SMTPException,
             OSError,
@@ -247,18 +260,15 @@ class SMTPEmailSender:
         ) as exc:
             raise EmailDeliveryError(
                 "Email delivery failed. Check the provider configuration "
-                "and connection."
+                "and connection.",
+                stage=stage,
             ) from exc
 
 
 def build_email_sender(
     settings: EmailDeliverySettings | None = None,
 ) -> EmailSender:
-    """Construct the configured email sender.
-
-    Mock delivery is the safe default until real SMTP credentials
-    have been configured.
-    """
+    """Construct the configured email sender."""
 
     if settings is None:
         settings = EmailDeliverySettings.from_environment()
