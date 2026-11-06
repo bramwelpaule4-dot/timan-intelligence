@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 
 import streamlit as st
@@ -17,6 +18,9 @@ from timan_intelligence.identity.service import register_user
 from timan_intelligence.security.auth import render_login
 
 
+logger = logging.getLogger(__name__)
+
+
 def _application_base_url() -> str:
     """Read the trusted public application URL from configuration."""
 
@@ -28,6 +32,24 @@ def _application_base_url() -> str:
     return (
         configured_url
         or os.getenv("TIMAN_APP_BASE_URL", "").strip()
+    )
+
+
+def _log_email_delivery_failure(exc: Exception) -> None:
+    """Log safe diagnostic details without exposing credentials or tokens."""
+
+    cause = exc.__cause__ or exc.__context__
+
+    smtp_code = getattr(cause, "smtp_code", None)
+    error_number = getattr(cause, "errno", None)
+
+    logger.error(
+        "TimanStat verification email delivery failed. "
+        "error_type=%s cause_type=%s smtp_code=%s errno=%s",
+        type(exc).__name__,
+        type(cause).__name__ if cause else "None",
+        smtp_code,
+        error_number,
     )
 
 
@@ -116,7 +138,11 @@ def render_registration() -> None:
         st.error(str(exc))
         return
 
-    except Exception:
+    except Exception as exc:
+        logger.error(
+            "TimanStat account registration failed. error_type=%s",
+            type(exc).__name__,
+        )
         st.error(
             "The account could not be created due to a system error. "
             "Please try again later."
@@ -129,7 +155,8 @@ def render_registration() -> None:
             base_url=base_url,
         )
 
-    except (ValueError, EmailDeliveryError):
+    except (ValueError, EmailDeliveryError) as exc:
+        _log_email_delivery_failure(exc)
         st.warning(
             "Your account has been created, but the verification "
             "email could not be sent. Please contact the platform "
@@ -137,7 +164,8 @@ def render_registration() -> None:
         )
         return
 
-    except Exception:
+    except Exception as exc:
+        _log_email_delivery_failure(exc)
         st.warning(
             "Your account has been created, but email delivery "
             "could not be completed. Please contact the platform "
