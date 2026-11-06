@@ -3,24 +3,43 @@
 
 from __future__ import annotations
 
-from typing import Any
+import math
+import time
+from typing import Any, MutableMapping
 
 import streamlit as st
 
 from timan_intelligence.identity.service import (
     _verify_password as _verify_identity_password,
+    authenticate_user as authenticate_identity_user,
 )
 from timan_intelligence.security.rate_limit import LoginRateLimiter
 from timan_intelligence.security.session import SessionManager
+from timan_intelligence.security.totp_service import (
+    TOTPServiceError,
+    verify_totp_for_user,
+)
 
 
 VALID_ROLES = {"developer", "admin", "user"}
 
-# Five failed attempts within 15 minutes trigger a 15-minute lockout.
+# Five failed password attempts within 15 minutes trigger a 15-minute lockout.
 LOGIN_RATE_LIMITER = LoginRateLimiter()
 
 # Manage authenticated session creation, validation and expiry.
 SESSION_MANAGER = SessionManager()
+
+# A pending second-factor challenge expires after five minutes.
+PENDING_TOTP_TIMEOUT_SECONDS = 5 * 60
+
+PENDING_AUTHENTICATION_KEYS = (
+    "pending_authentication",
+    "pending_user_id",
+    "pending_username",
+    "pending_role",
+    "pending_authenticated_at",
+    "pending_expires_at",
+)
 
 # Permissions are deliberately explicit.
 ROLE_PERMISSIONS = {
@@ -46,86 +65,239 @@ ROLE_PERMISSIONS = {
 }
 
 
-def _get_auth_config() -> dict[str, Any]:
-    """Read authentication configuration from Streamlit secrets."""
-
-    try:
-        config = st.secrets.get("auth", {})
-        return dict(config)
-    except Exception:
-        return {}
-
-
-def _get_users() -> dict[str, Any]:
-    """Return configured user accounts."""
-
-    config = _get_auth_config()
-    users = config.get("users", {})
-
-    try:
-        return dict(users)
-    except (TypeError, ValueError):
-        return {}
-
-
 def _verify_password(password: str, stored_hash: str) -> bool:
-    """Verify a configured account password using the shared secure verifier."""
+    """Verify a password using the shared secure password verifier."""
 
     return _verify_identity_password(password, stored_hash)
 
 
-def _reject_login(username: str) -> bool:
-    """Record a failed login attempt and reject authentication."""
+def _reject_login(identifier: str) -> bool:
+    """Record a failed password attempt and reject authentication."""
 
-    LOGIN_RATE_LIMITER.record_failure(username)
+    LOGIN_RATE_LIMITER.record_failure(identifier)
     return False
 
 
+def _clear_pending_authentication(
+    session_state: MutableMapping[str, Any],
+) -> None:
+    """Remove all pending second-factor authentication information."""
+
+    for key in PENDING_AUTHENTICATION_KEYS:
+        session_state.pop(key, None)
+
+
+def _create_pending_authentication(
+    session_state: MutableMapping[str, Any],
+    user: dict[str, Any],
+) -> None:
+    """Create a short-lived pending authentication challenge."""
+
+    user_id = user.get("id")
+    username = user.get("username")
+    role = user.get("role")
+
+    if (
+        not isinstance(user_id, str)
+        or not user_id.strip()
+        or not isinstance(username, str)
+        or not username.strip()
+        or not isinstance(role, str)
+        or role not in VALID_ROLES
+    ):
+        raise ValueError("The authenticated account record is invalid.")
+
+    now = time.monotonic()
+
+    session_state["pending_authentication"] = True
+    session_state["pending_user_id"] = user_id.strip()
+    session_state["pending_username"] = username.strip().casefold()
+    session_state["pending_role"] = role
+    session_state["pending_authenticated_at"] = now
+    session_state["pending_expires_at"] = (
+        now + PENDING_TOTP_TIMEOUT_SECONDS
+    )
+
+
+def is_totp_pending() -> bool:
+    """Return whether a valid second-factor challenge is pending."""
+
+    session_state = st.session_state
+
+    if session_state.get("pending_authentication") is not True:
+        _clear_pending_authentication(session_state)
+        return False
+
+    username = session_state.get("pending_username")
+    user_id = session_state.get("pending_user_id")
+    role = session_state.get("pending_role")
+    authenticated_at = session_state.get("pending_authenticated_at")
+    expires_at = session_state.get("pending_expires_at")
+
+    timestamps_valid = all(
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        for value in (authenticated_at, expires_at)
+    )
+
+    if (
+        not isinstance(user_id, str)
+        or not user_id.strip()
+        or not isinstance(username, str)
+        or not username.strip()
+        or role not in VALID_ROLES
+        or not timestamps_valid
+    ):
+        _clear_pending_authentication(session_state)
+        return False
+
+    now = time.monotonic()
+
+    if (
+        authenticated_at > now
+        or expires_at <= now
+        or expires_at <= authenticated_at
+    ):
+        _clear_pending_authentication(session_state)
+        return False
+
+    # A pending challenge must never coexist with a full session.
+    SESSION_MANAGER.clear_session(session_state)
+
+    return True
+
+
 def authenticate_user(username: str, password: str) -> bool:
-    """Authenticate an active account with login rate limiting."""
+    """
+    Authenticate using the database-backed identity service.
 
-    if not isinstance(username, str):
+    Accounts without TOTP receive a full authenticated session after
+    successful password verification.
+
+    Accounts with TOTP receive only a pending second-factor challenge.
+    They are not authenticated until the authenticator code is verified.
+
+    Returns:
+        True only when a full authenticated session is established.
+        False for failed login attempts and pending TOTP challenges.
+    """
+
+    if not isinstance(username, str) or not isinstance(password, str):
         return False
 
-    username = username.strip().casefold()
+    identifier = username.strip().casefold()
 
-    if not username:
+    if not identifier or not password:
         return False
 
-    # Reject locked identifiers before performing password verification.
-    if LOGIN_RATE_LIMITER.is_locked(username):
+    # Never allow an existing authenticated session to survive a new
+    # password-login attempt.
+    SESSION_MANAGER.clear_session(st.session_state)
+    _clear_pending_authentication(st.session_state)
+
+    if LOGIN_RATE_LIMITER.is_locked(identifier):
         return False
-
-    users = _get_users()
-    account = users.get(username)
-
-    if not account:
-        return _reject_login(username)
 
     try:
-        account = dict(account)
+        user = authenticate_identity_user(identifier, password)
     except (TypeError, ValueError):
-        return _reject_login(username)
+        return _reject_login(identifier)
 
-    if not account.get("active", False):
-        return _reject_login(username)
+    if user is None:
+        return _reject_login(identifier)
 
-    role = str(account.get("role", "")).strip().casefold()
+    if not isinstance(user, dict):
+        return _reject_login(identifier)
+
+    role = str(user.get("role", "")).strip().casefold()
 
     if role not in VALID_ROLES:
-        return _reject_login(username)
+        return _reject_login(identifier)
 
-    stored_hash = str(account.get("password_hash", ""))
+    actual_username = user.get("username")
+    user_id = user.get("id")
 
-    if not _verify_password(password, stored_hash):
-        return _reject_login(username)
+    if (
+        not isinstance(actual_username, str)
+        or not actual_username.strip()
+        or not isinstance(user_id, str)
+        or not user_id.strip()
+    ):
+        return _reject_login(identifier)
 
-    # Successful password verification clears previous failure history.
-    LOGIN_RATE_LIMITER.record_success(username)
+    LOGIN_RATE_LIMITER.record_success(identifier)
 
-    # Establish a managed session with idle and absolute expiry timestamps.
+    # Password authentication succeeded. TOTP-enabled accounts must
+    # complete the second factor before receiving a full session.
+    if bool(user.get("totp_enabled")):
+        _create_pending_authentication(
+            st.session_state,
+            {
+                "id": user_id,
+                "username": actual_username,
+                "role": role,
+            },
+        )
+        return False
+
     SESSION_MANAGER.create_session(
         st.session_state,
+        actual_username,
+        role,
+    )
+
+    return True
+
+
+def verify_pending_totp(code: str) -> bool:
+    """
+    Verify the authenticator code for a pending login.
+
+    A successful verification promotes the pending challenge to a
+    fully authenticated session. Failed verification leaves the
+    challenge pending, subject to the TOTP service's rate limiter.
+    """
+
+    if not isinstance(code, str):
+        return False
+
+    if not is_totp_pending():
+        return False
+
+    session_state = st.session_state
+
+    user_id = session_state.get("pending_user_id")
+    username = session_state.get("pending_username")
+    role = session_state.get("pending_role")
+
+    if (
+        not isinstance(user_id, str)
+        or not isinstance(username, str)
+        or role not in VALID_ROLES
+    ):
+        _clear_pending_authentication(session_state)
+        return False
+
+    try:
+        verified = verify_totp_for_user(user_id, code.strip())
+    except TOTPServiceError:
+        # Fail closed. Do not create a session when verification cannot
+        # be completed reliably.
+        return False
+
+    if not verified:
+        return False
+
+    # Recheck the challenge before promoting it.
+    if not is_totp_pending():
+        return False
+
+    # Remove the pending state before creating the full session.
+    _clear_pending_authentication(session_state)
+
+    SESSION_MANAGER.create_session(
+        session_state,
         username,
         role,
     )
@@ -134,7 +306,11 @@ def authenticate_user(username: str, password: str) -> bool:
 
 
 def is_authenticated() -> bool:
-    """Validate the current session and enforce session expiry."""
+    """Validate the current full session and enforce session expiry."""
+
+    if is_totp_pending():
+        SESSION_MANAGER.clear_session(st.session_state)
+        return False
 
     return SESSION_MANAGER.is_valid(st.session_state)
 
@@ -182,19 +358,56 @@ def require_permission(permission: str) -> bool:
 
 
 def logout() -> None:
-    """Clear all authentication information from the current session."""
+    """Clear full and pending authentication information."""
 
     SESSION_MANAGER.clear_session(st.session_state)
+    _clear_pending_authentication(st.session_state)
 
 
 def render_login() -> None:
-    """Render the TimanStat login interface."""
+    """Render the TimanStat password and TOTP login interfaces."""
 
     st.title("TimanStat Sign In")
+
+    if is_authenticated():
+        st.success("You are already signed in.")
+        return
+
+    if is_totp_pending():
+        st.caption("Password accepted. Complete two-factor verification.")
+
+        st.info(
+            "Enter the six-digit code from your authenticator application."
+        )
+
+        with st.form("timanstat_totp_login_form"):
+            code = st.text_input(
+                "Authenticator code",
+                max_chars=6,
+                placeholder="000000",
+            )
+            submitted = st.form_submit_button("Verify and sign in")
+
+        if submitted:
+            if verify_pending_totp(code):
+                st.success("Authentication successful.")
+                st.rerun()
+            else:
+                st.error(
+                    "The authenticator code could not be verified. "
+                    "Check the code or sign in again if the challenge expired."
+                )
+
+        if st.button("Cancel sign in"):
+            logout()
+            st.rerun()
+
+        return
+
     st.caption("Sign in using your authorised account.")
 
     with st.form("timanstat_login_form"):
-        username = st.text_input("Username")
+        username = st.text_input("Username or email")
         password = st.text_input("Password", type="password")
         submitted = st.form_submit_button("Sign in")
 
@@ -202,5 +415,10 @@ def render_login() -> None:
         if authenticate_user(username, password):
             st.success("Authentication successful.")
             st.rerun()
+        elif is_totp_pending():
+            st.rerun()
         else:
-            st.error("Invalid username, password or inactive account.")
+            st.error(
+                "Invalid username, password or inactive account. "
+                "You may also be temporarily locked out after repeated failures."
+            )
