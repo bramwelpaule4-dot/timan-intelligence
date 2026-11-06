@@ -4,6 +4,10 @@ import pytest
 
 from timan_intelligence.database.initialise import initialise_database
 from timan_intelligence.database.connection import database_connection
+from timan_intelligence.identity.email_verification import (
+    create_email_verification_token,
+    verify_email_token,
+)
 from timan_intelligence.identity.service import (
     register_user,
     authenticate_user,
@@ -27,12 +31,35 @@ def test_database(tmp_path, monkeypatch):
     return database_file
 
 
+def register_test_user(
+    username="testuser",
+    email="testuser@example.com",
+    full_name="Test User",
+    password="SecureTestPassword123!",
+):
+    """Register a user and return the user ID."""
+
+    return register_user(
+        username=username,
+        email=email,
+        full_name=full_name,
+        password=password,
+    )
+
+
+def verify_test_user(user_id):
+    """Verify a registered user's email address."""
+
+    token = create_email_verification_token(user_id)
+
+    assert verify_email_token(token) is True
+
+
 def test_register_user_creates_individual_account(test_database):
-    user_id = register_user(
+    user_id = register_test_user(
         username="bramwel",
         email="bramwel@example.com",
         full_name="Bramwel Paule",
-        password="SecureTestPassword123!",
     )
 
     user = get_user_by_id(user_id)
@@ -43,17 +70,13 @@ def test_register_user_creates_individual_account(test_database):
     assert user["full_name"] == "Bramwel Paule"
     assert user["role"] == "user"
     assert bool(user["is_active"]) is True
+    assert bool(user["email_verified"]) is False
 
 
 def test_registration_does_not_store_plain_text_password(test_database):
     password = "SecureTestPassword123!"
 
-    user_id = register_user(
-        username="testuser",
-        email="testuser@example.com",
-        full_name="Test User",
-        password=password,
-    )
+    user_id = register_test_user(password=password)
 
     with database_connection() as connection:
         row = connection.execute(
@@ -66,13 +89,21 @@ def test_registration_does_not_store_plain_text_password(test_database):
     assert row["password_hash"].startswith("scrypt$")
 
 
-def test_user_can_login_with_username(test_database):
-    register_user(
-        username="testuser",
-        email="testuser@example.com",
-        full_name="Test User",
-        password="SecureTestPassword123!",
+def test_unverified_user_cannot_login(test_database):
+    register_test_user()
+
+    user = authenticate_user(
+        "testuser",
+        "SecureTestPassword123!",
     )
+
+    assert user is None
+
+
+def test_verified_user_can_login_with_username(test_database):
+    user_id = register_test_user()
+
+    verify_test_user(user_id)
 
     user = authenticate_user(
         "testuser",
@@ -84,13 +115,10 @@ def test_user_can_login_with_username(test_database):
     assert "password_hash" not in user
 
 
-def test_user_can_login_with_email(test_database):
-    register_user(
-        username="testuser",
-        email="testuser@example.com",
-        full_name="Test User",
-        password="SecureTestPassword123!",
-    )
+def test_verified_user_can_login_with_email(test_database):
+    user_id = register_test_user()
+
+    verify_test_user(user_id)
 
     user = authenticate_user(
         "testuser@example.com",
@@ -102,12 +130,9 @@ def test_user_can_login_with_email(test_database):
 
 
 def test_login_rejects_incorrect_password(test_database):
-    register_user(
-        username="testuser",
-        email="testuser@example.com",
-        full_name="Test User",
-        password="SecureTestPassword123!",
-    )
+    user_id = register_test_user()
+
+    verify_test_user(user_id)
 
     user = authenticate_user(
         "testuser",
@@ -128,55 +153,39 @@ def test_login_rejects_unknown_user(test_database):
 
 def test_registration_rejects_short_password(test_database):
     with pytest.raises(ValueError):
-        register_user(
-            username="testuser",
-            email="testuser@example.com",
-            full_name="Test User",
-            password="short",
-        )
+        register_test_user(password="short")
 
 
 def test_registration_rejects_duplicate_username(test_database):
-    register_user(
+    register_test_user(
         username="testuser",
         email="first@example.com",
-        full_name="First User",
-        password="SecureTestPassword123!",
     )
 
     with pytest.raises(ValueError):
-        register_user(
+        register_test_user(
             username="testuser",
             email="second@example.com",
-            full_name="Second User",
-            password="AnotherSecurePassword123!",
         )
 
 
 def test_registration_rejects_duplicate_email(test_database):
-    register_user(
+    register_test_user(
         username="firstuser",
         email="same@example.com",
-        full_name="First User",
-        password="SecureTestPassword123!",
     )
 
     with pytest.raises(ValueError):
-        register_user(
+        register_test_user(
             username="seconduser",
             email="same@example.com",
-            full_name="Second User",
-            password="AnotherSecurePassword123!",
         )
 
 
 def test_inactive_user_cannot_login(test_database):
-    user_id = register_user(
-        username="inactiveuser",
-        email="inactive@example.com",
-        full_name="Inactive User",
-        password="SecureTestPassword123!",
-    )
+    user_id = register_test_user()
+
+    verify_test_user(user_id)
 
     with database_connection() as connection:
         connection.execute(
@@ -185,7 +194,7 @@ def test_inactive_user_cannot_login(test_database):
         )
 
     user = authenticate_user(
-        "inactiveuser",
+        "testuser",
         "SecureTestPassword123!",
     )
 
