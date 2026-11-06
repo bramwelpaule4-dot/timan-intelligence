@@ -193,6 +193,118 @@ def test_begin_totp_enrolment_does_not_save_secret_when_uri_generation_fails(
     assert state[5] is None
 
 
+def test_confirm_totp_enrolment_rejects_expired_pending_enrolment(totp_user):
+    """An enrolment older than 15 minutes is rejected and cleared."""
+
+    enrolment = begin_totp_enrolment(totp_user["user_id"])
+
+    with database_connection() as connection:
+        connection.execute(
+            """
+            UPDATE users
+            SET totp_pending_created_at = datetime('now', '-16 minutes')
+            WHERE id = ?
+            """,
+            (totp_user["user_id"],),
+        )
+
+    code = generate_totp_code(
+        enrolment["secret"],
+        at_time=TEST_TIMESTAMP,
+    )
+
+    confirmed = confirm_totp_enrolment(
+        user_id=totp_user["user_id"],
+        code=code,
+        at_time=TEST_TIMESTAMP,
+    )
+
+    assert confirmed is False
+
+    state = _get_user_totp_state(totp_user["user_id"])
+
+    assert state[0] in (False, 0)
+    assert state[1] is None
+    assert state[2] is None
+    assert state[5] is None
+
+
+def test_confirm_totp_enrolment_accepts_pending_enrolment_within_ttl(
+    totp_user,
+):
+    """An enrolment still within the 15-minute window can be confirmed."""
+
+    enrolment = begin_totp_enrolment(totp_user["user_id"])
+
+    with database_connection() as connection:
+        connection.execute(
+            """
+            UPDATE users
+            SET totp_pending_created_at = datetime('now', '-14 minutes')
+            WHERE id = ?
+            """,
+            (totp_user["user_id"],),
+        )
+
+    code = generate_totp_code(
+        enrolment["secret"],
+        at_time=TEST_TIMESTAMP,
+    )
+
+    confirmed = confirm_totp_enrolment(
+        user_id=totp_user["user_id"],
+        code=code,
+        at_time=TEST_TIMESTAMP,
+    )
+
+    assert confirmed is True
+
+    state = _get_user_totp_state(totp_user["user_id"])
+
+    assert state[0] in (True, 1)
+    assert state[1] is not None
+    assert state[2] is None
+    assert state[3] is not None
+    assert state[4] is not None
+    assert state[5] is None
+
+
+def test_confirm_totp_enrolment_rejects_missing_pending_timestamp(totp_user):
+    """A pending secret without a creation timestamp cannot be confirmed."""
+
+    enrolment = begin_totp_enrolment(totp_user["user_id"])
+
+    with database_connection() as connection:
+        connection.execute(
+            """
+            UPDATE users
+            SET totp_pending_created_at = NULL
+            WHERE id = ?
+            """,
+            (totp_user["user_id"],),
+        )
+
+    code = generate_totp_code(
+        enrolment["secret"],
+        at_time=TEST_TIMESTAMP,
+    )
+
+    confirmed = confirm_totp_enrolment(
+        user_id=totp_user["user_id"],
+        code=code,
+        at_time=TEST_TIMESTAMP,
+    )
+
+    assert confirmed is False
+
+    state = _get_user_totp_state(totp_user["user_id"])
+
+    assert state[0] in (False, 0)
+    assert state[1] is None
+    assert state[2] is None
+    assert state[5] is None
+
+
 def test_confirm_totp_enrolment_rejects_unknown_user(totp_user):
     """A nonexistent account cannot complete enrolment."""
 
