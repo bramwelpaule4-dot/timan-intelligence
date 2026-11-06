@@ -195,6 +195,9 @@ def register_user(
     Public registration always creates a normal user account.
     Platform privileges cannot be selected during registration.
 
+    New accounts remain unverified until their email verification
+    token has been successfully confirmed.
+
     Returns:
         The newly created user ID.
     """
@@ -255,6 +258,8 @@ def authenticate_user(
     """
     Authenticate an individual user using username or email.
 
+    An account must be active and have a verified email address.
+
     Returns:
         A user record without the password hash, or None if
         authentication fails.
@@ -297,6 +302,9 @@ def authenticate_user(
             return None
 
         if not user["is_active"]:
+            return None
+
+        if not user["email_verified"]:
             return None
 
         if not _verify_password(password, user["password_hash"]):
