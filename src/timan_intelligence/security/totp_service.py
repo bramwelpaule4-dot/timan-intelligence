@@ -21,6 +21,9 @@ from timan_intelligence.security.totp_encryption import (
     decrypt_totp_secret,
     encrypt_totp_secret,
 )
+from timan_intelligence.security.totp_rate_limit import (
+    totp_attempt_limiter,
+)
 
 
 # An unconfirmed authenticator enrolment remains valid for 15 minutes.
@@ -248,15 +251,17 @@ def confirm_totp_enrolment(
     Pending enrolments older than the configured TTL are rejected
     and their pending secrets are cleared.
 
-    A successful confirmation promotes the encrypted pending secret
-    to the active secret, enables TOTP and records the accepted
-    counter to prevent immediate code replay.
+    Failed authenticator codes are rate-limited independently from
+    normal TOTP verification attempts.
 
     Returns:
         True if enrolment succeeds; otherwise False.
     """
 
     user_id = _validate_user_id(user_id)
+
+    if totp_attempt_limiter.is_locked(user_id, "enrolment"):
+        return False
 
     p = _placeholder()
 
@@ -306,6 +311,10 @@ def confirm_totp_enrolment(
             ) from exc
 
         if accepted_counter is None:
+            totp_attempt_limiter.record_failure(
+                user_id,
+                "enrolment",
+            )
             return False
 
         result = connection.execute(
@@ -333,7 +342,15 @@ def confirm_totp_enrolment(
             ),
         )
 
-        return result.rowcount == 1
+        if result.rowcount != 1:
+            return False
+
+        totp_attempt_limiter.record_success(
+            user_id,
+            "enrolment",
+        )
+
+        return True
 
 
 def verify_totp_for_user(
@@ -347,12 +364,18 @@ def verify_totp_for_user(
     The accepted counter is updated atomically. This prevents the
     same authenticator code from succeeding in concurrent requests.
 
+    Failed authenticator codes are rate-limited independently from
+    enrolment confirmation attempts.
+
     Returns:
         True if the code is valid and its counter is successfully
         recorded; otherwise False.
     """
 
     user_id = _validate_user_id(user_id)
+
+    if totp_attempt_limiter.is_locked(user_id, "verification"):
+        return False
 
     p = _placeholder()
 
@@ -388,6 +411,10 @@ def verify_totp_for_user(
             ) from exc
 
         if accepted_counter is None:
+            totp_attempt_limiter.record_failure(
+                user_id,
+                "verification",
+            )
             return False
 
         result = connection.execute(
@@ -413,4 +440,18 @@ def verify_totp_for_user(
             ),
         )
 
-        return result.rowcount == 1
+        if result.rowcount != 1:
+            # This also covers a concurrent request that has already
+            # accepted the same counter.
+            totp_attempt_limiter.record_failure(
+                user_id,
+                "verification",
+            )
+            return False
+
+        totp_attempt_limiter.record_success(
+            user_id,
+            "verification",
+        )
+
+        return True
