@@ -73,8 +73,12 @@ def begin_totp_enrolment(
     """
     Begin TOTP enrolment for an active user.
 
-    Generates a new secret, encrypts it, and stores it as a pending
-    enrolment secret.
+    Generates a new secret, creates its provisioning URI, encrypts
+    the secret, and stores it as a pending enrolment secret.
+
+    The provisioning URI is validated before any database write.
+    This prevents invalid issuer or account configuration from
+    leaving an unusable pending enrolment in the database.
 
     The plaintext secret and provisioning URI are returned to the
     caller for display to the user. They must not be stored in logs.
@@ -92,11 +96,10 @@ def begin_totp_enrolment(
 
     try:
         secret = generate_totp_secret()
-        encrypted_secret = encrypt_totp_secret(secret)
 
-    except (TOTPError, SecretEncryptionError) as exc:
+    except TOTPError as exc:
         raise TOTPServiceError(
-            "Unable to generate or protect the TOTP enrolment secret."
+            "Unable to generate the TOTP enrolment secret."
         ) from exc
 
     p = _placeholder()
@@ -114,7 +117,30 @@ def begin_totp_enrolment(
                 "Two-factor authentication is already enabled."
             )
 
-        connection.execute(
+        # Validate the provisioning URI before changing the database.
+        try:
+            provisioning_uri = build_totp_provisioning_uri(
+                secret=secret,
+                account_name=user["email"],
+                issuer=issuer,
+            )
+
+        except TOTPError as exc:
+            raise TOTPServiceError(
+                "Unable to create the authenticator provisioning URI."
+            ) from exc
+
+        # Encrypt the secret only after the provisioning configuration
+        # has been validated successfully.
+        try:
+            encrypted_secret = encrypt_totp_secret(secret)
+
+        except SecretEncryptionError as exc:
+            raise TOTPServiceError(
+                "Unable to protect the TOTP enrolment secret."
+            ) from exc
+
+        result = connection.execute(
             f"""
             UPDATE users
             SET
@@ -131,7 +157,12 @@ def begin_totp_enrolment(
             ),
         )
 
-        result = connection.execute(
+        if result.rowcount != 1:
+            raise TOTPServiceError(
+                "Unable to establish the pending TOTP enrolment."
+            )
+
+        stored = connection.execute(
             f"""
             SELECT totp_pending_secret_encrypted
             FROM users
@@ -141,24 +172,12 @@ def begin_totp_enrolment(
         ).fetchone()
 
         if (
-            result is None
-            or result["totp_pending_secret_encrypted"] != encrypted_secret
+            stored is None
+            or stored["totp_pending_secret_encrypted"] != encrypted_secret
         ):
             raise TOTPServiceError(
-                "Unable to establish the pending TOTP enrolment."
+                "Unable to verify the pending TOTP enrolment."
             )
-
-    try:
-        provisioning_uri = build_totp_provisioning_uri(
-            secret=secret,
-            account_name=user["email"],
-            issuer=issuer,
-        )
-
-    except TOTPError as exc:
-        raise TOTPServiceError(
-            "Unable to create the authenticator provisioning URI."
-        ) from exc
 
     return {
         "secret": secret,
