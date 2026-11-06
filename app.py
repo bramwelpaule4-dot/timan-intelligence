@@ -16,6 +16,10 @@ from timan_intelligence.config import (
 )
 from timan_intelligence.config.branding import PLATFORM_LABEL, SIDEBAR_FOOTER
 from timan_intelligence.monitoring.dashboard import render_project_status_dashboard
+from timan_intelligence.database.initialise import initialise_database
+from timan_intelligence.identity.email_verification import verify_email_token
+from timan_intelligence.security.auth import is_authenticated, logout
+from timan_intelligence.security.auth_ui import render_authentication
 
 
 # ============================================================
@@ -53,6 +57,52 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+
+# ============================================================
+# DATABASE INITIALISATION AND AUTHENTICATION GATE
+# ============================================================
+
+try:
+    initialise_database()
+except Exception:
+    st.error(
+        "TimanStat could not connect to its database. "
+        "Please try again later or contact the platform administrator."
+    )
+    st.stop()
+
+# Process one-time email verification links before showing sign-in.
+verification_token = st.query_params.get("verify_email")
+
+if verification_token is not None:
+    try:
+        verification_succeeded = verify_email_token(
+            verification_token
+        )
+    except Exception:
+        verification_succeeded = False
+
+    if verification_succeeded:
+        st.success(
+            "Your email address has been verified. "
+            "You can now sign in to TimanStat."
+        )
+    else:
+        st.error(
+            "This verification link is invalid, expired or has already "
+            "been used. Please request assistance from the platform "
+            "administrator."
+        )
+
+    if "verify_email" in st.query_params:
+        del st.query_params["verify_email"]
+
+# No statistical module or dataset functionality is rendered unless
+# the current session has passed the authentication checks.
+if not is_authenticated():
+    render_authentication()
+    st.stop()
 
 
 # ============================================================
@@ -118,7 +168,8 @@ MODULES = {
     ),
     "Settings & Governance": (
         "Under development",
-        "Authentication, tenant isolation and audit controls are not implemented.",
+        "Account authentication and role-based access are implemented; "
+        "tenant administration and audit controls remain under development.",
     ),
     "Project Status": (
         "Available — implementation monitoring",
@@ -416,6 +467,10 @@ page = st.sidebar.radio(
     key="navigation_page",
 )
 
+if st.sidebar.button("Sign out", use_container_width=True):
+    logout()
+    st.rerun()
+
 st.sidebar.divider()
 st.sidebar.caption(SIDEBAR_FOOTER)
 
@@ -497,7 +552,6 @@ if page == "Home":
         st.caption(
             f"Current dataset: {st.session_state.dataset_name}"
         )
-
     st.subheader("Module availability")
 
     status_rows = [
@@ -997,8 +1051,7 @@ elif page == "Descriptive Statistics":
             )
 
             st.caption(
-                "Interpretation guide: the mean is sensitive to extreme values; "
-                "the median is more resistant. Standard deviation describes "
+                "Interpretation guide: the mean is sensitive to extreme values; "                "the median is more resistant. Standard deviation describes "
                 "spread around the mean; IQR describes the middle 50% of values. "
                 "Skewness and excess kurtosis are exploratory distribution "
                 "indicators and should be interpreted with sample size and plots."
