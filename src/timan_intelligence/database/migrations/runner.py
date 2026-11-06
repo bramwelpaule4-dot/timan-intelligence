@@ -11,6 +11,7 @@ from timan_intelligence.database.connection import get_database_type
 from timan_intelligence.database.migrations.versions import (
     v0001_initial_schema,
     v0002_totp_enrolment,
+    v0003_email_verification,
 )
 
 
@@ -33,6 +34,11 @@ MIGRATIONS = (
         version=v0002_totp_enrolment.VERSION,
         name=v0002_totp_enrolment.NAME,
         upgrade=v0002_totp_enrolment.upgrade,
+    ),
+    Migration(
+        version=v0003_email_verification.VERSION,
+        name=v0003_email_verification.NAME,
+        upgrade=v0003_email_verification.upgrade,
     ),
 )
 
