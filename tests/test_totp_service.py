@@ -6,7 +6,10 @@ import pytest
 from timan_intelligence.database.connection import database_connection
 from timan_intelligence.database.initialise import initialise_database
 from timan_intelligence.identity.service import register_user
-from timan_intelligence.security.totp import generate_totp_code
+from timan_intelligence.security.totp import (
+    TOTPError,
+    generate_totp_code,
+)
 from timan_intelligence.security.totp_encryption import (
     generate_totp_encryption_key,
 )
@@ -159,6 +162,35 @@ def test_begin_totp_enrolment_rejects_already_enabled_user(totp_user):
         match="already enabled",
     ):
         begin_totp_enrolment(totp_user["user_id"])
+
+
+def test_begin_totp_enrolment_does_not_save_secret_when_uri_generation_fails(
+    totp_user,
+    monkeypatch,
+):
+    """A provisioning URI failure must not persist a pending secret."""
+
+    def fail_provisioning_uri(**kwargs):
+        raise TOTPError("Invalid provisioning configuration.")
+
+    monkeypatch.setattr(
+        "timan_intelligence.security.totp_service.build_totp_provisioning_uri",
+        fail_provisioning_uri,
+    )
+
+    with pytest.raises(
+        TOTPServiceError,
+        match="Unable to create the authenticator provisioning URI",
+    ):
+        begin_totp_enrolment(totp_user["user_id"])
+
+    state = _get_user_totp_state(totp_user["user_id"])
+
+    assert state is not None
+    assert state[0] in (False, 0)
+    assert state[1] is None
+    assert state[2] is None
+    assert state[5] is None
 
 
 def test_confirm_totp_enrolment_rejects_unknown_user(totp_user):
