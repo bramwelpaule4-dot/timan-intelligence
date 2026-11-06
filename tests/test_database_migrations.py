@@ -156,6 +156,7 @@ def test_fresh_database_applies_all_migrations(migration_database):
     assert [(row["version"], row["name"]) for row in history] == [
         (1, "initial_schema"),
         (2, "totp_enrolment"),
+        (3, "email_verification"),
     ]
 
     assert_totp_schema()
@@ -187,6 +188,7 @@ def test_fresh_database_applies_all_migrations(migration_database):
         "project_memberships",
         "audit_logs",
         "schema_migrations",
+        "email_verification_tokens",
     }
 
     assert expected_tables.issubset(tables)
@@ -210,6 +212,7 @@ def test_repeated_initialisation_does_not_repeat_migration(
     assert [(row["version"], row["name"]) for row in history] == [
         (1, "initial_schema"),
         (2, "totp_enrolment"),
+        (3, "email_verification"),
     ]
 
 
@@ -248,6 +251,7 @@ def test_existing_unversioned_database_is_baselined_and_upgraded(
     assert [(row["version"], row["name"]) for row in history] == [
         (1, "initial_schema"),
         (2, "totp_enrolment"),
+        (3, "email_verification"),
     ]
 
     assert_totp_schema()
