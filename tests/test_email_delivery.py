@@ -263,6 +263,9 @@ def test_smtp_sender_delivers_message_using_starttls(
     smtp_server = MagicMock()
     smtp_server.__enter__.return_value = smtp_server
 
+    # An empty refusal dictionary represents successful delivery.
+    smtp_server.send_message.return_value = {}
+
     monkeypatch.setattr(
         email_delivery.smtplib,
         "SMTP",
@@ -305,6 +308,9 @@ def test_smtp_sender_can_disable_starttls(
 
     smtp_server = MagicMock()
     smtp_server.__enter__.return_value = smtp_server
+
+    # An empty refusal dictionary represents successful delivery.
+    smtp_server.send_message.return_value = {}
 
     monkeypatch.setattr(
         email_delivery.smtplib,
