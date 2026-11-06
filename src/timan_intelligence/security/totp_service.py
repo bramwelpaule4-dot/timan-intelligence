@@ -23,6 +23,10 @@ from timan_intelligence.security.totp_encryption import (
 )
 
 
+# An unconfirmed authenticator enrolment remains valid for 15 minutes.
+PENDING_ENROLMENT_TTL_MINUTES = 15
+
+
 class TOTPServiceError(Exception):
     """Raised when a TOTP enrolment or service operation fails."""
 
@@ -57,13 +61,64 @@ def _get_active_user(connection, user_id: str) -> Any:
             totp_enabled,
             totp_secret_encrypted,
             totp_pending_secret_encrypted,
-            totp_last_accepted_counter
+            totp_last_accepted_counter,
+            totp_pending_created_at
         FROM users
         WHERE id = {p}
           AND is_active = TRUE
         """,
         (user_id,),
     ).fetchone()
+
+
+def _clear_expired_pending_enrolment(
+    connection,
+    user_id: str,
+) -> bool:
+    """
+    Clear a pending enrolment that has expired or has no timestamp.
+
+    The expiry comparison uses database time to avoid differences
+    between application-server clocks and database-server clocks.
+
+    Returns:
+        True if an expired or invalid pending enrolment was cleared.
+        False if no expired pending enrolment was found.
+    """
+
+    p = _placeholder()
+
+    if get_database_type() == "postgresql":
+        expiry_condition = f"""
+            totp_pending_created_at <
+            CURRENT_TIMESTAMP - INTERVAL '{PENDING_ENROLMENT_TTL_MINUTES} minutes'
+        """
+    else:
+        expiry_condition = f"""
+            totp_pending_created_at <
+            datetime('now', '-{PENDING_ENROLMENT_TTL_MINUTES} minutes')
+        """
+
+    result = connection.execute(
+        f"""
+        UPDATE users
+        SET
+            totp_pending_secret_encrypted = NULL,
+            totp_pending_created_at = NULL,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = {p}
+          AND is_active = TRUE
+          AND totp_enabled = FALSE
+          AND totp_pending_secret_encrypted IS NOT NULL
+          AND (
+              totp_pending_created_at IS NULL
+              OR {expiry_condition}
+          )
+        """,
+        (user_id,),
+    )
+
+    return result.rowcount == 1
 
 
 def begin_totp_enrolment(
@@ -117,7 +172,6 @@ def begin_totp_enrolment(
                 "Two-factor authentication is already enabled."
             )
 
-        # Validate the provisioning URI before changing the database.
         try:
             provisioning_uri = build_totp_provisioning_uri(
                 secret=secret,
@@ -130,8 +184,6 @@ def begin_totp_enrolment(
                 "Unable to create the authenticator provisioning URI."
             ) from exc
 
-        # Encrypt the secret only after the provisioning configuration
-        # has been validated successfully.
         try:
             encrypted_secret = encrypt_totp_secret(secret)
 
@@ -193,6 +245,9 @@ def confirm_totp_enrolment(
     """
     Confirm TOTP enrolment using a valid authenticator code.
 
+    Pending enrolments older than the configured TTL are rejected
+    and their pending secrets are cleared.
+
     A successful confirmation promotes the encrypted pending secret
     to the active secret, enables TOTP and records the accepted
     counter to prevent immediate code replay.
@@ -217,6 +272,23 @@ def confirm_totp_enrolment(
         encrypted_secret = user["totp_pending_secret_encrypted"]
 
         if not encrypted_secret:
+            return False
+
+        # Expired enrolments and pending secrets without a creation
+        # timestamp must never be accepted.
+        if _clear_expired_pending_enrolment(connection, user_id):
+            return False
+
+        # Reload the record after the expiry check so confirmation
+        # uses the current pending secret and not a stale snapshot.
+        user = _get_active_user(connection, user_id)
+
+        if user is None or bool(user["totp_enabled"]):
+            return False
+
+        encrypted_secret = user["totp_pending_secret_encrypted"]
+
+        if not encrypted_secret or user["totp_pending_created_at"] is None:
             return False
 
         try:
@@ -251,6 +323,7 @@ def confirm_totp_enrolment(
               AND is_active = TRUE
               AND totp_enabled = FALSE
               AND totp_pending_secret_encrypted = {p}
+              AND totp_pending_created_at IS NOT NULL
             """,
             (
                 encrypted_secret,
