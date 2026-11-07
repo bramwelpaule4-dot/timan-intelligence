@@ -21,6 +21,7 @@ from timan_intelligence.identity.email_verification import verify_email_token
 from timan_intelligence.security.auth import is_authenticated, logout
 from timan_intelligence.security.auth_ui import render_authentication
 from timan_intelligence.security.password_change_ui import render_password_change
+from timan_intelligence.security.totp_management_ui import render_totp_management
 
 
 # ============================================================
@@ -1531,10 +1532,11 @@ elif page == "Account & Security":
     st.title("Account & Security")
     st.caption(status_text(MODULES[page][0]))
     st.write(
-        "Manage your sign-in credentials. Additional account and security "
-        "controls will be added here as they become available."
+        "Manage your sign-in credentials and account protection settings."
     )
     render_password_change()
+    st.divider()
+    render_totp_management()
 
 
 # ============================================================
