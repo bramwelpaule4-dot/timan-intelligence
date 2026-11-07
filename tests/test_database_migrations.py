@@ -19,6 +19,7 @@ EXPECTED_MIGRATION_HISTORY = [
     (5, "session_version"),
     (6, "totp_recovery_codes"),
     (7, "distributed_rate_limits"),
+    (8, "rate_limit_timestamp_precision"),
 ]
 
 
@@ -346,6 +347,12 @@ def test_fresh_database_applies_all_migrations(migration_database):
         "key_hash", "window_started_at", "failure_count", "locked_until"
     }
     assert rate_limit_index is not None
+    with database_connection() as connection:
+        rate_limit_table = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' "
+            "AND name = 'rate_limit_states'"
+        ).fetchone()
+    assert "DOUBLE PRECISION" in rate_limit_table["sql"].upper()
 
     with database_connection() as connection:
         tables = {
