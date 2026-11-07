@@ -377,6 +377,7 @@ def test_fresh_database_applies_all_migrations(migration_database):
         "email_verification_tokens",
         "password_reset_tokens",
         "totp_recovery_codes",
+        "rate_limit_states",
     }
 
     assert expected_tables.issubset(tables)
