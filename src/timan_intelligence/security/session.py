@@ -127,6 +127,18 @@ class SessionManager:
         )
         self.require_versioned_sessions = require_versioned_sessions
 
+    def get_current_session_version(self, user_id: str) -> int | None:
+        """Load the current version for an active account.
+
+        Returning None or raising an exception must be treated as a
+        failed account-state check by callers.
+        """
+
+        if not isinstance(user_id, str) or not user_id.strip():
+            return None
+
+        return self._session_version_loader(user_id.strip())
+
     def create_session(
         self,
         session_state: MutableMapping,
@@ -134,6 +146,7 @@ class SessionManager:
         role: str,
         *,
         user_id: str | None = None,
+        expected_session_version: int | None = None,
     ) -> None:
         """Create a new authenticated session."""
 
@@ -164,6 +177,24 @@ class SessionManager:
                 raise ValueError(
                     "The account session version is invalid."
                 )
+
+            if (
+                expected_session_version is not None
+                and (
+                    isinstance(expected_session_version, bool)
+                    or not isinstance(expected_session_version, int)
+                    or expected_session_version < 0
+                    or session_version != expected_session_version
+                )
+            ):
+                raise ValueError(
+                    "The account security state changed during authentication."
+                )
+
+        elif expected_session_version is not None:
+            raise ValueError(
+                "An account ID is required to verify the expected session version."
+            )
 
         else:
             if self.require_versioned_sessions:
