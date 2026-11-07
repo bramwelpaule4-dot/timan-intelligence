@@ -1,15 +1,16 @@
-
 """Streamlit authentication interface for TimanStat."""
 
 from __future__ import annotations
 
 import logging
 import os
+from urllib.parse import urlsplit
 
 import streamlit as st
 
 from timan_intelligence.identity.email_delivery import (
     EmailDeliveryError,
+    MockEmailSender,
 )
 from timan_intelligence.identity.email_notifications import (
     send_email_verification,
@@ -21,18 +22,94 @@ from timan_intelligence.security.auth import render_login
 logger = logging.getLogger(__name__)
 
 
+def _configuration_value(name: str) -> str:
+    """Read a configuration value from Streamlit Secrets or environment."""
+
+    try:
+        value = st.secrets.get(name, "")
+    except Exception:
+        value = ""
+
+    if value in (None, ""):
+        value = os.getenv(name, "")
+
+    return str(value).strip()
+
+
 def _application_base_url() -> str:
     """Read the trusted public application URL from configuration."""
 
-    try:
-        configured_url = st.secrets.get("TIMAN_APP_BASE_URL", "")
-    except Exception:
-        configured_url = ""
+    return _configuration_value("TIMAN_APP_BASE_URL")
 
-    return (
-        configured_url
-        or os.getenv("TIMAN_APP_BASE_URL", "").strip()
+
+def _development_email_sender(
+    base_url: str,
+) -> MockEmailSender | None:
+    """
+    Construct a mock email sender only for an authorised development host.
+
+    Production and other environments retain their configured email
+    delivery provider.
+    """
+
+    environment = _configuration_value(
+        "TIMAN_ENVIRONMENT"
+    ).lower()
+
+    simulator_enabled = _configuration_value(
+        "TIMAN_DEV_EMAIL_SIMULATOR"
+    ).lower()
+
+    if environment != "development" or simulator_enabled != "true":
+        return None
+
+    try:
+        hostname = urlsplit(base_url).hostname
+    except ValueError as exc:
+        raise ValueError(
+            "The development application URL is invalid."
+        ) from exc
+
+    if not hostname:
+        raise ValueError(
+            "The development application URL has no valid hostname."
+        )
+
+    allowed_hosts = {
+        host.strip().lower()
+        for host in _configuration_value(
+            "TIMAN_DEV_ALLOWED_HOSTS"
+        ).split(",")
+        if host.strip()
+    }
+
+    allowed_hosts.update(
+        {
+            "localhost",
+            "127.0.0.1",
+            "::1",
+        }
     )
+
+    if hostname.lower() not in allowed_hosts:
+        raise ValueError(
+            "The development email simulator is not authorised "
+            "for this application hostname."
+        )
+
+    return MockEmailSender()
+
+
+def _extract_verification_url(body: str) -> str | None:
+    """Extract the generated verification URL from a mock email."""
+
+    for line in body.splitlines():
+        candidate = line.strip()
+
+        if "verify_email=" in candidate:
+            return candidate
+
+    return None
 
 
 def _log_email_delivery_failure(exc: Exception) -> None:
@@ -153,27 +230,82 @@ def render_registration() -> None:
         return
 
     try:
+        development_sender = _development_email_sender(
+            base_url
+        )
+
         send_email_verification(
             user_id=user_id,
             base_url=base_url,
+            sender=development_sender,
         )
 
     except (ValueError, EmailDeliveryError) as exc:
         _log_email_delivery_failure(exc)
         st.warning(
             "Your account has been created, but the verification "
-            "email could not be sent. Please contact the platform "
-            "administrator for assistance."
+            "process could not be completed. Please contact the "
+            "platform administrator for assistance."
         )
         return
 
     except Exception as exc:
         _log_email_delivery_failure(exc)
         st.warning(
-            "Your account has been created, but email delivery "
-            "could not be completed. Please contact the platform "
-            "administrator."
+            "Your account has been created, but the verification "
+            "process could not be completed. Please contact the "
+            "platform administrator."
         )
+        return
+
+    if development_sender is not None:
+        if not development_sender.sent_messages:
+            logger.error(
+                "Development email simulator produced no message."
+            )
+            st.warning(
+                "Your account was created, but the development "
+                "verification message could not be retrieved."
+            )
+            return
+
+        verification_message = (
+            development_sender.sent_messages[-1]
+        )
+
+        verification_url = _extract_verification_url(
+            verification_message.body
+        )
+
+        if verification_url is None:
+            logger.error(
+                "Development verification URL was not found "
+                "in the generated mock email."
+            )
+            st.warning(
+                "Your account was created, but the development "
+                "verification link could not be retrieved."
+            )
+            return
+
+        st.success(
+            "Your test account has been created successfully."
+        )
+
+        st.warning(
+            "Development mode: this is a test verification link. "
+            "It is not an email sent to your inbox."
+        )
+
+        st.markdown(
+            f"[Open development verification link]({verification_url})"
+        )
+
+        st.caption(
+            "This development-only link uses the same verification "
+            "token service as normal email verification."
+        )
+
         return
 
     st.success(
