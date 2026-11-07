@@ -174,6 +174,83 @@ class DatabaseRateLimiter:
             and float(row["locked_until"]) > now
         )
 
+
+    def consume_attempt(self, identifier: str) -> bool:
+        """Atomically allow at most the configured attempts in a time window.
+
+        Unlike failure counting, this records every request. It is intended
+        for outbound email and other request-throttling workflows.
+        """
+        key_hash = self._key_hash(identifier)
+        now = float(self._clock())
+        cutoff = now - self.window_seconds
+        lockout_until = now + self.lockout_seconds
+        p = _placeholder()
+
+        with database_connection() as connection:
+            result = connection.execute(
+                f"""
+                INSERT INTO rate_limit_states (
+                    key_hash, window_started_at, failure_count, locked_until
+                )
+                VALUES (
+                    {p}, {p}, 1,
+                    CASE WHEN {p} = 1 THEN {p} ELSE NULL END
+                )
+                ON CONFLICT (key_hash) DO UPDATE SET
+                    window_started_at = CASE
+                        WHEN rate_limit_states.window_started_at <= {p}
+                          OR (
+                              rate_limit_states.locked_until IS NOT NULL
+                              AND rate_limit_states.locked_until <= {p}
+                          )
+                            THEN {p}
+                        ELSE rate_limit_states.window_started_at
+                    END,
+                    failure_count = CASE
+                        WHEN rate_limit_states.window_started_at <= {p}
+                          OR (
+                              rate_limit_states.locked_until IS NOT NULL
+                              AND rate_limit_states.locked_until <= {p}
+                          )
+                            THEN 1
+                        ELSE rate_limit_states.failure_count + 1
+                    END,
+                    locked_until = CASE
+                        WHEN rate_limit_states.window_started_at <= {p}
+                          OR (
+                              rate_limit_states.locked_until IS NOT NULL
+                              AND rate_limit_states.locked_until <= {p}
+                          )
+                            THEN CASE WHEN {p} = 1 THEN {p} ELSE NULL END
+                        WHEN rate_limit_states.failure_count + 1 >= {p}
+                            THEN {p}
+                        ELSE rate_limit_states.locked_until
+                    END
+                WHERE (
+                    rate_limit_states.locked_until IS NULL
+                    OR rate_limit_states.locked_until <= {p}
+                )
+                  AND (
+                    rate_limit_states.window_started_at <= {p}
+                    OR rate_limit_states.failure_count < {p}
+                    OR (
+                        rate_limit_states.locked_until IS NOT NULL
+                        AND rate_limit_states.locked_until <= {p}
+                    )
+                )
+                """,
+                (
+                    key_hash, now, self.max_failed_attempts, lockout_until,
+                    cutoff, now, now,
+                    cutoff, now, now,
+                    cutoff, now, self.max_failed_attempts, lockout_until,
+                    now, cutoff, self.max_failed_attempts, now,
+                ),
+            )
+
+        return result.rowcount == 1
+
     def record_success(self, identifier: str) -> None:
         """Clear the failure history for an identifier."""
         key_hash = self._key_hash(identifier)
