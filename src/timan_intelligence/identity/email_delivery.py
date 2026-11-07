@@ -11,6 +11,8 @@ import os
 import re
 import smtplib
 from dataclasses import dataclass
+
+import streamlit as st
 from email.message import EmailMessage as MIMEEmailMessage
 from typing import Protocol
 
@@ -55,9 +57,42 @@ class EmailDeliverySettings:
         cls,
         environ: dict[str, str] | None = None,
     ) -> "EmailDeliverySettings":
-        """Load email settings from environment variables."""
+        """Load settings from Streamlit Secrets and environment variables.
 
-        env = os.environ if environ is None else environ
+        Explicit environment variables take precedence over Streamlit Secrets.
+        The optional environ argument remains isolated for deterministic tests.
+        """
+
+        if environ is None:
+            env: dict[str, str] = {}
+
+            # Streamlit Cloud stores deployment secrets in st.secrets;
+            # they are not automatically exported as OS environment variables.
+            try:
+                secrets = st.secrets
+                for key in (
+                    "TIMAN_EMAIL_PROVIDER",
+                    "TIMAN_EMAIL_SENDER",
+                    "TIMAN_EMAIL_SENDER_NAME",
+                    "TIMAN_EMAIL_SMTP_HOST",
+                    "TIMAN_EMAIL_SMTP_PORT",
+                    "TIMAN_EMAIL_SMTP_USERNAME",
+                    "TIMAN_EMAIL_SMTP_PASSWORD",
+                    "TIMAN_EMAIL_USE_STARTTLS",
+                    "TIMAN_EMAIL_TIMEOUT",
+                ):
+                    value = secrets.get(key, "")
+                    if value not in (None, ""):
+                        env[key] = str(value)
+            except Exception:
+                # Local environments without configured Streamlit Secrets
+                # continue to use environment variables and safe defaults.
+                pass
+
+            # Explicit process environment settings override Streamlit Secrets.
+            env.update(os.environ)
+        else:
+            env = environ
 
         provider = env.get(
             "TIMAN_EMAIL_PROVIDER",
