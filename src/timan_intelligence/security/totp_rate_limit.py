@@ -8,7 +8,7 @@ from timan_intelligence.security.rate_limit import LoginRateLimiter
 
 
 # TOTP uses a separate limiter from password login attempts.
-# Enrolment confirmation and normal verification use separate keys.
+# Enrolment, verification, and recovery use separate keys.
 TOTP_MAX_FAILED_ATTEMPTS = 5
 TOTP_ATTEMPT_WINDOW_SECONDS = 15 * 60
 TOTP_LOCKOUT_SECONDS = 15 * 60
