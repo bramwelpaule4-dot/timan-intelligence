@@ -182,6 +182,7 @@ def regenerate_recovery_codes(
     user_id: str,
     current_password: str,
     authenticator_code: str,
+    at_time: float | None = None,
 ) -> list[str] | None:
     """Regenerate codes after verifying the password and a fresh TOTP code."""
 
@@ -218,7 +219,11 @@ def regenerate_recovery_codes(
     if compact_code is not None:
         verified = consume_recovery_code(user_id, authenticator_code)
     else:
-        verified = verify_totp_for_user(user_id, authenticator_code.strip())
+        verified = verify_totp_for_user(
+            user_id,
+            authenticator_code.strip(),
+            at_time=at_time,
+        )
 
     if not verified:
         return None
