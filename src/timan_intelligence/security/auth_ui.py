@@ -435,8 +435,23 @@ def render_resend_verification() -> None:
     )
 
 
+AUTHENTICATION_VIEW_KEY = "timanstat_authentication_view"
+AUTHENTICATION_VIEWS = {
+    "sign_in",
+    "password_recovery",
+    "email_verification",
+}
+
+
+def _set_authentication_view(view: str) -> None:
+    """Switch the public authentication interface to one focused view."""
+
+    if view in AUTHENTICATION_VIEWS:
+        st.session_state[AUTHENTICATION_VIEW_KEY] = view
+
+
 def render_authentication() -> None:
-    """Render the TimanStat sign-in and registration interface."""
+    """Render a focused, ChatGPT-inspired sign-in and registration interface."""
 
     st.title("Welcome to TimanStat")
 
@@ -460,16 +475,62 @@ def render_authentication() -> None:
     )
 
     with login_tab:
-        render_login()
-        render_resend_verification()
-
-        # Import locally to avoid a circular module import:
-        # password_reset_ui reuses helpers from this module.
-        from timan_intelligence.security.password_reset_ui import (
-            render_password_recovery,
+        current_view = st.session_state.get(
+            AUTHENTICATION_VIEW_KEY,
+            "sign_in",
         )
 
-        render_password_recovery()
+        if current_view not in AUTHENTICATION_VIEWS:
+            current_view = "sign_in"
+            st.session_state[AUTHENTICATION_VIEW_KEY] = current_view
+
+        if current_view == "sign_in":
+            render_login()
+
+            # Keep secondary actions out of the way during an MFA challenge.
+            if st.session_state.get("pending_authentication") is not True:
+                st.button(
+                    "Forgot password?",
+                    key="timanstat_open_password_recovery",
+                    on_click=_set_authentication_view,
+                    args=("password_recovery",),
+                )
+                st.button(
+                    "Resend verification email",
+                    key="timanstat_open_email_verification",
+                    on_click=_set_authentication_view,
+                    args=("email_verification",),
+                )
+
+        elif current_view == "password_recovery":
+            st.subheader("Password recovery")
+
+            # Import locally to avoid a circular module import:
+            # password_reset_ui reuses helpers from this module.
+            from timan_intelligence.security.password_reset_ui import (
+                render_password_recovery,
+            )
+
+            render_password_recovery()
+
+            st.button(
+                "Back to sign in",
+                key="timanstat_back_from_password_recovery",
+                on_click=_set_authentication_view,
+                args=("sign_in",),
+            )
+
+        elif current_view == "email_verification":
+            st.subheader("Email verification")
+
+            render_resend_verification()
+
+            st.button(
+                "Back to sign in",
+                key="timanstat_back_from_email_verification",
+                on_click=_set_authentication_view,
+                args=("sign_in",),
+            )
 
     with register_tab:
         render_registration()
