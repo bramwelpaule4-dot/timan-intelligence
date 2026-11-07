@@ -409,3 +409,61 @@ def test_smtp_sender_rejects_invalid_message(
 
     with pytest.raises(ValueError):
         sender.send(invalid_message)
+
+
+
+def test_streamlit_secrets_load_smtp_configuration(monkeypatch):
+    """Load SMTP settings from Streamlit Cloud Secrets."""
+
+    secrets = {
+        "TIMAN_EMAIL_PROVIDER": "smtp",
+        "TIMAN_EMAIL_SENDER": "timananalytics@gmail.com",
+        "TIMAN_EMAIL_SENDER_NAME": "TimanStat",
+        "TIMAN_EMAIL_SMTP_HOST": "smtp.gmail.com",
+        "TIMAN_EMAIL_SMTP_PORT": 587,
+        "TIMAN_EMAIL_SMTP_USERNAME": "timananalytics@gmail.com",
+        "TIMAN_EMAIL_SMTP_PASSWORD": "test-secret-password",
+        "TIMAN_EMAIL_USE_STARTTLS": True,
+        "TIMAN_EMAIL_TIMEOUT": 25,
+    }
+
+    monkeypatch.setattr(email_delivery.st, "secrets", secrets, raising=False)
+    monkeypatch.setattr(email_delivery.os, "environ", {})
+
+    settings = EmailDeliverySettings.from_environment()
+
+    assert settings.provider == "smtp"
+    assert settings.sender_email == "timananalytics@gmail.com"
+    assert settings.smtp_host == "smtp.gmail.com"
+    assert settings.smtp_port == 587
+    assert settings.smtp_username == "timananalytics@gmail.com"
+    assert settings.smtp_password == "test-secret-password"
+    assert settings.use_starttls is True
+    assert settings.timeout == 25
+
+
+def test_environment_overrides_streamlit_secret_values(monkeypatch):
+    """Process environment values take precedence over Streamlit Secrets."""
+
+    monkeypatch.setattr(
+        email_delivery.st,
+        "secrets",
+        {
+            "TIMAN_EMAIL_PROVIDER": "smtp",
+            "TIMAN_EMAIL_SENDER": "secrets@example.com",
+        },
+        raising=False,
+    )
+    monkeypatch.setattr(
+        email_delivery.os,
+        "environ",
+        {
+            "TIMAN_EMAIL_PROVIDER": "mock",
+            "TIMAN_EMAIL_SENDER": "environment@example.com",
+        },
+    )
+
+    settings = EmailDeliverySettings.from_environment()
+
+    assert settings.provider == "mock"
+    assert settings.sender_email == "environment@example.com"
