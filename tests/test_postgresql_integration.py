@@ -1,4 +1,4 @@
-
+ 
 """PostgreSQL integration tests for TimanStat."""
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ EXPECTED_MIGRATION_HISTORY = [
     (6, "totp_recovery_codes"),
     (7, "distributed_rate_limits"),
     (8, "rate_limit_timestamp_precision"),
+    (9, "subscriptions"),
 ]
 
 
@@ -176,6 +177,7 @@ def test_postgresql_schema_contains_required_tables(postgres_database):
         "password_reset_tokens",
         "totp_recovery_codes",
         "rate_limit_states",
+        "subscriptions",
     }
 
     with database_connection() as connection:
@@ -650,7 +652,6 @@ def test_postgresql_transaction_rolls_back_all_changes_on_failure(
     assert result is None
 
 
-
 def test_postgresql_rate_limiter_shares_state_between_instances(
     postgres_database,
 ):
@@ -691,6 +692,7 @@ def test_postgresql_rate_limiter_shares_state_between_instances(
     assert failure_limiter.record_failure("failed-login-user") is True
     assert first.is_locked("worker-test@example.com") is True
     assert failure_limiter.is_locked("failed-login-user") is True
+
 
 def test_postgresql_request_throttle_is_atomic_under_concurrency(
     postgres_database,
@@ -801,4 +803,3 @@ def test_postgresql_failed_login_counter_is_atomic_under_concurrency(
     assert row["locked_until"] is not None
     assert float(row["locked_until"]) > time.time()
     assert any(results)
-
