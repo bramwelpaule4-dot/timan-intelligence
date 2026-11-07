@@ -234,14 +234,14 @@ def assert_session_version_schema():
             SELECT
                 name,
                 type,
-                notnull,
+                "notnull" AS is_not_null,
                 dflt_value
             FROM pragma_table_info('users')
             WHERE name = 'session_version'
             """
         ).fetchone()
 
-        check_user = connection.execute(
+        connection.execute(
             """
             INSERT INTO users (
                 id,
@@ -272,7 +272,7 @@ def assert_session_version_schema():
 
     assert column is not None
     assert column["type"].upper() == "INTEGER"
-    assert column["notnull"] == 1
+    assert column["is_not_null"] == 1
     assert str(column["dflt_value"]) == "0"
     assert user is not None
     assert user["session_version"] == 0
