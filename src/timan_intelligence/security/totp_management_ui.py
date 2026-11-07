@@ -138,7 +138,7 @@ def render_totp_management() -> None:
                 "Save these codes now. They are displayed only once; "
                 "all previous recovery codes have been invalidated."
             )
-            st.code("\\n".join(new_codes))
+            st.code("\n".join(new_codes))
             logout()
             st.info(
                 "All active sessions have been signed out. "
@@ -344,7 +344,7 @@ def render_totp_management() -> None:
             "Save these recovery codes in a secure location. Each code "
             "can be used once, and they will not be displayed again."
         )
-        st.code("\\n".join(recovery_codes))
+        st.code("\n".join(recovery_codes))
         logout()
         st.info(
             "All active sessions have been signed out. Sign in again; "
