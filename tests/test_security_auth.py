@@ -473,6 +473,77 @@ def test_pending_totp_authentication_can_be_promoted(
     assert auth.is_authenticated() is True
 
 
+def test_pending_challenge_is_invalidated_when_account_version_changes(
+    monkeypatch,
+    mock_session,
+    valid_account,
+    controlled_session_manager,
+):
+    """A security-state change must invalidate an outstanding MFA challenge."""
+
+    account = dict(valid_account)
+    account["totp_enabled"] = True
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        lambda identifier, password: account,
+    )
+    verification_calls = []
+    monkeypatch.setattr(
+        auth,
+        "verify_totp_for_user",
+        lambda user_id, code: verification_calls.append((user_id, code)) or True,
+    )
+
+    assert auth.authenticate_user("testuser", VALID_PASSWORD) is False
+    assert mock_session["pending_session_version"] == 0
+
+    controlled_session_manager.manager._session_version_loader = (
+        lambda user_id: 1
+    )
+
+    assert auth.is_totp_pending() is False
+    assert auth.verify_pending_totp("123456") is False
+    assert verification_calls == []
+    assert mock_session == {}
+
+
+def test_mfa_promotion_rejects_version_change_during_session_creation(
+    monkeypatch,
+    mock_session,
+    valid_account,
+    controlled_session_manager,
+):
+    """A version change at promotion must not establish a fresh session."""
+
+    account = dict(valid_account)
+    account["totp_enabled"] = True
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        lambda identifier, password: account,
+    )
+    monkeypatch.setattr(
+        auth,
+        "verify_totp_for_user",
+        lambda user_id, code: True,
+    )
+
+    manager = controlled_session_manager.manager
+    original_create_session = manager.create_session
+
+    def change_version_then_create(*args, **kwargs):
+        manager._session_version_loader = lambda user_id: 1
+        return original_create_session(*args, **kwargs)
+
+    monkeypatch.setattr(manager, "create_session", change_version_then_create)
+
+    assert auth.authenticate_user("testuser", VALID_PASSWORD) is False
+    assert auth.verify_pending_totp("123456") is False
+    assert "authenticated" not in mock_session
+    assert "pending_authentication" not in mock_session
+
+
 def test_invalid_totp_does_not_create_authenticated_session(
     monkeypatch,
     mock_session,
@@ -599,6 +670,7 @@ def test_logout_clears_full_and_pending_authentication(mock_session):
             "pending_user_id": "test-user-id",
             "pending_username": "testuser",
             "pending_role": "user",
+            "pending_session_version": 0,
             "pending_authenticated_at": time.monotonic(),
             "pending_expires_at": time.monotonic() + 300,
             "unrelated_setting": "preserve",
@@ -619,6 +691,7 @@ def test_logout_clears_full_and_pending_authentication(mock_session):
         "pending_user_id",
         "pending_username",
         "pending_role",
+        "pending_session_version",
         "pending_authenticated_at",
         "pending_expires_at",
     ):
