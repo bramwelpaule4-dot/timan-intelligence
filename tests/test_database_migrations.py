@@ -18,6 +18,7 @@ EXPECTED_MIGRATION_HISTORY = [
     (4, "password_reset"),
     (5, "session_version"),
     (6, "totp_recovery_codes"),
+    (7, "distributed_rate_limits"),
 ]
 
 
@@ -331,6 +332,20 @@ def test_fresh_database_applies_all_migrations(migration_database):
     assert_password_reset_schema()
     assert_session_version_schema()
     assert_totp_recovery_codes_schema()
+    with database_connection() as connection:
+        rate_limit_columns = {
+            row["name"] for row in connection.execute(
+                "PRAGMA table_info('rate_limit_states')"
+            ).fetchall()
+        }
+        rate_limit_index = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'index' "
+            "AND name = 'idx_rate_limit_locked_until'"
+        ).fetchone()
+    assert rate_limit_columns == {
+        "key_hash", "window_started_at", "failure_count", "locked_until"
+    }
+    assert rate_limit_index is not None
 
     with database_connection() as connection:
         tables = {
