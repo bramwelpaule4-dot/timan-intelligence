@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import math
+import os
 import time
 from typing import Callable
 
@@ -32,6 +34,7 @@ class DatabaseRateLimiter:
         window_seconds: float = 900,
         lockout_seconds: float = 900,
         clock: Callable[[], float] = time.time,
+        hmac_secret: str | None = None,
     ) -> None:
         if not isinstance(scope, str) or not scope.strip():
             raise ValueError("A rate-limit scope is required.")
@@ -60,6 +63,36 @@ class DatabaseRateLimiter:
         self.window_seconds = float(window_seconds)
         self.lockout_seconds = float(lockout_seconds)
         self._clock = clock
+        self._hmac_secret = hmac_secret
+
+    def _get_hmac_secret(self) -> bytes:
+        """Load the dedicated secret used to protect rate-limit identifiers.
+
+        Configure TIMANSTAT_RATE_LIMIT_HMAC_KEY in the process environment
+        or Streamlit Secrets. A dedicated key prevents a database-only reader
+        from testing likely usernames and email addresses offline.
+        """
+        secret = self._hmac_secret
+        if secret is None:
+            secret = os.getenv("TIMANSTAT_RATE_LIMIT_HMAC_KEY", "").strip()
+
+        if not secret:
+            try:
+                import streamlit as st
+
+                secret = str(
+                    st.secrets.get("TIMANSTAT_RATE_LIMIT_HMAC_KEY", "")
+                ).strip()
+            except Exception:
+                secret = ""
+
+        if not isinstance(secret, str) or len(secret.encode("utf-8")) < 32:
+            raise RuntimeError(
+                "Rate-limit HMAC key is missing or too short. Configure "
+                "TIMANSTAT_RATE_LIMIT_HMAC_KEY with at least 32 bytes."
+            )
+
+        return secret.encode("utf-8")
 
     def _key_hash(self, identifier: str) -> str:
         if not isinstance(identifier, str):
@@ -67,8 +100,12 @@ class DatabaseRateLimiter:
         normalised = identifier.strip().casefold()
         if not normalised:
             raise ValueError("The rate-limit identifier cannot be empty.")
-        material = f"{self.scope}:{normalised}".encode("utf-8")
-        return hashlib.sha256(material).hexdigest()
+        material = f"timanstat-rate-limit:v2:{self.scope}:{normalised}".encode("utf-8")
+        return hmac.new(
+            self._get_hmac_secret(),
+            material,
+            hashlib.sha256,
+        ).hexdigest()
 
     def is_locked(self, identifier: str) -> bool:
         """Return whether the identifier is currently locked."""
