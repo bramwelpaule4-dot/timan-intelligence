@@ -7,6 +7,7 @@ import pytest
 
 from timan_intelligence.security import auth
 from timan_intelligence.security.rate_limit import LoginRateLimiter
+from timan_intelligence.security.session import SessionManager
 
 
 VALID_PASSWORD = "SecureTestPassword123!"
@@ -14,7 +15,7 @@ VALID_PASSWORD = "SecureTestPassword123!"
 
 @pytest.fixture
 def rate_limit_environment(monkeypatch):
-    """Provide isolated database authentication and a controllable clock."""
+    """Provide isolated authentication and a controllable clock."""
 
     current_time = [1_000.0]
     session_state = {}
@@ -61,6 +62,19 @@ def rate_limit_environment(monkeypatch):
         auth,
         "authenticate_identity_user",
         authenticate_identity_user,
+    )
+
+    # The test account is simulated, so use a controlled session-version
+    # loader rather than attempting to query a real database.
+    manager = SessionManager(
+        session_version_loader=lambda user_id: 0,
+        require_versioned_sessions=False,
+    )
+
+    monkeypatch.setattr(
+        auth,
+        "SESSION_MANAGER",
+        manager,
     )
 
     return SimpleNamespace(
@@ -151,6 +165,8 @@ def test_lockout_expires_after_fifteen_minutes(
 
     assert environment.session["authenticated"] is True
     assert environment.session["username"] == "testuser"
+    assert environment.session["user_id"] == "test-user-id"
+    assert environment.session["session_version"] == 0
 
 
 def test_successful_login_clears_previous_failed_attempts(
