@@ -108,6 +108,13 @@ def _is_period_expired(record: dict[str, Any]) -> bool:
         return True
 
 
+def _normalise_subscription_record(row: Any) -> dict[str, Any]:
+    """Return database rows with stable Python types across SQLite/PostgreSQL."""
+    record = dict(row)
+    record["cancel_at_period_end"] = bool(record.get("cancel_at_period_end", False))
+    return record
+
+
 def assign_subscription(
     *,
     plan_code: str,
@@ -211,7 +218,7 @@ def get_subscription(
         ).fetchone()
     if row is None:
         return None
-    record = dict(row)
+    record = _normalise_subscription_record(row)
     if _is_period_expired(record):
         return None
     return record
@@ -235,7 +242,7 @@ def get_subscription_history(
             """,
             (owner_id,),
         ).fetchall()
-    return [dict(row) for row in rows]
+    return [_normalise_subscription_record(row) for row in rows]
 
 
 def change_subscription_status(
