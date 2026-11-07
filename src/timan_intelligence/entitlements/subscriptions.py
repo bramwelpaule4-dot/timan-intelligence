@@ -47,6 +47,46 @@ def _owner(user_id: str | None, organisation_id: str | None) -> tuple[str, str]:
     return "organisation_id", organisation_id.strip()
 
 
+def _utc_datetime(value: str) -> datetime:
+    """Parse an ISO timestamp and normalize it to timezone-aware UTC.
+
+    Naive timestamps are interpreted as UTC for compatibility with existing
+    records created by earlier versions of this service.
+    """
+    if not isinstance(value, str) or not value.strip():
+        raise SubscriptionError("Subscription period values must be ISO timestamps.")
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise SubscriptionError("Subscription periods must be ISO timestamps.") from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _validate_period(
+    current_period_start: str | None,
+    current_period_end: str | None,
+) -> tuple[str | None, str | None]:
+    """Validate and canonicalize period timestamps to UTC ISO-8601."""
+    start = (
+        _utc_datetime(current_period_start)
+        if current_period_start is not None
+        else None
+    )
+    end = (
+        _utc_datetime(current_period_end)
+        if current_period_end is not None
+        else None
+    )
+    if start is not None and end is not None and end <= start:
+        raise SubscriptionError("Subscription period end must be after its start.")
+    return (
+        start.isoformat(timespec="seconds") if start is not None else None,
+        end.isoformat(timespec="seconds") if end is not None else None,
+    )
+
+
 def _validate_status(status: str) -> str:
     if not isinstance(status, str):
         raise SubscriptionError("Subscription status must be text.")
@@ -56,24 +96,16 @@ def _validate_status(status: str) -> str:
     return value
 
 
-def _validate_period(
-    current_period_start: str | None,
-    current_period_end: str | None,
-) -> tuple[str | None, str | None]:
-    for value in (current_period_start, current_period_end):
-        if value is not None:
-            if not isinstance(value, str) or not value.strip():
-                raise SubscriptionError("Subscription period values must be ISO timestamps.")
-            try:
-                datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
-            except ValueError as exc:
-                raise SubscriptionError("Subscription periods must be ISO timestamps.") from exc
-    if current_period_start and current_period_end:
-        start = datetime.fromisoformat(current_period_start.replace("Z", "+00:00"))
-        end = datetime.fromisoformat(current_period_end.replace("Z", "+00:00"))
-        if end <= start:
-            raise SubscriptionError("Subscription period end must be after its start.")
-    return current_period_start, current_period_end
+def _is_period_expired(record: dict[str, Any]) -> bool:
+    """Return whether the recorded paid/trial period has ended."""
+    period_end = record.get("current_period_end")
+    if period_end is None:
+        return False
+    try:
+        return _utc_datetime(str(period_end)) <= datetime.now(timezone.utc)
+    except SubscriptionError:
+        # Invalid persisted dates must never grant continued entitlement.
+        return True
 
 
 def assign_subscription(
@@ -98,7 +130,7 @@ def assign_subscription(
         raise SubscriptionError("Unrecognised subscription plan.") from exc
 
     canonical_status = _validate_status(status)
-    if isinstance(cancel_at_period_end, bool) is False:
+    if not isinstance(cancel_at_period_end, bool):
         raise SubscriptionError("cancel_at_period_end must be boolean.")
     period_start, period_end = _validate_period(
         current_period_start,
@@ -107,9 +139,7 @@ def assign_subscription(
 
     subscription_id = str(uuid.uuid4())
     p = _placeholder()
-    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat(
-        timespec="seconds"
-    )
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     with database_connection() as connection:
         owner_table = "users" if owner_column == "user_id" else "organisations"
@@ -160,7 +190,11 @@ def get_subscription(
     user_id: str | None = None,
     organisation_id: str | None = None,
 ) -> dict[str, Any] | None:
-    """Return the current subscription for exactly one owner, if present."""
+    """Return a current, unexpired subscription for exactly one owner.
+
+    A subscription scheduled to cancel at period end remains effective until
+    that period ends. Expired records remain in history and are not deleted.
+    """
     owner_column, owner_id = _owner(user_id, organisation_id)
     p = _placeholder()
     with database_connection() as connection:
@@ -170,12 +204,17 @@ def get_subscription(
             FROM subscriptions
             WHERE {owner_column} = {p}
               AND status IN ('trialing', 'active', 'past_due')
-            ORDER BY created_at DESC
+            ORDER BY created_at DESC, id DESC
             LIMIT 1
             """,
             (owner_id,),
         ).fetchone()
-    return dict(row) if row is not None else None
+    if row is None:
+        return None
+    record = dict(row)
+    if _is_period_expired(record):
+        return None
+    return record
 
 
 def get_subscription_history(
@@ -208,9 +247,7 @@ def change_subscription_status(
         raise SubscriptionError("A valid subscription ID is required.")
     canonical_status = _validate_status(status)
     p = _placeholder()
-    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat(
-        timespec="seconds"
-    )
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     canceled_at = now if canonical_status == "canceled" else None
     with database_connection() as connection:
         result = connection.execute(
@@ -240,16 +277,52 @@ def get_effective_plan_code(
     user_id: str,
     organisation_id: str | None = None,
 ) -> str:
-    """Resolve organisation plan first, then user plan, then safe Free default."""
+    """Resolve an active member's organisation plan, then user plan, then Free.
+
+    Supplying an organisation ID requires an active membership for the user.
+    This prevents callers from resolving an organisation's subscription by
+    guessing or supplying an unrelated organisation identifier.
+    """
     if not isinstance(user_id, str) or not user_id.strip():
         raise SubscriptionError("A valid user ID is required.")
+
     if organisation_id is not None:
+        if not isinstance(organisation_id, str) or not organisation_id.strip():
+            raise SubscriptionError("A valid organisation ID is required.")
+        p = _placeholder()
+        with database_connection() as connection:
+            membership = connection.execute(
+                f"""
+                SELECT id
+                FROM organisation_memberships
+                WHERE user_id = {p}
+                  AND organisation_id = {p}
+                  AND status = 'active'
+                LIMIT 1
+                """,
+                (user_id.strip(), organisation_id.strip()),
+            ).fetchone()
+        if membership is None:
+            raise SubscriptionError(
+                "An active organisation membership is required."
+            )
         organisation_subscription = get_subscription(
             organisation_id=organisation_id
         )
         if organisation_subscription is not None:
-            return get_plan(organisation_subscription["plan_code"]).code
+            try:
+                return get_plan(organisation_subscription["plan_code"]).code
+            except (TypeError, ValueError) as exc:
+                raise SubscriptionError(
+                    "Stored organisation subscription plan is invalid."
+                ) from exc
+
     user_subscription = get_subscription(user_id=user_id)
     if user_subscription is not None:
-        return get_plan(user_subscription["plan_code"]).code
+        try:
+            return get_plan(user_subscription["plan_code"]).code
+        except (TypeError, ValueError) as exc:
+            raise SubscriptionError(
+                "Stored individual subscription plan is invalid."
+            ) from exc
     return "free"

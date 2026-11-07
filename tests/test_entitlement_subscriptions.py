@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from timan_intelligence.database.connection import database_connection
@@ -39,6 +41,15 @@ def subscription_database(tmp_path, monkeypatch):
             """,
             ("org-1", "Organisation One"),
         )
+        connection.execute(
+            """
+            INSERT INTO organisation_memberships (
+                id, organisation_id, user_id, role, status
+            )
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            ("membership-1", "org-1", "user-1", "org_member", "active"),
+        )
     return database_path
 
 
@@ -72,10 +83,13 @@ def test_reassignment_preserves_history_and_only_one_current_record(
     assert len(history) == 2
     assert {row["id"] for row in history} == {first, second}
     assert get_subscription(user_id="user-1")["id"] == second
-    assert sum(row["status"] in {"active", "trialing", "past_due"} for row in history) == 1
+    assert sum(
+        row["status"] in {"active", "trialing", "past_due"}
+        for row in history
+    ) == 1
 
 
-def test_organisation_subscription_is_separate_from_user_role(
+def test_organisation_subscription_requires_active_membership(
     subscription_database,
 ):
     assign_subscription(organisation_id="org-1", plan_code="enterprise")
@@ -84,6 +98,18 @@ def test_organisation_subscription_is_separate_from_user_role(
         organisation_id="org-1",
     ) == "enterprise"
     assert get_effective_plan_code(user_id="user-1") == "free"
+
+    with database_connection() as connection:
+        connection.execute(
+            """
+            UPDATE organisation_memberships
+            SET status = 'suspended'
+            WHERE id = ?
+            """,
+            ("membership-1",),
+        )
+    with pytest.raises(SubscriptionError, match="active organisation membership"):
+        get_effective_plan_code(user_id="user-1", organisation_id="org-1")
 
 
 def test_canceled_subscription_falls_back_to_free(subscription_database):
@@ -95,6 +121,54 @@ def test_canceled_subscription_falls_back_to_free(subscription_database):
     assert get_subscription(user_id="user-1") is None
     assert get_effective_plan_code(user_id="user-1") == "free"
     assert len(get_subscription_history(user_id="user-1")) == 1
+
+
+def test_expired_period_does_not_grant_entitlement(subscription_database):
+    yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    earlier = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+    assign_subscription(
+        user_id="user-1",
+        plan_code="professional",
+        current_period_start=earlier,
+        current_period_end=yesterday,
+    )
+    assert get_subscription(user_id="user-1") is None
+    assert get_effective_plan_code(user_id="user-1") == "free"
+    assert len(get_subscription_history(user_id="user-1")) == 1
+
+
+def test_cancel_at_period_end_remains_effective_until_expiry(
+    subscription_database,
+):
+    future = (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()
+    start = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    assign_subscription(
+        user_id="user-1",
+        plan_code="professional",
+        current_period_start=start,
+        current_period_end=future,
+        cancel_at_period_end=True,
+    )
+    record = get_subscription(user_id="user-1")
+    assert record is not None
+    assert record["cancel_at_period_end"] is True
+    assert get_effective_plan_code(user_id="user-1") == "professional"
+
+
+def test_mixed_timezone_periods_are_normalized_and_compared(
+    subscription_database,
+):
+    subscription_id = assign_subscription(
+        user_id="user-1",
+        plan_code="professional",
+        current_period_start="2026-11-01T00:00:00-05:00",
+        current_period_end="2026-12-01T00:00:00Z",
+    )
+    record = get_subscription(user_id="user-1")
+    assert record is not None
+    assert record["id"] == subscription_id
+    assert record["current_period_start"].endswith("+00:00")
+    assert record["current_period_end"].endswith("+00:00")
 
 
 def test_unknown_plan_and_invalid_owner_are_rejected(subscription_database):
