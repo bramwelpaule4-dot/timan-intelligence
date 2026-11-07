@@ -28,6 +28,7 @@ def test_database(tmp_path, monkeypatch):
         "DATABASE_URL",
         f"sqlite:///{database_file.as_posix()}",
     )
+    monkeypatch.setenv("TIMANSTAT_RATE_LIMIT_HMAC_KEY", "test-only-timanstat-rate-limit-hmac-key-32-bytes-minimum")
 
     initialise_database()
 
