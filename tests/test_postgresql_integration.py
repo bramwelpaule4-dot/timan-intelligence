@@ -23,6 +23,7 @@ EXPECTED_MIGRATION_HISTORY = [
     (5, "session_version"),
     (6, "totp_recovery_codes"),
     (7, "distributed_rate_limits"),
+    (8, "rate_limit_timestamp_precision"),
 ]
 
 
@@ -126,6 +127,21 @@ def test_postgresql_migrations_are_recorded(postgres_database):
     assert session_version_column["column_default"] == "0"
 
     assert verification_table is not None
+
+    with database_connection() as connection:
+        rate_limit_timestamp_columns = connection.execute(
+            """
+            SELECT column_name, data_type
+            FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = 'rate_limit_states'
+              AND column_name IN ('window_started_at', 'locked_until')
+            """
+        ).fetchall()
+    assert {row["column_name"]: row["data_type"] for row in rate_limit_timestamp_columns} == {
+        "window_started_at": "double precision",
+        "locked_until": "double precision",
+    }
 
     with database_connection() as connection:
         recovery_table = connection.execute(
