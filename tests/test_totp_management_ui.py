@@ -321,6 +321,6 @@ def test_totp_management_regenerates_and_displays_recovery_codes(
             "ABCD1234-EF001122-33445566-77889900",
         )
     ]
-    assert "NEW-CODE-ONE\\nNEW-CODE-TWO" in fake_st.codes
+    assert "NEW-CODE-ONE\nNEW-CODE-TWO" in fake_st.codes
     assert logout_calls == [True]
     assert fake_st.stop_called
