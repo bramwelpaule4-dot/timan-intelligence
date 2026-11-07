@@ -263,7 +263,11 @@ def resend_email_verification(
         window_seconds=cooldown_seconds,
         lockout_seconds=cooldown_seconds,
     )
-    if not request_limiter.consume_attempt(normalised_email):
+    try:
+        if not request_limiter.consume_attempt(normalised_email):
+            return False
+    except Exception:
+        # Do not send mail when shared throttling cannot be enforced.
         return False
 
     p = _placeholder()
