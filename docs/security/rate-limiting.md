@@ -34,6 +34,9 @@ processes that access the same database file on the same host. It is not a
 distributed coordination service across separate machines or containers.
 Do not deploy multiple independent SQLite files and assume they share limits.
 
+All application workers should keep their system clocks synchronised
+with a reliable time source because rate-limit windows use UTC epoch time.
+
 The current application layer applies account-identifier and email-address
 limits. It does not infer client IP addresses from untrusted forwarded headers.
 For a public multi-replica deployment, add trusted edge-proxy or WAF IP-based
