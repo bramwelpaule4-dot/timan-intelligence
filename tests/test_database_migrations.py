@@ -16,6 +16,7 @@ EXPECTED_MIGRATION_HISTORY = [
     (2, "totp_enrolment"),
     (3, "email_verification"),
     (4, "password_reset"),
+    (5, "session_version"),
 ]
 
 
@@ -224,6 +225,59 @@ def assert_password_reset_schema():
     assert expiry_index["tbl_name"] == "password_reset_tokens"
 
 
+def assert_session_version_schema():
+    """Verify the session-version column and its default value."""
+
+    with database_connection() as connection:
+        column = connection.execute(
+            """
+            SELECT
+                name,
+                type,
+                notnull,
+                dflt_value
+            FROM pragma_table_info('users')
+            WHERE name = 'session_version'
+            """
+        ).fetchone()
+
+        check_user = connection.execute(
+            """
+            INSERT INTO users (
+                id,
+                username,
+                email,
+                full_name,
+                password_hash
+            )
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                "session-version-default-test",
+                "session_version_default",
+                "session_version_default@example.com",
+                "Session Version Default Test",
+                "test-hash",
+            ),
+        )
+
+        user = connection.execute(
+            """
+            SELECT session_version
+            FROM users
+            WHERE id = ?
+            """,
+            ("session-version-default-test",),
+        ).fetchone()
+
+    assert column is not None
+    assert column["type"].upper() == "INTEGER"
+    assert column["notnull"] == 1
+    assert str(column["dflt_value"]) == "0"
+    assert user is not None
+    assert user["session_version"] == 0
+
+
 def test_fresh_database_applies_all_migrations(migration_database):
     """A fresh database should receive every registered migration."""
 
@@ -238,6 +292,7 @@ def test_fresh_database_applies_all_migrations(migration_database):
 
     assert_totp_schema()
     assert_password_reset_schema()
+    assert_session_version_schema()
 
     with database_connection() as connection:
         tables = {
@@ -294,6 +349,7 @@ def test_repeated_initialisation_does_not_repeat_migration(
     ] == EXPECTED_MIGRATION_HISTORY
 
     assert_password_reset_schema()
+    assert_session_version_schema()
 
 
 def test_existing_unversioned_database_is_baselined_and_upgraded(
@@ -335,6 +391,7 @@ def test_existing_unversioned_database_is_baselined_and_upgraded(
 
     assert_totp_schema()
     assert_password_reset_schema()
+    assert_session_version_schema()
 
     with database_connection() as connection:
         user = connection.execute(
@@ -345,7 +402,8 @@ def test_existing_unversioned_database_is_baselined_and_upgraded(
                 totp_enabled,
                 totp_secret_encrypted,
                 totp_pending_secret_encrypted,
-                totp_last_accepted_counter
+                totp_last_accepted_counter,
+                session_version
             FROM users
             WHERE id = ?
             """,
@@ -358,6 +416,7 @@ def test_existing_unversioned_database_is_baselined_and_upgraded(
     assert user["totp_secret_encrypted"] is None
     assert user["totp_pending_secret_encrypted"] is None
     assert user["totp_last_accepted_counter"] is None
+    assert user["session_version"] == 0
 
 
 def test_incomplete_existing_database_is_rejected(
