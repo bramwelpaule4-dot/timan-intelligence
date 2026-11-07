@@ -416,3 +416,31 @@ def test_invalid_base_url_is_rejected(
         )
 
     assert sender.sent_messages == []
+
+
+
+def test_repeated_password_reset_request_is_throttled(test_user):
+    sender = RecordingEmailSender()
+
+    assert request_password_reset(
+        email="resetmail@example.com",
+        base_url="https://timanstat.example.com",
+        sender=sender,
+    ) is True
+
+    with database_connection() as connection:
+        connection.execute(
+            """
+            UPDATE password_reset_tokens
+            SET created_at = ?
+            WHERE user_id = ?
+            """,
+            ("2000-01-01 00:00:00", test_user),
+        )
+
+    assert request_password_reset(
+        email="resetmail@example.com",
+        base_url="https://timanstat.example.com",
+        sender=sender,
+    ) is False
+    assert len(sender.sent_messages) == 1
