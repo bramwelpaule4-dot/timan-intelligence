@@ -22,6 +22,7 @@ from timan_intelligence.security.auth import is_authenticated, logout
 from timan_intelligence.security.auth_ui import render_authentication
 from timan_intelligence.security.password_change_ui import render_password_change
 from timan_intelligence.security.totp_management_ui import render_totp_management
+from timan_intelligence.organisations.service import list_user_organisations
 from timan_intelligence.entitlements.service import (
     DatasetLimitExceeded,
     UsageLimitExceeded,
@@ -398,6 +399,12 @@ def numeric_outlier_profile(df):
 
 
 
+def get_active_organisation_id():
+    """Return the organisation selected as the current billing context."""
+    organisation_id = st.session_state.get("active_organisation_id")
+    return organisation_id if isinstance(organisation_id, str) and organisation_id else None
+
+
 def quota_download_button(label, **kwargs):
     """Require and consume one monthly export allowance before enabling a download."""
     export_key = kwargs.get("key")
@@ -413,7 +420,11 @@ def quota_download_button(label, **kwargs):
             st.error("Your authenticated account could not be verified. Please sign in again.")
         else:
             try:
-                consume_monthly_usage("monthly_exports", user_id=user_id)
+                consume_monthly_usage(
+                    "monthly_exports",
+                    user_id=user_id,
+                    organisation_id=get_active_organisation_id(),
+                )
             except UsageLimitExceeded as exc:
                 st.error(str(exc))
             except Exception:
@@ -509,6 +520,40 @@ st.sidebar.markdown(
 )
 
 st.sidebar.divider()
+
+# Select the account or organisation whose subscription and usage limits
+# should govern uploads, analyses and exports in this session.
+current_user_id = st.session_state.get("user_id")
+try:
+    user_organisations = list_user_organisations(current_user_id)
+except Exception:
+    st.sidebar.error("Workspace access could not be verified.")
+    st.error(
+        "TimanStat could not verify your organisation access. "
+        "Please refresh the page or sign in again."
+    )
+    st.stop()
+
+organisation_names = {
+    item["organisation_id"]: item["organisation_name"]
+    for item in user_organisations
+}
+organisation_options = [None, *organisation_names.keys()]
+if st.session_state.get("active_organisation_id") not in organisation_options:
+    st.session_state.active_organisation_id = None
+
+st.sidebar.selectbox(
+    "WORKSPACE / BILLING CONTEXT",
+    options=organisation_options,
+    format_func=lambda value: (
+        "Personal account" if value is None else organisation_names[value]
+    ),
+    key="active_organisation_id",
+    help=(
+        "Upload limits and monthly analysis/export allowances are applied "
+        "to the selected account or organisation."
+    ),
+)
 
 page = st.sidebar.radio(
     "NAVIGATION",
@@ -653,6 +698,7 @@ elif page == "Data Management":
             validate_dataset_limits(
                 user_id=current_user_id,
                 file_size_bytes=len(uploaded_file.getvalue()),
+                organisation_id=st.session_state.get("active_organisation_id"),
             )
         except (DatasetLimitExceeded, RuntimeError) as exc:
             st.error(str(exc))
@@ -670,7 +716,9 @@ elif page == "Data Management":
                 try:
                     imported = load_uploaded_file(uploaded_file)
                     validate_dataset_limits(
-                        user_id=current_user_id, row_count=len(imported)
+                        user_id=current_user_id,
+                        row_count=len(imported),
+                        organisation_id=st.session_state.get("active_organisation_id"),
                     )
 
                     st.session_state.dataset = imported
@@ -1058,7 +1106,11 @@ elif page == "Descriptive Statistics":
                 st.error("Your authenticated account could not be verified. Please sign in again.")
             else:
                 try:
-                    consume_monthly_usage("monthly_analyses", user_id=user_id)
+                    consume_monthly_usage(
+                        "monthly_analyses",
+                        user_id=user_id,
+                        organisation_id=get_active_organisation_id(),
+                    )
                 except UsageLimitExceeded as exc:
                     st.error(str(exc))
                 except Exception:

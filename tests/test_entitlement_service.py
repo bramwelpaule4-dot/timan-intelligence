@@ -177,6 +177,40 @@ def test_professional_dataset_limits(entitlement_database):
         validate_dataset_limits(user_id="user-1", row_count=250_001)
 
 
+def test_organisation_subscription_controls_dataset_limits(entitlement_database):
+    assign_subscription(organisation_id="org-1", plan_code="professional")
+    validate_dataset_limits(
+        user_id="user-1",
+        organisation_id="org-1",
+        row_count=250_000,
+        file_size_bytes=250 * 1024 * 1024,
+    )
+    with pytest.raises(DatasetLimitExceeded):
+        validate_dataset_limits(
+            user_id="user-1",
+            organisation_id="org-1",
+            row_count=250_001,
+        )
+
+
+def test_dataset_limits_reject_inactive_organisation_membership(entitlement_database):
+    with database_connection() as connection:
+        connection.execute(
+            """
+            UPDATE organisation_memberships
+            SET status = 'suspended'
+            WHERE organisation_id = ? AND user_id = ?
+            """,
+            ("org-1", "user-1"),
+        )
+    with pytest.raises(Exception, match="active organisation membership"):
+        validate_dataset_limits(
+            user_id="user-1",
+            organisation_id="org-1",
+            row_count=1,
+        )
+
+
 def test_enterprise_dataset_limits_are_unlimited(entitlement_database):
     assign_subscription(user_id="user-1", plan_code="enterprise")
     validate_dataset_limits(
