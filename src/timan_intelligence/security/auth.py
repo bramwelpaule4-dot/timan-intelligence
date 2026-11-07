@@ -13,7 +13,7 @@ from timan_intelligence.identity.service import (
     _verify_password as _verify_identity_password,
     authenticate_user as authenticate_identity_user,
 )
-from timan_intelligence.security.rate_limit import LoginRateLimiter
+from timan_intelligence.security.distributed_rate_limit import DatabaseRateLimiter
 from timan_intelligence.security.recovery_codes import consume_recovery_code
 from timan_intelligence.security.session import SessionManager
 from timan_intelligence.security.totp_service import (
@@ -25,7 +25,7 @@ from timan_intelligence.security.totp_service import (
 VALID_ROLES = {"developer", "admin", "user"}
 
 # Five failed password attempts within 15 minutes trigger a 15-minute lockout.
-LOGIN_RATE_LIMITER = LoginRateLimiter()
+LOGIN_RATE_LIMITER = DatabaseRateLimiter(scope="login")
 
 # Every authenticated session must have a valid database-backed
 # account identity and session version.
