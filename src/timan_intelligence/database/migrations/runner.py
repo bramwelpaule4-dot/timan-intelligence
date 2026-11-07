@@ -12,6 +12,7 @@ from timan_intelligence.database.migrations.versions import (
     v0001_initial_schema,
     v0002_totp_enrolment,
     v0003_email_verification,
+    v0004_password_reset,
 )
 
 
@@ -39,6 +40,11 @@ MIGRATIONS = (
         version=v0003_email_verification.VERSION,
         name=v0003_email_verification.NAME,
         upgrade=v0003_email_verification.upgrade,
+    ),
+    Migration(
+        version=v0004_password_reset.VERSION,
+        name=v0004_password_reset.NAME,
+        upgrade=v0004_password_reset.upgrade,
     ),
 )
 
