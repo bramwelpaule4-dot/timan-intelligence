@@ -10,6 +10,8 @@ from timan_intelligence.database.connection import (
     database_connection,
     get_database_type,
 )
+from timan_intelligence.entitlements.plans import get_limit, is_within_limit
+from timan_intelligence.entitlements.subscriptions import get_effective_plan_code
 
 
 VALID_PROJECT_ROLES = {"project_admin", "project_member"}
@@ -332,6 +334,15 @@ def create_project(
         description, "Project description"
     )
 
+    # Resolve the subscription outside the project transaction. The caller
+    # cannot supply a plan code; the active organisation subscription (or
+    # the creator's individual subscription) is authoritative.
+    plan_code = get_effective_plan_code(
+        user_id=created_by,
+        organisation_id=organisation_id,
+    )
+    project_limit = get_limit(plan_code, "max_projects")
+
     project_id = _new_id()
     membership_id = _new_id()
     p = _placeholder()
@@ -342,6 +353,27 @@ def create_project(
         _require_organisation_admin(
             connection, organisation_id, created_by
         )
+
+        current_projects = connection.execute(
+            f"""
+            SELECT COUNT(*) AS total
+            FROM projects
+            WHERE organisation_id = {p}
+              AND status != 'archived'
+            """,
+            (organisation_id,),
+        ).fetchone()
+        current_count = int(current_projects["total"])
+        if not is_within_limit(
+            plan_code,
+            "max_projects",
+            current_count,
+        ):
+            raise ValueError(
+                f"The {plan_code.title()} plan allows "
+                f"{project_limit} active projects per organisation. "
+                "Upgrade the subscription or archive an existing project."
+            )
 
         connection.execute(
             f"""

@@ -24,6 +24,7 @@ EXPECTED_MIGRATION_HISTORY = [
     (7, "distributed_rate_limits"),
     (8, "rate_limit_timestamp_precision"),
     (9, "subscriptions"),
+    (10, "entitlement_usage"),
 ]
 
 
@@ -177,6 +178,7 @@ def test_postgresql_schema_contains_required_tables(postgres_database):
         "totp_recovery_codes",
         "rate_limit_states",
         "subscriptions",
+        "entitlement_usage",
     }
 
     with database_connection() as connection:

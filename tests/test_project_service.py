@@ -1196,3 +1196,44 @@ def test_project_member_cannot_access_another_project(
             project_id=other_project_id,
             requested_by=test_users["member"],
         )
+
+
+
+def test_free_plan_project_limit_is_enforced(test_database, test_users, test_organisation):
+    for index in range(3):
+        create_project(
+            organisation_id=test_organisation,
+            name=f"Free Plan Project {index + 1}",
+            created_by=test_users["projectadmin"],
+        )
+
+    with pytest.raises(ValueError, match="Free plan allows 3 active projects"):
+        create_project(
+            organisation_id=test_organisation,
+            name="Project Above Free Limit",
+            created_by=test_users["projectadmin"],
+        )
+
+
+def test_archived_projects_do_not_consume_project_limit(
+    test_database, test_users, test_organisation
+):
+    project_ids = [
+        create_project(
+            organisation_id=test_organisation,
+            name=f"Project {index + 1}",
+            created_by=test_users["projectadmin"],
+        )
+        for index in range(3)
+    ]
+    update_project(
+        project_id=project_ids[0],
+        updated_by=test_users["projectadmin"],
+        status="archived",
+    )
+    new_project = create_project(
+        organisation_id=test_organisation,
+        name="Replacement Project",
+        created_by=test_users["projectadmin"],
+    )
+    assert new_project
