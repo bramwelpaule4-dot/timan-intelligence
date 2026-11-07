@@ -22,6 +22,10 @@ from timan_intelligence.security.auth import is_authenticated, logout
 from timan_intelligence.security.auth_ui import render_authentication
 from timan_intelligence.security.password_change_ui import render_password_change
 from timan_intelligence.security.totp_management_ui import render_totp_management
+from timan_intelligence.entitlements.service import (
+    UsageLimitExceeded,
+    consume_monthly_usage,
+)
 
 
 # ============================================================
@@ -391,6 +395,43 @@ def numeric_outlier_profile(df):
     return pd.DataFrame(records)
 
 
+
+def quota_download_button(label, **kwargs):
+    """Require and consume one monthly export allowance before enabling a download."""
+    export_key = kwargs.get("key")
+    if not isinstance(export_key, str) or not export_key:
+        raise ValueError("Quota-controlled downloads require a stable key.")
+
+    ready_key = f"timanstat_export_ready_{export_key}"
+    prepare_key = f"timanstat_prepare_export_{export_key}"
+
+    if st.button(f"Prepare export: {label}", key=prepare_key):
+        user_id = st.session_state.get("user_id")
+        if not isinstance(user_id, str) or not user_id.strip():
+            st.error("Your authenticated account could not be verified. Please sign in again.")
+        else:
+            try:
+                consume_monthly_usage("monthly_exports", user_id=user_id)
+            except UsageLimitExceeded as exc:
+                st.error(str(exc))
+            except Exception:
+                st.error("The export allowance could not be verified. No export was prepared.")
+            else:
+                st.session_state[ready_key] = True
+
+    if st.session_state.get(ready_key):
+        downloaded = st.download_button(label, **kwargs)
+        if downloaded:
+            st.session_state[ready_key] = False
+
+
+def _dataset_analysis_key(df):
+    """Create a stable session key for the currently loaded dataset."""
+    row_hashes = pd.util.hash_pandas_object(df, index=True).values.tobytes()
+    column_names = repr(tuple(str(column) for column in df.columns)).encode("utf-8")
+    return hashlib.sha256(column_names + row_hashes).hexdigest()
+
+
 def get_dataset():
     """Return the active dataset, with appropriate guidance if absent."""
     df = st.session_state.dataset
@@ -750,7 +791,7 @@ elif page == "Data Management":
                 use_container_width=True,
             )
 
-        st.download_button(
+        quota_download_button(
             "Download current dataset as CSV",
             data=df.to_csv(index=False).encode("utf-8-sig"),
             file_name="timan_dataset_export.csv",
@@ -834,7 +875,7 @@ elif page == "Data Quality":
         st.subheader("Variable-level quality profile")
         quality = variable_quality_profile(df)
         st.dataframe(quality, hide_index=True, use_container_width=True)
-        st.download_button(
+        quota_download_button(
             "Download variable quality profile",
             data=quality.to_csv(index=False).encode("utf-8-sig"),
             file_name="timan_data_quality_profile.csv",
@@ -866,7 +907,7 @@ elif page == "Data Quality":
                 hide_index=True,
                 use_container_width=True,
             )
-        st.download_button(
+        quota_download_button(
             "Download missingness report",
             data=missing_by_variable.to_csv(index=False).encode("utf-8-sig"),
             file_name="timan_missingness_report.csv",
@@ -892,7 +933,7 @@ elif page == "Data Quality":
                     df.loc[duplicate_mask],
                     use_container_width=True,
                 )
-                st.download_button(
+                quota_download_button(
                     "Download rows involved in exact duplicates",
                     data=df.loc[duplicate_mask].to_csv(index=False).encode("utf-8-sig"),
                     file_name="timan_duplicate_rows_review.csv",
@@ -916,7 +957,7 @@ elif page == "Data Quality":
                 hide_index=True,
                 use_container_width=True,
             )
-            st.download_button(
+            quota_download_button(
                 "Download potential outlier summary",
                 data=outlier_profile.to_csv(index=False).encode("utf-8-sig"),
                 file_name="timan_potential_outliers.csv",
@@ -984,7 +1025,32 @@ elif page == "Descriptive Statistics":
     df = get_dataset()
 
     if df is not None:
-        numeric_cols = list(df.select_dtypes(include="number").columns)
+        analysis_key = _dataset_analysis_key(df)
+        if st.button(
+            "Run descriptive analysis",
+            type="primary",
+            key="run_descriptive_analysis",
+        ):
+            user_id = st.session_state.get("user_id")
+            if not isinstance(user_id, str) or not user_id.strip():
+                st.error("Your authenticated account could not be verified. Please sign in again.")
+            else:
+                try:
+                    consume_monthly_usage("monthly_analyses", user_id=user_id)
+                except UsageLimitExceeded as exc:
+                    st.error(str(exc))
+                except Exception:
+                    st.error("Your monthly analysis allowance could not be verified. No analysis was run.")
+                else:
+                    st.session_state["timanstat_descriptive_analysis_key"] = analysis_key
+
+        if st.session_state.get("timanstat_descriptive_analysis_key") != analysis_key:
+            st.info(
+                "Select **Run descriptive analysis** to calculate results. "
+                "Each new run consumes one monthly analysis from your plan."
+            )
+        else:
+            numeric_cols = list(df.select_dtypes(include="number").columns)
         categorical_cols = [
             col for col in df.columns
             if not pd.api.types.is_numeric_dtype(df[col].dtype)
@@ -1048,7 +1114,7 @@ elif page == "Descriptive Statistics":
 
             summary = pd.DataFrame(numeric_records)
             st.dataframe(summary, hide_index=True, use_container_width=True)
-            st.download_button(
+            quota_download_button(
                 "Download full numeric summary",
                 data=summary.to_csv(index=False).encode("utf-8-sig"),
                 file_name="timan_descriptive_statistics.csv",
@@ -1174,7 +1240,7 @@ elif page == "Descriptive Statistics":
                 "Cumulative percentages follow the displayed frequency order. "
                 "If the variable has many unique values, the table may be long."
             )
-            st.download_button(
+            quota_download_button(
                 "Download categorical frequency table",
                 data=frequencies.to_csv(index=False).encode("utf-8-sig"),
                 file_name="timan_frequency_table.csv",
@@ -1218,7 +1284,7 @@ elif page == "Descriptive Statistics":
                 "between groups do not, by themselves, demonstrate that group "
                 "membership caused the observed outcome."
             )
-            st.download_button(
+            quota_download_button(
                 "Download grouped summary",
                 data=grouped.to_csv(index=False).encode("utf-8-sig"),
                 file_name="timan_grouped_descriptive_summary.csv",
@@ -1247,7 +1313,7 @@ elif page == "Descriptive Statistics":
                 "Pearson measures linear association, while Spearman and Kendall "
                 "are rank-based measures."
             )
-            st.download_button(
+            quota_download_button(
                 "Download correlation matrix",
                 data=corr.to_csv().encode("utf-8-sig"),
                 file_name="timan_correlation_matrix.csv",
@@ -1450,7 +1516,7 @@ elif page == "Reports & Exports":
             "descriptive outputs available in this version."
         )
 
-        st.download_button(
+        quota_download_button(
             "Download current dataset as CSV",
             data=df.to_csv(index=False).encode("utf-8-sig"),
             file_name="timan_dataset_export.csv",
@@ -1460,7 +1526,7 @@ elif page == "Reports & Exports":
 
         summary = numeric_summary(df)
 
-        st.download_button(
+        quota_download_button(
             "Download numeric descriptive statistics",
             data=summary.to_csv(index=False).encode("utf-8-sig"),
             file_name="timan_descriptive_statistics.csv",
@@ -1470,7 +1536,7 @@ elif page == "Reports & Exports":
 
         quality = variable_quality_profile(df)
 
-        st.download_button(
+        quota_download_button(
             "Download data-quality profile",
             data=quality.to_csv(index=False).encode("utf-8-sig"),
             file_name="timan_data_quality.csv",
