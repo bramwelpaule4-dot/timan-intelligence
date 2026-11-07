@@ -158,7 +158,7 @@ def test_totp_limiter_rejects_invalid_user_ids(
 
 
 def test_totp_limiter_rejects_unsupported_operation(limiter):
-    """Only enrolment and verification operations are accepted."""
+    """Only supported TOTP operations are accepted."""
 
     with pytest.raises(ValueError):
         limiter.is_locked("user-1", "password-reset")
