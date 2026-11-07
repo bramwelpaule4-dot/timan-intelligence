@@ -15,7 +15,7 @@ from timan_intelligence.identity.password_reset import (
     reset_password_with_token,
 )
 from timan_intelligence.identity.service import (
-    authenticate_user,
+    _verify_password,
     register_user,
 )
 
@@ -112,10 +112,23 @@ def test_direct_reset_email_contains_valid_reset_link(test_user):
         "NewSecurePassword456!",
     ) is True
 
-    assert authenticate_user(
-        "resetmailuser",
+    # Verify the new password hash directly. Login must remain blocked
+    # because this test account has not completed email verification.
+    with database_connection() as connection:
+        row = connection.execute(
+            """
+            SELECT password_hash
+            FROM users
+            WHERE id = ?
+            """,
+            (test_user,),
+        ).fetchone()
+
+    assert row is not None
+    assert _verify_password(
         "NewSecurePassword456!",
-    ) is not None
+        row["password_hash"],
+    )
 
 
 def test_direct_reset_email_rejects_unknown_user(test_database):
@@ -164,7 +177,8 @@ def test_password_reset_request_allows_unverified_email(test_user):
             (test_user,),
         ).fetchone()
 
-    assert row["email_verified"] is False
+    assert row is not None
+    assert not bool(row["email_verified"])
 
     sender = RecordingEmailSender()
 
@@ -187,7 +201,8 @@ def test_password_reset_request_allows_unverified_email(test_user):
             (test_user,),
         ).fetchone()
 
-    assert row["email_verified"] is False
+    assert row is not None
+    assert not bool(row["email_verified"])
 
 
 def test_unknown_email_returns_false_without_sending(test_database):
