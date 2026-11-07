@@ -41,7 +41,7 @@ class TOTPAttemptRateLimiter:
         if not isinstance(user_id, str) or not user_id.strip():
             raise ValueError("A valid user ID is required.")
 
-        if operation not in {"enrolment", "verification"}:
+        if operation not in {"enrolment", "verification", "recovery"}:
             raise ValueError("Unsupported TOTP operation.")
 
         return f"totp:{operation}:{user_id.strip()}"
