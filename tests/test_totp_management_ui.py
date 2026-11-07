@@ -151,6 +151,11 @@ def test_totp_management_confirms_enrolment_and_revokes_local_session(
         "confirm_totp_enrolment",
         lambda user_id, code: confirmed.append((user_id, code)) or True,
     )
+    monkeypatch.setattr(
+        ui,
+        "generate_recovery_codes",
+        lambda user_id: ["CODE-ONE", "CODE-TWO"],
+    )
     monkeypatch.setattr(ui, "logout", lambda: logout_calls.append(True))
 
     with pytest.raises(FakeStop):
@@ -161,6 +166,7 @@ def test_totp_management_confirms_enrolment_and_revokes_local_session(
     assert logout_calls == [True]
     assert fake_st.stop_called
     assert _message_contains(fake_st, "Two-factor authentication has been enabled.")
+    assert "CODE-ONE\\nCODE-TWO" in fake_st.codes
 
 
 def test_totp_management_rejects_invalid_confirmation_code(
@@ -215,6 +221,7 @@ def test_totp_management_disables_authenticator_and_logs_out(
     disable_calls = []
 
     monkeypatch.setattr(ui, "get_totp_status", lambda user_id: True)
+    monkeypatch.setattr(ui, "get_recovery_code_count", lambda user_id: 8)
     monkeypatch.setattr(
         ui,
         "disable_totp_for_user",
@@ -246,6 +253,7 @@ def test_totp_management_reports_incorrect_disable_credentials(
     fake_st.inputs["Authenticator code"] = "000000"
 
     monkeypatch.setattr(ui, "get_totp_status", lambda user_id: True)
+    monkeypatch.setattr(ui, "get_recovery_code_count", lambda user_id: 8)
     monkeypatch.setattr(
         ui,
         "disable_totp_for_user",
