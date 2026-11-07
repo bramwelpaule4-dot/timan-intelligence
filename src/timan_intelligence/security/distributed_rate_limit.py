@@ -144,11 +144,11 @@ class DatabaseRateLimiter:
                 (key_hash,),
             ).fetchone()
             connection.execute(
-                """
+                f"""
                 DELETE FROM rate_limit_states
                 WHERE locked_until IS NOT NULL
-                  AND locked_until <= ?
-                  AND window_started_at <= ?
+                  AND locked_until <= {p}
+                  AND window_started_at <= {p}
                 """,
                 (now, now - max(self.window_seconds, self.lockout_seconds)),
             )
