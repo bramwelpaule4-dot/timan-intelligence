@@ -141,7 +141,10 @@ class DatabaseRateLimiter:
                 INSERT INTO rate_limit_states (
                     key_hash, window_started_at, failure_count, locked_until
                 )
-                VALUES ({p}, {p}, 1, NULL)
+                VALUES (
+                    {p}, {p}, 1,
+                    CASE WHEN {p} = 1 THEN {p} ELSE NULL END
+                )
                 ON CONFLICT (key_hash) DO UPDATE SET
                     window_started_at = CASE
                         WHEN rate_limit_states.locked_until > {p}
@@ -180,7 +183,7 @@ class DatabaseRateLimiter:
                     END
                 """,
                 (
-                    key_hash, now,
+                    key_hash, now, self.max_failed_attempts, lockout_until,
                     now, cutoff, now, now,
                     now, cutoff, now,
                     now, cutoff, now, self.max_failed_attempts,
