@@ -783,3 +783,68 @@ def test_absolute_timeout_is_enforced_through_authentication(
 
     assert auth.is_authenticated() is False
     assert mock_session == {}
+
+
+def test_pending_recovery_code_authentication_can_be_promoted(
+    monkeypatch,
+    mock_session,
+    valid_account,
+):
+    """A valid single-use recovery code should complete second-factor login."""
+
+    account = dict(valid_account)
+    account["totp_enabled"] = True
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        lambda identifier, password: account,
+    )
+    consumed = []
+    monkeypatch.setattr(
+        auth,
+        "consume_recovery_code",
+        lambda user_id, code: (
+            consumed.append((user_id, code)) or code == "ABCD1234-EF001122-33445566-77889900"
+        ),
+    )
+
+    assert auth.authenticate_user("testuser", VALID_PASSWORD) is False
+    assert auth.verify_pending_recovery_code(
+        "ABCD1234-EF001122-33445566-77889900"
+    ) is True
+
+    assert consumed == [
+        ("test-user-id", "ABCD1234-EF001122-33445566-77889900")
+    ]
+    assert mock_session["authenticated"] is True
+    assert mock_session["user_id"] == "test-user-id"
+    assert "pending_authentication" not in mock_session
+
+
+def test_invalid_recovery_code_does_not_create_session(
+    monkeypatch,
+    mock_session,
+    valid_account,
+):
+    """An invalid recovery code must leave the second-factor challenge pending."""
+
+    account = dict(valid_account)
+    account["totp_enabled"] = True
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        lambda identifier, password: account,
+    )
+    monkeypatch.setattr(
+        auth,
+        "consume_recovery_code",
+        lambda user_id, code: False,
+    )
+
+    assert auth.authenticate_user("testuser", VALID_PASSWORD) is False
+    assert auth.verify_pending_second_factor(
+        "ABCD1234-EF001122-33445566-77889900"
+    ) is False
+
+    assert mock_session["pending_authentication"] is True
+    assert "authenticated" not in mock_session
