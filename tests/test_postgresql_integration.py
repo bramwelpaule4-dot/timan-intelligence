@@ -45,6 +45,10 @@ def postgres_database():
         )
 
     os.environ["DATABASE_URL"] = database_url
+    os.environ.setdefault(
+        "TIMANSTAT_RATE_LIMIT_HMAC_KEY",
+        "test-only-timanstat-rate-limit-hmac-key-32-bytes-minimum",
+    )
 
     initialise_database()
 
