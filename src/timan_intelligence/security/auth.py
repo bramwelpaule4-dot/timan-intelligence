@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 import time
 from typing import Any, MutableMapping
 
@@ -251,6 +252,56 @@ def authenticate_user(username: str, password: str) -> bool:
     return True
 
 
+def verify_pending_recovery_code(code: str) -> bool:
+    """Verify and consume a recovery code for a pending login challenge."""
+
+    if not isinstance(code, str) or not is_totp_pending():
+        return False
+
+    session_state = st.session_state
+    user_id = session_state.get("pending_user_id")
+    username = session_state.get("pending_username")
+    role = session_state.get("pending_role")
+
+    if (
+        not isinstance(user_id, str)
+        or not isinstance(username, str)
+        or role not in VALID_ROLES
+    ):
+        _clear_pending_authentication(session_state)
+        return False
+
+    try:
+        verified = consume_recovery_code(user_id, code)
+    except Exception:
+        return False
+
+    if not verified or not is_totp_pending():
+        return False
+
+    _clear_pending_authentication(session_state)
+    SESSION_MANAGER.create_session(
+        session_state,
+        username,
+        role,
+        user_id=user_id,
+    )
+    return True
+
+
+def verify_pending_second_factor(code: str) -> bool:
+    """Accept either an authenticator code or a formatted recovery code."""
+
+    if not isinstance(code, str):
+        return False
+
+    compact = code.strip().replace("-", "").replace(" ", "")
+    if re.fullmatch(r"[A-Fa-f0-9]{32}", compact):
+        return verify_pending_recovery_code(code)
+
+    return verify_pending_totp(code)
+
+
 def verify_pending_totp(code: str) -> bool:
     """
     Verify the authenticator code for a pending login.
@@ -379,19 +430,19 @@ def render_login() -> None:
         st.caption("Password accepted. Complete two-factor verification.")
 
         st.info(
-            "Enter the six-digit code from your authenticator application."
+            "Enter your six-digit authenticator code. You may use a recovery code if you cannot access your authenticator."
         )
 
         with st.form("timanstat_totp_login_form"):
             code = st.text_input(
                 "Authenticator code",
-                max_chars=6,
-                placeholder="000000",
+                max_chars=40,
+                placeholder="Authenticator code or recovery code",
             )
             submitted = st.form_submit_button("Verify and sign in")
 
         if submitted:
-            if verify_pending_totp(code):
+            if verify_pending_second_factor(code):
                 st.success("Authentication successful.")
                 st.rerun()
             else:
