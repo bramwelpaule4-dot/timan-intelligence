@@ -1,3 +1,4 @@
+
 """PostgreSQL integration tests for TimanStat."""
 
 from __future__ import annotations
@@ -12,6 +13,15 @@ from timan_intelligence.database.migrations.runner import (
     LATEST_SCHEMA_VERSION,
     _validate_existing_schema,
 )
+
+
+EXPECTED_MIGRATION_HISTORY = [
+    (1, "initial_schema"),
+    (2, "totp_enrolment"),
+    (3, "email_verification"),
+    (4, "password_reset"),
+    (5, "session_version"),
+]
 
 
 @pytest.fixture(scope="session")
@@ -59,19 +69,21 @@ def test_postgresql_migrations_are_recorded(postgres_database):
             """
         ).fetchall()
 
-    assert [(row["version"], row["name"]) for row in history] == [
-        (1, "initial_schema"),
-        (2, "totp_enrolment"),
-        (3, "email_verification"),
-        (4, "password_reset"),
-    ]
+    assert [
+        (row["version"], row["name"])
+        for row in history
+    ] == EXPECTED_MIGRATION_HISTORY
 
     assert history[-1]["version"] == LATEST_SCHEMA_VERSION
 
     with database_connection() as connection:
         columns = connection.execute(
             """
-            SELECT column_name
+            SELECT
+                column_name,
+                data_type,
+                is_nullable,
+                column_default
             FROM information_schema.columns
             WHERE table_schema = current_schema()
               AND table_name = 'users'
@@ -88,7 +100,10 @@ def test_postgresql_migrations_are_recorded(postgres_database):
             """
         ).fetchone()
 
-    actual_columns = {row["column_name"] for row in columns}
+    actual_columns = {
+        row["column_name"]: row
+        for row in columns
+    }
 
     expected_totp_columns = {
         "totp_enabled",
@@ -100,6 +115,14 @@ def test_postgresql_migrations_are_recorded(postgres_database):
     }
 
     assert expected_totp_columns.issubset(actual_columns)
+    assert "session_version" in actual_columns
+
+    session_version_column = actual_columns["session_version"]
+
+    assert session_version_column["data_type"] == "integer"
+    assert session_version_column["is_nullable"] == "NO"
+    assert session_version_column["column_default"] == "0"
+
     assert verification_table is not None
 
 
@@ -157,12 +180,10 @@ def test_postgresql_migration_is_idempotent(postgres_database):
             """
         ).fetchall()
 
-    assert [(row["version"], row["name"]) for row in history] == [
-        (1, "initial_schema"),
-        (2, "totp_enrolment"),
-        (3, "email_verification"),
-        (4, "password_reset"),
-    ]
+    assert [
+        (row["version"], row["name"])
+        for row in history
+    ] == EXPECTED_MIGRATION_HISTORY
 
     assert history[-1]["version"] == LATEST_SCHEMA_VERSION
 
