@@ -658,3 +658,16 @@ def test_postgresql_rate_limiter_shares_state_between_instances(
 
     assert first.consume_attempt("worker-test@example.com") is True
     assert second.consume_attempt("worker-test@example.com") is False
+
+    failure_scope = f"postgres-failure-{uuid.uuid4()}"
+    failure_limiter = DatabaseRateLimiter(
+        scope=failure_scope,
+        max_failed_attempts=5,
+        window_seconds=900,
+        lockout_seconds=900,
+    )
+    for _ in range(4):
+        assert failure_limiter.record_failure("failed-login-user") is False
+    assert failure_limiter.record_failure("failed-login-user") is True
+    assert first.is_locked("worker-test@example.com") is True
+    assert failure_limiter.is_locked("failed-login-user") is True
