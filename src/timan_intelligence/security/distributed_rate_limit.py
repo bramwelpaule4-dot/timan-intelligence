@@ -7,7 +7,14 @@ import math
 import time
 from typing import Callable
 
-from timan_intelligence.database.connection import database_connection
+from timan_intelligence.database.connection import (
+    database_connection,
+    get_database_type,
+)
+
+
+def _placeholder() -> str:
+    return "%s" if get_database_type() == "postgresql" else "?"
 
 
 class DatabaseRateLimiter:
@@ -65,12 +72,13 @@ class DatabaseRateLimiter:
         """Return whether the identifier is currently locked."""
         key_hash = self._key_hash(identifier)
         now = float(self._clock())
+        p = _placeholder()
         with database_connection() as connection:
             row = connection.execute(
-                """
+                f"""
                 SELECT locked_until
                 FROM rate_limit_states
-                WHERE key_hash = ?
+                WHERE key_hash = {p}
                 """,
                 (key_hash,),
             ).fetchone()
@@ -87,13 +95,14 @@ class DatabaseRateLimiter:
         cutoff = now - self.window_seconds
         lockout_until = now + self.lockout_seconds
 
+        p = _placeholder()
         with database_connection() as connection:
             connection.execute(
-                """
+                f"""
                 INSERT INTO rate_limit_states (
                     key_hash, window_started_at, failure_count, locked_until
                 )
-                VALUES (?, ?, 1, NULL)
+                VALUES ({p}, {p}, 1, NULL)
                 ON CONFLICT (key_hash) DO UPDATE SET
                     window_started_at = CASE
                         WHEN rate_limit_states.locked_until > ?
@@ -127,10 +136,10 @@ class DatabaseRateLimiter:
                 ),
             )
             row = connection.execute(
-                """
+                f"""
                 SELECT locked_until
                 FROM rate_limit_states
-                WHERE key_hash = ?
+                WHERE key_hash = {p}
                 """,
                 (key_hash,),
             ).fetchone()
@@ -155,6 +164,6 @@ class DatabaseRateLimiter:
         key_hash = self._key_hash(identifier)
         with database_connection() as connection:
             connection.execute(
-                "DELETE FROM rate_limit_states WHERE key_hash = ?",
+                f"DELETE FROM rate_limit_states WHERE key_hash = {_placeholder()}",
                 (key_hash,),
             )
