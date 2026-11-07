@@ -1,7 +1,7 @@
+
 """Tests for the TimanStat Streamlit authentication interface."""
 
 from contextlib import nullcontext
-from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -59,6 +59,9 @@ class FakeStreamlit:
 
     def tabs(self, labels):
         return (nullcontext(), nullcontext())
+
+    def markdown(self, value):
+        self.writes.append(value)
 
 
 @pytest.fixture
@@ -356,3 +359,155 @@ def test_registration_does_not_leak_unexpected_account_error(
     assert "system error" in fake_streamlit.errors[0]
     assert "Database credentials leaked" not in fake_streamlit.errors[0]
     send_verification.assert_not_called()
+
+
+# Development email simulator security tests
+
+
+def test_development_email_simulator_is_disabled_by_default(
+    fake_streamlit,
+    monkeypatch,
+):
+    monkeypatch.delenv("TIMAN_ENVIRONMENT", raising=False)
+    monkeypatch.delenv("TIMAN_DEV_EMAIL_SIMULATOR", raising=False)
+
+    assert auth_ui._development_email_sender(
+        "https://timanstat-dev.streamlit.app"
+    ) is None
+
+
+def test_development_email_simulator_is_disabled_in_production(
+    fake_streamlit,
+    monkeypatch,
+):
+    monkeypatch.setenv("TIMAN_ENVIRONMENT", "production")
+    monkeypatch.setenv("TIMAN_DEV_EMAIL_SIMULATOR", "true")
+    monkeypatch.setenv(
+        "TIMAN_DEV_ALLOWED_HOSTS",
+        "timanstat-dev.streamlit.app",
+    )
+
+    assert auth_ui._development_email_sender(
+        "https://timanstat-dev.streamlit.app"
+    ) is None
+
+
+def test_development_email_simulator_requires_explicit_enablement(
+    fake_streamlit,
+    monkeypatch,
+):
+    monkeypatch.setenv("TIMAN_ENVIRONMENT", "development")
+    monkeypatch.setenv("TIMAN_DEV_EMAIL_SIMULATOR", "false")
+    monkeypatch.setenv(
+        "TIMAN_DEV_ALLOWED_HOSTS",
+        "timanstat-dev.streamlit.app",
+    )
+
+    assert auth_ui._development_email_sender(
+        "https://timanstat-dev.streamlit.app"
+    ) is None
+
+
+def test_development_email_simulator_rejects_unapproved_hostname(
+    fake_streamlit,
+    monkeypatch,
+):
+    monkeypatch.setenv("TIMAN_ENVIRONMENT", "development")
+    monkeypatch.setenv("TIMAN_DEV_EMAIL_SIMULATOR", "true")
+    monkeypatch.setenv(
+        "TIMAN_DEV_ALLOWED_HOSTS",
+        "timanstat-dev.streamlit.app",
+    )
+
+    with pytest.raises(ValueError, match="not authorised"):
+        auth_ui._development_email_sender(
+            "https://timanstat.streamlit.app"
+        )
+
+
+def test_development_email_simulator_accepts_approved_hostname(
+    fake_streamlit,
+    monkeypatch,
+):
+    monkeypatch.setenv("TIMAN_ENVIRONMENT", "development")
+    monkeypatch.setenv("TIMAN_DEV_EMAIL_SIMULATOR", "true")
+    monkeypatch.setenv(
+        "TIMAN_DEV_ALLOWED_HOSTS",
+        "timanstat-dev.streamlit.app",
+    )
+
+    sender = auth_ui._development_email_sender(
+        "https://timanstat-dev.streamlit.app"
+    )
+
+    assert isinstance(sender, auth_ui.MockEmailSender)
+
+
+def test_development_email_simulator_accepts_localhost(
+    fake_streamlit,
+    monkeypatch,
+):
+    monkeypatch.setenv("TIMAN_ENVIRONMENT", "development")
+    monkeypatch.setenv("TIMAN_DEV_EMAIL_SIMULATOR", "true")
+    monkeypatch.delenv("TIMAN_DEV_ALLOWED_HOSTS", raising=False)
+
+    sender = auth_ui._development_email_sender(
+        "http://localhost:8501"
+    )
+
+    assert isinstance(sender, auth_ui.MockEmailSender)
+
+
+def test_development_email_simulator_rejects_invalid_url(
+    fake_streamlit,
+    monkeypatch,
+):
+    monkeypatch.setenv("TIMAN_ENVIRONMENT", "development")
+    monkeypatch.setenv("TIMAN_DEV_EMAIL_SIMULATOR", "true")
+
+    with pytest.raises(ValueError):
+        auth_ui._development_email_sender("not-a-valid-url")
+
+
+def test_development_email_simulator_uses_exact_hostname_match(
+    fake_streamlit,
+    monkeypatch,
+):
+    monkeypatch.setenv("TIMAN_ENVIRONMENT", "development")
+    monkeypatch.setenv("TIMAN_DEV_EMAIL_SIMULATOR", "true")
+    monkeypatch.setenv(
+        "TIMAN_DEV_ALLOWED_HOSTS",
+        "timanstat-dev.streamlit.app",
+    )
+
+    with pytest.raises(ValueError, match="not authorised"):
+        auth_ui._development_email_sender(
+            "https://timanstat-dev.streamlit.app.attacker.com"
+        )
+
+
+def test_extract_verification_url_from_mock_email():
+    verification_url = (
+        "https://timanstat-dev.streamlit.app/"
+        "?verify_email=test-token-123"
+    )
+
+    body = (
+        "Hello Test User,\n\n"
+        "Please verify your email address:\n\n"
+        f"{verification_url}\n\n"
+        "Regards,\nTimanStat"
+    )
+
+    assert auth_ui._extract_verification_url(body) == (
+        verification_url
+    )
+
+
+def test_extract_verification_url_returns_none_when_missing():
+    body = (
+        "Hello Test User,\n\n"
+        "Thank you for registering with TimanStat.\n"
+    )
+
+    assert auth_ui._extract_verification_url(body) is None
