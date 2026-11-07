@@ -1203,6 +1203,13 @@ def test_project_member_cannot_access_another_project(
 
 
 def test_free_plan_project_limit_is_enforced(test_database, test_users, test_organisation):
+    # The shared organisation fixture uses Enterprise to keep unrelated
+    # project tests independent of seat limits. This test must explicitly
+    # exercise the Free plan project quota.
+    assign_subscription(
+        organisation_id=test_organisation,
+        plan_code="free",
+    )
     for index in range(3):
         create_project(
             organisation_id=test_organisation,
@@ -1221,6 +1228,11 @@ def test_free_plan_project_limit_is_enforced(test_database, test_users, test_org
 def test_archived_projects_do_not_consume_project_limit(
     test_database, test_users, test_organisation
 ):
+    # Exercise the Free plan quota so archiving genuinely releases a slot.
+    assign_subscription(
+        organisation_id=test_organisation,
+        plan_code="free",
+    )
     project_ids = [
         create_project(
             organisation_id=test_organisation,
