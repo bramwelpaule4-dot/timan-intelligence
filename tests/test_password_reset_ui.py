@@ -302,15 +302,18 @@ def test_development_password_reset_displays_mock_link(
 
 
 def test_extract_password_reset_url_from_email():
+    """Extract a reset URL from an email containing real line breaks."""
+
     reset_url = (
         "https://timanstat.example.com/"
         "?reset_password=test-token-123"
     )
 
+    # These are actual newline characters, not literal backslash-n text.
     body = (
-        "Hello,\\n\\n"
-        "Reset your password using this link:\\n"
-        f"{reset_url}\\n"
+        "Hello,\n\n"
+        "Reset your password using this link:\n"
+        f"{reset_url}\n"
     )
 
     assert password_reset_ui._extract_password_reset_url(
