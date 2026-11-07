@@ -17,6 +17,7 @@ EXPECTED_MIGRATION_HISTORY = [
     (3, "email_verification"),
     (4, "password_reset"),
     (5, "session_version"),
+    (6, "totp_recovery_codes"),
 ]
 
 
@@ -278,6 +279,42 @@ def assert_session_version_schema():
     assert user["session_version"] == 0
 
 
+def assert_totp_recovery_codes_schema():
+    """Verify hashed recovery-code storage and its lookup index."""
+
+    with database_connection() as connection:
+        columns = {
+            row["name"]
+            for row in connection.execute(
+                "PRAGMA table_info('totp_recovery_codes')"
+            ).fetchall()
+        }
+        foreign_keys = connection.execute(
+            "PRAGMA foreign_key_list('totp_recovery_codes')"
+        ).fetchall()
+        index = connection.execute(
+            """
+            SELECT name, tbl_name
+            FROM sqlite_master
+            WHERE type = 'index'
+              AND name = 'idx_totp_recovery_codes_user'
+            """
+        ).fetchone()
+
+    assert columns == {
+        "id", "user_id", "code_hash", "created_at", "consumed_at"
+    }
+    assert any(
+        row["from"] == "user_id"
+        and row["table"] == "users"
+        and row["to"] == "id"
+        and row["on_delete"].upper() == "CASCADE"
+        for row in foreign_keys
+    )
+    assert index is not None
+    assert index["tbl_name"] == "totp_recovery_codes"
+
+
 def test_fresh_database_applies_all_migrations(migration_database):
     """A fresh database should receive every registered migration."""
 
@@ -293,6 +330,7 @@ def test_fresh_database_applies_all_migrations(migration_database):
     assert_totp_schema()
     assert_password_reset_schema()
     assert_session_version_schema()
+    assert_totp_recovery_codes_schema()
 
     with database_connection() as connection:
         tables = {
@@ -323,6 +361,7 @@ def test_fresh_database_applies_all_migrations(migration_database):
         "schema_migrations",
         "email_verification_tokens",
         "password_reset_tokens",
+        "totp_recovery_codes",
     }
 
     assert expected_tables.issubset(tables)
@@ -350,6 +389,7 @@ def test_repeated_initialisation_does_not_repeat_migration(
 
     assert_password_reset_schema()
     assert_session_version_schema()
+    assert_totp_recovery_codes_schema()
 
 
 def test_existing_unversioned_database_is_baselined_and_upgraded(
