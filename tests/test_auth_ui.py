@@ -24,6 +24,11 @@ class FakeStreamlit:
         self.captions = []
         self.subheaders = []
         self.writes = []
+        self.buttons = []
+
+    def button(self, label, *args, **kwargs):
+        self.buttons.append(label)
+        return False
 
     def subheader(self, value):
         self.subheaders.append(value)
@@ -335,6 +340,10 @@ def test_authentication_page_renders_login_and_registration_tabs(
     assert fake_streamlit.titles == ["Welcome to TimanStat"]
     render_login.assert_called_once()
     render_registration.assert_called_once()
+    assert fake_streamlit.buttons == [
+        "Forgot password?",
+        "Resend verification email",
+    ]
 
 
 def test_registration_does_not_leak_unexpected_account_error(
