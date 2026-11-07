@@ -1,3 +1,4 @@
+
 """Secure password-reset token services for TimanStat."""
 
 from __future__ import annotations
@@ -41,16 +42,7 @@ def create_password_reset_token(
     Create a new password-reset token for an active user.
 
     Any previously issued password-reset token for the user
-    is invalidated.
-
-    Only the token hash is stored in the database.
-
-    Returns:
-        The plaintext token for delivery through the email service.
-
-    Raises:
-        ValueError: If the user ID or expiry is invalid, or the
-            account does not exist or is inactive.
+    is invalidated. Only the token hash is stored.
     """
 
     if not isinstance(user_id, str) or not user_id.strip():
@@ -95,7 +87,6 @@ def create_password_reset_token(
                 "The requested user does not exist or is inactive."
             )
 
-        # Invalidate previously issued reset tokens.
         connection.execute(
             f"""
             DELETE FROM password_reset_tokens
@@ -132,26 +123,19 @@ def reset_password_with_token(
     """
     Replace a user's password using a valid password-reset token.
 
-    A reset token is accepted only when:
-    - It exists in the database.
-    - It has not already been consumed.
-    - It has not expired.
-    - Its associated user account is active.
+    Password replacement, token consumption, and account-wide
+    session revocation occur in the same database transaction.
 
-    The password replacement and token consumption occur
-    in the same database transaction.
-
-    The new password uses the existing TimanStat scrypt
-    password-hashing implementation.
+    Incrementing users.session_version invalidates every existing
+    authenticated session associated with the account.
 
     Returns:
         True if the password was successfully changed.
-        False if the token is invalid, expired, consumed,
-        or belongs to an inactive account.
+        False if the token is invalid, expired, consumed, or
+        belongs to an inactive account.
 
     Raises:
-        ValueError: If the new password does not meet the
-            existing TimanStat password requirements.
+        ValueError: If the new password does not meet requirements.
     """
 
     if not isinstance(token, str):
@@ -165,8 +149,7 @@ def reset_password_with_token(
     ):
         return False
 
-    # Validate and hash the new password before changing database state.
-    # This reuses the existing 12-character minimum and 1024-byte maximum.
+    # Validate and hash before changing database state.
     new_password_hash = _hash_password(new_password)
 
     token_hash = _hash_token(token)
@@ -192,8 +175,7 @@ def reset_password_with_token(
         if reset_record is None:
             return False
 
-        # Consume the token conditionally. This prevents a token
-        # that has already been used or expired from being reused.
+        # Consume the token conditionally to prevent reuse.
         consumed = connection.execute(
             f"""
             UPDATE password_reset_tokens
@@ -208,12 +190,14 @@ def reset_password_with_token(
         if consumed.rowcount != 1:
             return False
 
-        # Change the password only for the active account associated
-        # with the successfully consumed reset token.
+        # Change the password and increment the account's session
+        # version together. All existing sessions will fail their
+        # next session-version validation.
         updated = connection.execute(
             f"""
             UPDATE users
             SET password_hash = {p},
+                session_version = session_version + 1,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = {p}
               AND is_active = TRUE
