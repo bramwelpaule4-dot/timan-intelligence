@@ -34,6 +34,9 @@ SESSION_MANAGER = SessionManager(require_versioned_sessions=True)
 # A pending second-factor challenge expires after five minutes.
 PENDING_TOTP_TIMEOUT_SECONDS = 5 * 60
 
+LOGIN_IDENTIFIER_KEY = "timanstat_login_identifier"
+LOGIN_STEP_KEY = "timanstat_login_step"
+
 PENDING_AUTHENTICATION_KEYS = (
     "pending_authentication",
     "pending_user_id",
@@ -491,26 +494,24 @@ def logout() -> None:
 
 
 def render_login() -> None:
-    """Render the TimanStat password and TOTP login interfaces."""
-
-    st.title("TimanStat Sign In")
+    """Render a simple two-step, email-first TimanStat sign-in flow."""
 
     if is_authenticated():
         st.success("You are already signed in.")
         return
 
     if is_totp_pending():
-        st.caption("Password accepted. Complete two-factor verification.")
-
-        st.info(
-            "Enter your six-digit authenticator code. You may use a recovery code if you cannot access your authenticator."
+        st.subheader("Verify it's you")
+        st.caption(
+            "Your password was accepted. Enter your authenticator code "
+            "or use one of your recovery codes to finish signing in."
         )
 
         with st.form("timanstat_totp_login_form"):
             code = st.text_input(
-                "Authenticator code",
+                "Authenticator code or recovery code",
                 max_chars=40,
-                placeholder="Authenticator code or recovery code",
+                placeholder="Enter your verification code",
             )
             submitted = st.form_submit_button("Verify and sign in")
 
@@ -520,31 +521,91 @@ def render_login() -> None:
                 st.rerun()
             else:
                 st.error(
-                    "The authenticator code could not be verified. "
-                    "Check the code or sign in again if the challenge expired."
+                    "We could not verify that code. Check it and try again, "
+                    "or sign in again if the verification request has expired."
                 )
 
-        if st.button("Cancel sign in"):
+        if st.button("Cancel sign in", key="timanstat_cancel_mfa_sign_in"):
             logout()
+            st.session_state.pop(LOGIN_IDENTIFIER_KEY, None)
+            st.session_state.pop(LOGIN_STEP_KEY, None)
             st.rerun()
 
         return
 
-    st.caption("Sign in using your authorised account.")
+    identifier = st.session_state.get(LOGIN_IDENTIFIER_KEY, "")
+    step = st.session_state.get(LOGIN_STEP_KEY, "identifier")
 
-    with st.form("timanstat_login_form"):
-        username = st.text_input("Username or email")
-        password = st.text_input("Password", type="password")
-        submitted = st.form_submit_button("Sign in")
+    if not isinstance(identifier, str):
+        identifier = ""
+        step = "identifier"
+        st.session_state.pop(LOGIN_IDENTIFIER_KEY, None)
+
+    if step != "password" or not identifier.strip():
+        st.subheader("Welcome back")
+        st.caption("Enter your email address or username to continue.")
+
+        with st.form("timanstat_login_identifier_form"):
+            entered_identifier = st.text_input(
+                "Email address or username",
+                max_chars=254,
+                autocomplete="username",
+            )
+            submitted = st.form_submit_button(
+                "Continue",
+                use_container_width=True,
+            )
+
+        if submitted:
+            if not entered_identifier.strip():
+                st.error("Enter your email address or username.")
+                return
+
+            st.session_state[LOGIN_IDENTIFIER_KEY] = (
+                entered_identifier.strip()
+            )
+            st.session_state[LOGIN_STEP_KEY] = "password"
+            st.rerun()
+
+        return
+
+    st.subheader("Enter your password")
+    st.caption(f"Signing in as {identifier}")
+
+    with st.form("timanstat_login_password_form"):
+        password = st.text_input(
+            "Password",
+            type="password",
+            autocomplete="current-password",
+        )
+        submitted = st.form_submit_button(
+            "Sign in",
+            use_container_width=True,
+        )
 
     if submitted:
-        if authenticate_user(username, password):
+        if not password:
+            st.error("Enter your password.")
+            return
+
+        if authenticate_user(identifier, password):
+            st.session_state.pop(LOGIN_IDENTIFIER_KEY, None)
+            st.session_state.pop(LOGIN_STEP_KEY, None)
             st.success("Authentication successful.")
             st.rerun()
         elif is_totp_pending():
             st.rerun()
         else:
             st.error(
-                "Invalid username, password or inactive account. "
-                "You may also be temporarily locked out after repeated failures."
+                "We could not sign you in with those details. Check your "
+                "password, verify your email address if you have not already, "
+                "or try again later if sign-in attempts are temporarily limited."
             )
+
+    if st.button(
+        "Use a different account",
+        key="timanstat_change_login_identifier",
+    ):
+        st.session_state.pop(LOGIN_IDENTIFIER_KEY, None)
+        st.session_state.pop(LOGIN_STEP_KEY, None)
+        st.rerun()
