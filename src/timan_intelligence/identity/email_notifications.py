@@ -27,6 +27,16 @@ from timan_intelligence.identity.password_reset import (
 from timan_intelligence.security.distributed_rate_limit import DatabaseRateLimiter
 
 
+EMAIL_VERIFICATION_SUBJECT = "Verify your TimanStat account"
+PASSWORD_RESET_SUBJECT = "Reset your TimanStat password"
+
+DEFAULT_RESEND_COOLDOWN_SECONDS = 60
+MAX_RESEND_COOLDOWN_SECONDS = 3600
+
+DEFAULT_PASSWORD_RESET_COOLDOWN_SECONDS = 60
+MAX_PASSWORD_RESET_COOLDOWN_SECONDS = 3600
+
+
 EMAIL_VERIFICATION_REQUEST_LIMITER = DatabaseRateLimiter(
     scope="email-verification-request",
     max_failed_attempts=1,
@@ -39,16 +49,6 @@ PASSWORD_RESET_REQUEST_LIMITER = DatabaseRateLimiter(
     window_seconds=DEFAULT_PASSWORD_RESET_COOLDOWN_SECONDS,
     lockout_seconds=DEFAULT_PASSWORD_RESET_COOLDOWN_SECONDS,
 )
-
-
-EMAIL_VERIFICATION_SUBJECT = "Verify your TimanStat account"
-PASSWORD_RESET_SUBJECT = "Reset your TimanStat password"
-
-DEFAULT_RESEND_COOLDOWN_SECONDS = 60
-MAX_RESEND_COOLDOWN_SECONDS = 3600
-
-DEFAULT_PASSWORD_RESET_COOLDOWN_SECONDS = 60
-MAX_PASSWORD_RESET_COOLDOWN_SECONDS = 3600
 
 
 def _placeholder() -> str:
