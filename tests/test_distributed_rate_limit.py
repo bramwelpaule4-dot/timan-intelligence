@@ -11,6 +11,7 @@ from timan_intelligence.security.distributed_rate_limit import DatabaseRateLimit
 def rate_limit_database(tmp_path, monkeypatch):
     path = tmp_path / "rate_limits.db"
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{path.as_posix()}")
+    monkeypatch.setenv("TIMANSTAT_RATE_LIMIT_HMAC_KEY", "test-only-timanstat-rate-limit-hmac-key-32-bytes-minimum")
     initialise_database()
     return path
 
@@ -140,3 +141,39 @@ def test_request_throttle_allows_configured_number_of_attempts(rate_limit_databa
     assert limiter.consume_attempt("user@example.com") is True
     assert limiter.consume_attempt("user@example.com") is True
     assert limiter.consume_attempt("user@example.com") is False
+
+
+def test_hmac_identifier_hash_is_stable_and_scope_separated(rate_limit_database):
+    """The same key and identifier produce stable, namespaced digests."""
+    first = DatabaseRateLimiter(scope="login", hmac_secret="test-only-timanstat-rate-limit-hmac-key-32-bytes-minimum")
+    second = DatabaseRateLimiter(scope="login", hmac_secret="test-only-timanstat-rate-limit-hmac-key-32-bytes-minimum")
+    other_scope = DatabaseRateLimiter(scope="recovery", hmac_secret="test-only-timanstat-rate-limit-hmac-key-32-bytes-minimum")
+
+    assert first._key_hash("User@Example.com") == second._key_hash(
+        " user@example.com "
+    )
+    assert first._key_hash("user@example.com") != other_scope._key_hash(
+        "user@example.com"
+    )
+
+
+def test_hmac_identifier_hash_changes_when_secret_changes(rate_limit_database):
+    """A different application secret produces unrelated stored keys."""
+    first = DatabaseRateLimiter(scope="login", hmac_secret="test-only-timanstat-rate-limit-hmac-key-32-bytes-minimum")
+    second = DatabaseRateLimiter(
+        scope="login",
+        hmac_secret="different-test-only-key-with-at-least-32-bytes",
+    )
+
+    assert first._key_hash("user@example.com") != second._key_hash(
+        "user@example.com"
+    )
+
+
+@pytest.mark.parametrize("secret", ["", "short", "é" * 10])
+def test_hmac_requires_at_least_32_secret_bytes(rate_limit_database, secret):
+    """Weak or absent HMAC secrets are rejected rather than downgraded."""
+    limiter = DatabaseRateLimiter(scope="login", hmac_secret=secret)
+
+    with pytest.raises(RuntimeError, match="HMAC key"):
+        limiter.is_locked("user@example.com")
