@@ -691,3 +691,114 @@ def test_postgresql_rate_limiter_shares_state_between_instances(
     assert failure_limiter.record_failure("failed-login-user") is True
     assert first.is_locked("worker-test@example.com") is True
     assert failure_limiter.is_locked("failed-login-user") is True
+
+def test_postgresql_request_throttle_is_atomic_under_concurrency(
+    postgres_database,
+):
+    """Concurrent workers must not exceed the configured request allowance."""
+
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    from uuid import uuid4
+
+    from timan_intelligence.security.distributed_rate_limit import (
+        DatabaseRateLimiter,
+    )
+
+    scope = f"postgres-concurrent-request-{uuid4()}"
+    identifier = f"{uuid4()}@example.com"
+    worker_count = 20
+    allowed_attempts = 4
+    barrier = Barrier(worker_count)
+
+    def consume_from_independent_worker():
+        limiter = DatabaseRateLimiter(
+            scope=scope,
+            max_failed_attempts=allowed_attempts,
+            window_seconds=120,
+            lockout_seconds=120,
+        )
+        barrier.wait(timeout=15)
+        return limiter.consume_attempt(identifier)
+
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        results = list(
+            executor.map(
+                lambda _: consume_from_independent_worker(),
+                range(worker_count),
+            )
+        )
+
+    assert sum(results) == allowed_attempts
+
+    limiter = DatabaseRateLimiter(
+        scope=scope,
+        max_failed_attempts=allowed_attempts,
+        window_seconds=120,
+        lockout_seconds=120,
+    )
+    assert limiter.consume_attempt(identifier) is False
+
+
+def test_postgresql_failed_login_counter_is_atomic_under_concurrency(
+    postgres_database,
+):
+    """Concurrent failed logins must produce one consistent lockout state."""
+
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    from uuid import uuid4
+    import time
+
+    from timan_intelligence.security.distributed_rate_limit import (
+        DatabaseRateLimiter,
+    )
+
+    scope = f"postgres-concurrent-login-{uuid4()}"
+    identifier = f"concurrent-user-{uuid4()}"
+    worker_count = 20
+    failure_threshold = 5
+    barrier = Barrier(worker_count)
+
+    def record_from_independent_worker():
+        limiter = DatabaseRateLimiter(
+            scope=scope,
+            max_failed_attempts=failure_threshold,
+            window_seconds=120,
+            lockout_seconds=120,
+        )
+        barrier.wait(timeout=15)
+        return limiter.record_failure(identifier)
+
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        results = list(
+            executor.map(
+                lambda _: record_from_independent_worker(),
+                range(worker_count),
+            )
+        )
+
+    limiter = DatabaseRateLimiter(
+        scope=scope,
+        max_failed_attempts=failure_threshold,
+        window_seconds=120,
+        lockout_seconds=120,
+    )
+    assert limiter.is_locked(identifier) is True
+
+    with database_connection() as connection:
+        row = connection.execute(
+            """
+            SELECT failure_count, locked_until
+            FROM rate_limit_states
+            WHERE key_hash = %s
+            """,
+            (limiter._key_hash(identifier),),
+        ).fetchone()
+
+    assert row is not None
+    assert row["failure_count"] == failure_threshold
+    assert row["locked_until"] is not None
+    assert float(row["locked_until"]) > time.time()
+    assert any(results)
+
