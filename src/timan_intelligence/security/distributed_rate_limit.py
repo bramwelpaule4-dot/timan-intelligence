@@ -243,7 +243,6 @@ class DatabaseRateLimiter:
                 (
                     key_hash, now, self.max_failed_attempts, lockout_until,
                     cutoff, now, now,
-                    cutoff, now, now,
                     cutoff, now,
                     cutoff, now, self.max_failed_attempts, lockout_until,
                     self.max_failed_attempts, lockout_until,
