@@ -14,6 +14,7 @@ from timan_intelligence.identity.email_delivery import (
     MockEmailSender,
 )
 from timan_intelligence.identity.email_notifications import (
+    resend_email_verification,
     send_email_verification,
 )
 from timan_intelligence.identity.service import register_user
@@ -21,6 +22,12 @@ from timan_intelligence.security.auth import render_login
 
 
 logger = logging.getLogger(__name__)
+
+RESEND_GENERIC_MESSAGE = (
+    "If an active, unverified account exists for that email address, "
+    "a verification link will be sent. If you recently requested one, "
+    "please wait before trying again."
+)
 
 
 def _configuration_value(name: str) -> str:
@@ -225,6 +232,8 @@ def render_registration() -> None:
         )
         return
 
+    development_sender = None
+
     try:
         development_sender = _development_email_sender(
             base_url
@@ -237,7 +246,6 @@ def render_registration() -> None:
                 sender=development_sender,
             )
         else:
-            # Preserve the established production call signature.
             send_email_verification(
                 user_id=user_id,
                 base_url=base_url,
@@ -317,6 +325,116 @@ def render_registration() -> None:
     )
 
 
+def render_resend_verification() -> None:
+    """Render the public email-verification resend form."""
+
+    st.subheader("Resend verification email")
+
+    st.write(
+        "If you did not receive your verification email, "
+        "or your previous link has expired, you can request another."
+    )
+
+    with st.form("timanstat_resend_verification_form"):
+        email = st.text_input(
+            "Registered email address",
+            max_chars=254,
+        )
+
+        submitted = st.form_submit_button(
+            "Resend verification link",
+            use_container_width=True,
+        )
+
+    if not submitted:
+        return
+
+    if not email.strip():
+        st.error("Enter your registered email address.")
+        return
+
+    base_url = _application_base_url()
+
+    if not base_url:
+        st.warning(
+            "The verification service is temporarily unavailable. "
+            "Please try again later."
+        )
+        return
+
+    development_sender = None
+
+    try:
+        development_sender = _development_email_sender(
+            base_url
+        )
+
+        if development_sender is not None:
+            resend_email_verification(
+                email=email,
+                base_url=base_url,
+                sender=development_sender,
+            )
+        else:
+            resend_email_verification(
+                email=email,
+                base_url=base_url,
+            )
+
+    except (ValueError, EmailDeliveryError) as exc:
+        _log_email_delivery_failure(exc)
+        st.warning(
+            "The verification request could not be completed. "
+            "Please try again later."
+        )
+        return
+
+    except Exception as exc:
+        _log_email_delivery_failure(exc)
+        st.warning(
+            "The verification request could not be completed. "
+            "Please try again later."
+        )
+        return
+
+    # Always display the same public response, regardless of
+    # whether an account exists, is verified, or is in cooldown.
+    st.success(RESEND_GENERIC_MESSAGE)
+
+    if development_sender is None:
+        return
+
+    if not development_sender.sent_messages:
+        return
+
+    verification_message = development_sender.sent_messages[-1]
+
+    verification_url = _extract_verification_url(
+        verification_message.body
+    )
+
+    if verification_url is None:
+        logger.error(
+            "Development resend verification URL was not found "
+            "in the generated mock email."
+        )
+        return
+
+    st.warning(
+        "Development mode: this is a test verification link. "
+        "It is not an email sent to your inbox."
+    )
+
+    st.markdown(
+        f"[Open development verification link]({verification_url})"
+    )
+
+    st.caption(
+        "This development-only link uses the same verification "
+        "token service as normal email verification."
+    )
+
+
 def render_authentication() -> None:
     """Render the TimanStat sign-in and registration interface."""
 
@@ -343,6 +461,7 @@ def render_authentication() -> None:
 
     with login_tab:
         render_login()
+        render_resend_verification()
 
     with register_tab:
         render_registration()
