@@ -175,7 +175,12 @@ def test_password_step_hands_off_to_mfa_without_creating_full_session(
         "authenticate_user",
         lambda identifier, password: False,
     )
-    monkeypatch.setattr(auth, "is_totp_pending", lambda: True)
+    pending_states = iter([False, True])
+    monkeypatch.setattr(
+        auth,
+        "is_totp_pending",
+        lambda: next(pending_states),
+    )
 
     auth.render_login()
 
@@ -189,6 +194,7 @@ def test_password_step_hands_off_to_mfa_without_creating_full_session(
 def test_password_step_allows_user_to_change_account(
     login_ui,
 ):
+    login_ui.submitted = False
     login_ui.session_state.update(
         {
             auth.LOGIN_IDENTIFIER_KEY: "analyst@example.com",
@@ -196,7 +202,7 @@ def test_password_step_allows_user_to_change_account(
         }
     )
 
-    # The fake button is not clicked; the control is rendered for the user.
+    # A non-submitted password form still renders the account-switch control.
     auth.render_login()
 
     assert "Use a different account" in login_ui.buttons
