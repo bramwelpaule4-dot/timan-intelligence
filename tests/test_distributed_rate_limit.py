@@ -177,3 +177,51 @@ def test_hmac_requires_at_least_32_secret_bytes(rate_limit_database, secret):
 
     with pytest.raises(RuntimeError, match="HMAC key"):
         limiter.is_locked("user@example.com")
+
+def test_different_identifiers_have_independent_rate_limit_state(
+    rate_limit_database,
+):
+    limiter = DatabaseRateLimiter(
+        scope="login",
+        max_failed_attempts=2,
+        window_seconds=60,
+        lockout_seconds=60,
+    )
+
+    assert limiter.record_failure("first-user@example.com") is False
+    assert limiter.record_failure("first-user@example.com") is True
+
+    assert limiter.is_locked("first-user@example.com") is True
+    assert limiter.is_locked("second-user@example.com") is False
+
+
+def test_hmac_key_rotation_does_not_reuse_previous_rate_limit_digest(
+    rate_limit_database,
+):
+    """Changing the HMAC secret deliberately starts a fresh key namespace."""
+    old_key = "test-only-timanstat-rate-limit-hmac-key-32-bytes-minimum"
+    new_key = "rotated-test-only-rate-limit-hmac-key-with-32-bytes"
+
+    previous = DatabaseRateLimiter(
+        scope="login",
+        max_failed_attempts=1,
+        window_seconds=60,
+        lockout_seconds=60,
+        hmac_secret=old_key,
+    )
+    rotated = DatabaseRateLimiter(
+        scope="login",
+        max_failed_attempts=1,
+        window_seconds=60,
+        lockout_seconds=60,
+        hmac_secret=new_key,
+    )
+
+    assert previous.record_failure("rotation-user@example.com") is True
+    assert previous.is_locked("rotation-user@example.com") is True
+
+    # A new HMAC key produces a distinct digest. This resets historical
+    # limiter state; operators must account for that during key rotation.
+    assert rotated.is_locked("rotation-user@example.com") is False
+    assert rotated.record_failure("rotation-user@example.com") is True
+
