@@ -1,4 +1,3 @@
- 
 """PostgreSQL integration tests for TimanStat."""
 
 from __future__ import annotations
