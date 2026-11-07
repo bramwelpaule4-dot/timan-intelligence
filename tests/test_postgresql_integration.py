@@ -1,4 +1,3 @@
-
 """PostgreSQL integration tests for TimanStat."""
 
 from __future__ import annotations
@@ -64,6 +63,7 @@ def test_postgresql_migrations_are_recorded(postgres_database):
         (1, "initial_schema"),
         (2, "totp_enrolment"),
         (3, "email_verification"),
+        (4, "password_reset"),
     ]
 
     assert history[-1]["version"] == LATEST_SCHEMA_VERSION
@@ -115,6 +115,7 @@ def test_postgresql_schema_contains_required_tables(postgres_database):
         "audit_logs",
         "schema_migrations",
         "email_verification_tokens",
+        "password_reset_tokens",
     }
 
     with database_connection() as connection:
@@ -160,6 +161,7 @@ def test_postgresql_migration_is_idempotent(postgres_database):
         (1, "initial_schema"),
         (2, "totp_enrolment"),
         (3, "email_verification"),
+        (4, "password_reset"),
     ]
 
     assert history[-1]["version"] == LATEST_SCHEMA_VERSION
