@@ -628,3 +628,33 @@ def test_postgresql_transaction_rolls_back_all_changes_on_failure(
         ).fetchone()
 
     assert result is None
+
+
+
+def test_postgresql_rate_limiter_shares_state_between_instances(
+    postgres_database,
+):
+    """Independent application workers should share PostgreSQL limits."""
+
+    import uuid
+
+    from timan_intelligence.security.distributed_rate_limit import (
+        DatabaseRateLimiter,
+    )
+
+    scope = f"postgres-integration-{uuid.uuid4()}"
+    first = DatabaseRateLimiter(
+        scope=scope,
+        max_failed_attempts=1,
+        window_seconds=60,
+        lockout_seconds=60,
+    )
+    second = DatabaseRateLimiter(
+        scope=scope,
+        max_failed_attempts=1,
+        window_seconds=60,
+        lockout_seconds=60,
+    )
+
+    assert first.consume_attempt("worker-test@example.com") is True
+    assert second.consume_attempt("worker-test@example.com") is False
