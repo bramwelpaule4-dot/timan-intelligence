@@ -83,6 +83,22 @@ def test_monthly_analysis_quota_is_enforced_at_boundary(entitlement_database):
         )
 
 
+def test_single_usage_request_cannot_exceed_empty_monthly_quota(entitlement_database):
+    with pytest.raises(UsageLimitExceeded, match="single request"):
+        consume_monthly_usage(
+            "monthly_analyses",
+            user_id="user-1",
+            amount=101,
+            period_start="2026-11-01",
+        )
+
+    assert get_monthly_usage(
+        "monthly_analyses",
+        user_id="user-1",
+        period_start="2026-11-01",
+    ) == 0
+
+
 def test_usage_is_separated_by_calendar_month(entitlement_database):
     consume_monthly_usage(
         "monthly_exports",

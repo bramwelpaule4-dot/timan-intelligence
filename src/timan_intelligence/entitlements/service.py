@@ -130,6 +130,12 @@ def consume_monthly_usage(
     column, owner_id = _owner(user_id if organisation_id is None else None, organisation_id)
     code = get_effective_plan_code(user_id=user_id, organisation_id=organisation_id)
     limit = get_limit(code, metric)
+    if limit is not None and amount > limit:
+        raise UsageLimitExceeded(
+            f"The {code.title()} plan allows {limit} "
+            f"{metric.replace('_', ' ')} per month; a single request "
+            f"for {amount} would exceed that allowance."
+        )
     period = _period_start(period_start)
     p = _placeholder()
     conflict = f"{column}, metric, period_start"
