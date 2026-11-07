@@ -283,3 +283,44 @@ def test_totp_management_handles_status_lookup_failure(
         fake_st,
         "Two-factor authentication settings are temporarily unavailable.",
     )
+
+
+def test_totp_management_regenerates_and_displays_recovery_codes(
+    fake_st,
+    monkeypatch,
+):
+    fake_st.form_buttons["Generate new recovery codes"] = True
+    fake_st.inputs["Current password for recovery-code regeneration"] = (
+        "SecureTestPassword123!"
+    )
+    fake_st.inputs["Authenticator code or unused recovery code"] = (
+        "ABCD1234-EF001122-33445566-77889900"
+    )
+    calls = []
+    logout_calls = []
+
+    monkeypatch.setattr(ui, "get_totp_status", lambda user_id: True)
+    monkeypatch.setattr(ui, "get_recovery_code_count", lambda user_id: 4)
+    monkeypatch.setattr(
+        ui,
+        "regenerate_recovery_codes",
+        lambda user_id, password, code: (
+            calls.append((user_id, password, code))
+            or ["NEW-CODE-ONE", "NEW-CODE-TWO"]
+        ),
+    )
+    monkeypatch.setattr(ui, "logout", lambda: logout_calls.append(True))
+
+    with pytest.raises(FakeStop):
+        ui.render_totp_management()
+
+    assert calls == [
+        (
+            "test-user",
+            "SecureTestPassword123!",
+            "ABCD1234-EF001122-33445566-77889900",
+        )
+    ]
+    assert "NEW-CODE-ONE\\nNEW-CODE-TWO" in fake_st.codes
+    assert logout_calls == [True]
+    assert fake_st.stop_called
