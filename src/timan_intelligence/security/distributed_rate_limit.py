@@ -1,0 +1,160 @@
+"""Shared database-backed rate limiting for TimanStat."""
+
+from __future__ import annotations
+
+import hashlib
+import math
+import time
+from typing import Callable
+
+from timan_intelligence.database.connection import database_connection
+
+
+class DatabaseRateLimiter:
+    """Apply atomic rate limits shared by workers using the same database.
+
+    PostgreSQL is the recommended shared production backend. SQLite state is
+    shared only by processes using the same database file on the same host.
+    Identifiers are hashed before storage.
+    """
+
+    def __init__(
+        self,
+        scope: str,
+        max_failed_attempts: int = 5,
+        window_seconds: float = 900,
+        lockout_seconds: float = 900,
+        clock: Callable[[], float] = time.time,
+    ) -> None:
+        if not isinstance(scope, str) or not scope.strip():
+            raise ValueError("A rate-limit scope is required.")
+        if (
+            isinstance(max_failed_attempts, bool)
+            or not isinstance(max_failed_attempts, int)
+            or max_failed_attempts < 1
+        ):
+            raise ValueError("max_failed_attempts must be a positive integer.")
+        for name, value in (("window_seconds", window_seconds),
+                            ("lockout_seconds", lockout_seconds)):
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or value <= 0
+            ):
+                raise ValueError(f"{name} must be a positive finite number.")
+        if not callable(clock):
+            raise ValueError("clock must be callable.")
+
+        self.scope = scope.strip().casefold()
+        self.max_failed_attempts = max_failed_attempts
+        self.window_seconds = float(window_seconds)
+        self.lockout_seconds = float(lockout_seconds)
+        self._clock = clock
+
+    def _key_hash(self, identifier: str) -> str:
+        if not isinstance(identifier, str):
+            raise TypeError("The rate-limit identifier must be a string.")
+        normalised = identifier.strip().casefold()
+        if not normalised:
+            raise ValueError("The rate-limit identifier cannot be empty.")
+        material = f"{self.scope}:{normalised}".encode("utf-8")
+        return hashlib.sha256(material).hexdigest()
+
+    def is_locked(self, identifier: str) -> bool:
+        """Return whether the identifier is currently locked."""
+        key_hash = self._key_hash(identifier)
+        now = float(self._clock())
+        with database_connection() as connection:
+            row = connection.execute(
+                """
+                SELECT locked_until
+                FROM rate_limit_states
+                WHERE key_hash = ?
+                """,
+                (key_hash,),
+            ).fetchone()
+        return bool(
+            row is not None
+            and row["locked_until"] is not None
+            and float(row["locked_until"]) > now
+        )
+
+    def record_failure(self, identifier: str) -> bool:
+        """Atomically record a failure and return the resulting lock state."""
+        key_hash = self._key_hash(identifier)
+        now = float(self._clock())
+        cutoff = now - self.window_seconds
+        lockout_until = now + self.lockout_seconds
+
+        with database_connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO rate_limit_states (
+                    key_hash, window_started_at, failure_count, locked_until
+                )
+                VALUES (?, ?, 1, NULL)
+                ON CONFLICT (key_hash) DO UPDATE SET
+                    window_started_at = CASE
+                        WHEN rate_limit_states.locked_until > ?
+                            THEN rate_limit_states.window_started_at
+                        WHEN rate_limit_states.window_started_at <= ?
+                            THEN ?
+                        ELSE rate_limit_states.window_started_at
+                    END,
+                    failure_count = CASE
+                        WHEN rate_limit_states.locked_until > ?
+                            THEN rate_limit_states.failure_count
+                        WHEN rate_limit_states.window_started_at <= ?
+                            THEN 1
+                        ELSE rate_limit_states.failure_count + 1
+                    END,
+                    locked_until = CASE
+                        WHEN rate_limit_states.locked_until > ?
+                            THEN rate_limit_states.locked_until
+                        WHEN rate_limit_states.window_started_at <= ?
+                            THEN NULL
+                        WHEN rate_limit_states.failure_count + 1 >= ?
+                            THEN ?
+                        ELSE rate_limit_states.locked_until
+                    END
+                """,
+                (
+                    key_hash, now,
+                    now, cutoff, now,
+                    now, cutoff,
+                    now, cutoff, self.max_failed_attempts, lockout_until,
+                ),
+            )
+            row = connection.execute(
+                """
+                SELECT locked_until
+                FROM rate_limit_states
+                WHERE key_hash = ?
+                """,
+                (key_hash,),
+            ).fetchone()
+            connection.execute(
+                """
+                DELETE FROM rate_limit_states
+                WHERE locked_until IS NOT NULL
+                  AND locked_until <= ?
+                  AND window_started_at <= ?
+                """,
+                (now, now - max(self.window_seconds, self.lockout_seconds)),
+            )
+
+        return bool(
+            row is not None
+            and row["locked_until"] is not None
+            and float(row["locked_until"]) > now
+        )
+
+    def record_success(self, identifier: str) -> None:
+        """Clear the failure history for an identifier."""
+        key_hash = self._key_hash(identifier)
+        with database_connection() as connection:
+            connection.execute(
+                "DELETE FROM rate_limit_states WHERE key_hash = ?",
+                (key_hash,),
+            )
