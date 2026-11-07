@@ -41,8 +41,10 @@ class DatabaseRateLimiter:
             or max_failed_attempts < 1
         ):
             raise ValueError("max_failed_attempts must be a positive integer.")
-        for name, value in (("window_seconds", window_seconds),
-                            ("lockout_seconds", lockout_seconds)):
+        for name, value in (
+            ("window_seconds", window_seconds),
+            ("lockout_seconds", lockout_seconds),
+        ):
             if (
                 isinstance(value, bool)
                 or not isinstance(value, (int, float))
@@ -94,8 +96,8 @@ class DatabaseRateLimiter:
         now = float(self._clock())
         cutoff = now - self.window_seconds
         lockout_until = now + self.lockout_seconds
-
         p = _placeholder()
+
         with database_connection() as connection:
             connection.execute(
                 f"""
@@ -105,34 +107,47 @@ class DatabaseRateLimiter:
                 VALUES ({p}, {p}, 1, NULL)
                 ON CONFLICT (key_hash) DO UPDATE SET
                     window_started_at = CASE
-                        WHEN rate_limit_states.locked_until > ?
+                        WHEN rate_limit_states.locked_until > {p}
                             THEN rate_limit_states.window_started_at
-                        WHEN rate_limit_states.window_started_at <= ?
-                            THEN ?
+                        WHEN rate_limit_states.window_started_at <= {p}
+                          OR (
+                              rate_limit_states.locked_until IS NOT NULL
+                              AND rate_limit_states.locked_until <= {p}
+                          )
+                            THEN {p}
                         ELSE rate_limit_states.window_started_at
                     END,
                     failure_count = CASE
-                        WHEN rate_limit_states.locked_until > ?
+                        WHEN rate_limit_states.locked_until > {p}
                             THEN rate_limit_states.failure_count
-                        WHEN rate_limit_states.window_started_at <= ?
+                        WHEN rate_limit_states.window_started_at <= {p}
+                          OR (
+                              rate_limit_states.locked_until IS NOT NULL
+                              AND rate_limit_states.locked_until <= {p}
+                          )
                             THEN 1
                         ELSE rate_limit_states.failure_count + 1
                     END,
                     locked_until = CASE
-                        WHEN rate_limit_states.locked_until > ?
+                        WHEN rate_limit_states.locked_until > {p}
                             THEN rate_limit_states.locked_until
-                        WHEN rate_limit_states.window_started_at <= ?
+                        WHEN rate_limit_states.window_started_at <= {p}
+                          OR (
+                              rate_limit_states.locked_until IS NOT NULL
+                              AND rate_limit_states.locked_until <= {p}
+                          )
                             THEN NULL
-                        WHEN rate_limit_states.failure_count + 1 >= ?
-                            THEN ?
+                        WHEN rate_limit_states.failure_count + 1 >= {p}
+                            THEN {p}
                         ELSE rate_limit_states.locked_until
                     END
                 """,
                 (
                     key_hash, now,
+                    now, cutoff, now, now,
                     now, cutoff, now,
-                    now, cutoff,
-                    now, cutoff, self.max_failed_attempts, lockout_until,
+                    now, cutoff, now, self.max_failed_attempts,
+                    lockout_until,
                 ),
             )
             row = connection.execute(
