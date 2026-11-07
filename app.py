@@ -20,6 +20,7 @@ from timan_intelligence.database.initialise import initialise_database
 from timan_intelligence.identity.email_verification import verify_email_token
 from timan_intelligence.security.auth import is_authenticated, logout
 from timan_intelligence.security.auth_ui import render_authentication
+from timan_intelligence.security.password_change_ui import render_password_change
 
 
 # ============================================================
@@ -165,6 +166,10 @@ MODULES = {
     "Reports & Exports": (
         "Available — data exports",
         "Download the current dataset and available descriptive outputs.",
+    ),
+    "Account & Security": (
+        "Available",
+        "Manage your account password and security settings.",
     ),
     "Settings & Governance": (
         "Under development",
@@ -1516,6 +1521,20 @@ elif page == "About":
         "analytical engine is implemented. Modules marked "
         "Under development are not operational."
     )
+
+
+# ============================================================
+# ACCOUNT & SECURITY
+# ============================================================
+
+elif page == "Account & Security":
+    st.title("Account & Security")
+    st.caption(status_text(MODULES[page][0]))
+    st.write(
+        "Manage your sign-in credentials. Additional account and security "
+        "controls will be added here as they become available."
+    )
+    render_password_change()
 
 
 # ============================================================
