@@ -7,6 +7,9 @@ import re
 import uuid
 from typing import Any
 
+from timan_intelligence.entitlements.plans import get_limit
+from timan_intelligence.entitlements.subscriptions import get_effective_plan_code
+
 from timan_intelligence.database.connection import (
     database_connection,
     get_database_type,
@@ -280,6 +283,27 @@ def add_organisation_member(
             raise ValueError(
                 "This user already has a membership record in the organisation."
             )
+
+        plan_code = get_effective_plan_code(
+            user_id=added_by, organisation_id=organisation_id
+        )
+        member_limit = get_limit(plan_code, "max_team_members")
+        if member_limit is not None:
+            active_members = connection.execute(
+                f"""
+                SELECT COUNT(*) AS total
+                FROM organisation_memberships
+                WHERE organisation_id = {p} AND status = 'active'
+                """,
+                (organisation_id,),
+            ).fetchone()
+            current_members = int(active_members["total"])
+            if current_members >= member_limit:
+                raise ValueError(
+                    f"The {plan_code.title()} plan allows {member_limit} active "
+                    f"team member(s); this organisation already has {current_members}. "
+                    "Upgrade the organisation plan to add more members."
+                )
 
         connection.execute(
             f"""

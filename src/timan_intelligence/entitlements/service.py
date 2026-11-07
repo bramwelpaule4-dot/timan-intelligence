@@ -58,6 +58,37 @@ def get_effective_entitlements(*, user_id: str, organisation_id: str | None = No
     return {"plan_code": plan.code, "plan_name": plan.name, "features": plan.features, "limits": plan.limits}
 
 
+class DatasetLimitExceeded(EntitlementError):
+    """Raised when an uploaded dataset exceeds its plan allowance."""
+
+
+def validate_dataset_limits(
+    *, user_id: str, row_count: int | None = None,
+    file_size_bytes: int | None = None, organisation_id: str | None = None,
+) -> dict[str, int | None]:
+    """Enforce plan upload-size and row limits before dataset use."""
+    code = get_effective_plan_code(user_id=user_id, organisation_id=organisation_id)
+    size_limit_mb = get_limit(code, "max_upload_size_mb")
+    row_limit = get_limit(code, "max_dataset_rows")
+    if file_size_bytes is not None:
+        if isinstance(file_size_bytes, bool) or not isinstance(file_size_bytes, int) or file_size_bytes < 0:
+            raise ValueError("File size must be a non-negative integer.")
+        if size_limit_mb is not None and file_size_bytes > size_limit_mb * 1024 * 1024:
+            raise DatasetLimitExceeded(
+                f"The {code.title()} plan allows uploads up to {size_limit_mb} MB. "
+                "Choose a smaller file or upgrade your plan."
+            )
+    if row_count is not None:
+        if isinstance(row_count, bool) or not isinstance(row_count, int) or row_count < 0:
+            raise ValueError("Dataset row count must be a non-negative integer.")
+        if row_limit is not None and row_count > row_limit:
+            raise DatasetLimitExceeded(
+                f"The {code.title()} plan allows datasets up to {row_limit:,} rows; "
+                f"this dataset contains {row_count:,} rows. Upgrade your plan to import it."
+            )
+    return {"max_upload_size_mb": size_limit_mb, "max_dataset_rows": row_limit}
+
+
 def require_feature(feature: str, *, user_id: str, organisation_id: str | None = None) -> str:
     code = get_effective_plan_code(user_id=user_id, organisation_id=organisation_id)
     if not has_feature(code, feature):

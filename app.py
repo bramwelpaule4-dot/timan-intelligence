@@ -23,8 +23,10 @@ from timan_intelligence.security.auth_ui import render_authentication
 from timan_intelligence.security.password_change_ui import render_password_change
 from timan_intelligence.security.totp_management_ui import render_totp_management
 from timan_intelligence.entitlements.service import (
+    DatasetLimitExceeded,
     UsageLimitExceeded,
     consume_monthly_usage,
+    validate_dataset_limits,
 )
 
 
@@ -644,6 +646,20 @@ elif page == "Data Management":
         upload_id = get_upload_id(uploaded_file)
         upload_key = f"{uploaded_file.name}:{upload_id}"
         file_name = uploaded_file.name.lower()
+        current_user_id = st.session_state.get("user_id")
+        try:
+            if not isinstance(current_user_id, str) or not current_user_id.strip():
+                raise RuntimeError("Your authenticated account could not be verified. Please sign in again.")
+            validate_dataset_limits(
+                user_id=current_user_id,
+                file_size_bytes=len(uploaded_file.getvalue()),
+            )
+        except (DatasetLimitExceeded, RuntimeError) as exc:
+            st.error(str(exc))
+            st.stop()
+        except Exception:
+            st.error("Your upload allowance could not be verified. The file was not imported.")
+            st.stop()
 
         # CSV: import directly when a different file is uploaded.
         if file_name.endswith(".csv"):
@@ -653,6 +669,9 @@ elif page == "Data Management":
             ):
                 try:
                     imported = load_uploaded_file(uploaded_file)
+                    validate_dataset_limits(
+                        user_id=current_user_id, row_count=len(imported)
+                    )
 
                     st.session_state.dataset = imported
                     st.session_state.dataset_name = uploaded_file.name
@@ -724,6 +743,9 @@ elif page == "Data Management":
                         imported = load_uploaded_file(
                             uploaded_file,
                             sheet_name=selected_sheet,
+                        )
+                        validate_dataset_limits(
+                            user_id=current_user_id, row_count=len(imported)
                         )
 
                         st.session_state.dataset = imported

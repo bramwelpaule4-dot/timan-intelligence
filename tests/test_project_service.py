@@ -6,6 +6,7 @@ import pytest
 from timan_intelligence.database.connection import database_connection
 from timan_intelligence.database.initialise import initialise_database
 from timan_intelligence.identity.service import register_user
+from timan_intelligence.entitlements.subscriptions import assign_subscription
 from timan_intelligence.organisations.service import (
     create_organisation,
     add_organisation_member,
@@ -70,10 +71,12 @@ def test_users(test_database):
 @pytest.fixture
 def test_organisation(test_users):
     """Create an organisation with an Organisation Admin."""
-    return create_organisation(
+    organisation_id = create_organisation(
         name="TimanStat Project Test Organisation",
         created_by=test_users["projectadmin"],
     )
+    assign_subscription(organisation_id=organisation_id, plan_code="enterprise")
+    return organisation_id
 
 
 @pytest.fixture

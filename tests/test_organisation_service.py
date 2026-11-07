@@ -5,6 +5,7 @@ import pytest
 from timan_intelligence.database.connection import database_connection
 from timan_intelligence.database.initialise import initialise_database
 from timan_intelligence.identity.service import register_user
+from timan_intelligence.entitlements.subscriptions import assign_subscription
 from timan_intelligence.organisations.service import (
     create_organisation,
     add_organisation_member,
@@ -89,6 +90,7 @@ def test_organisation(test_users):
         country="Kenya",
     )
 
+    assign_subscription(organisation_id=organisation_id, plan_code="enterprise")
     return organisation_id
 
 

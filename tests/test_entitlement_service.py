@@ -9,11 +9,13 @@ import pytest
 from timan_intelligence.database.connection import database_connection
 from timan_intelligence.database.initialise import initialise_database
 from timan_intelligence.entitlements.service import (
+    DatasetLimitExceeded,
     FeatureAccessDenied,
     UsageLimitExceeded,
     consume_monthly_usage,
     get_monthly_usage,
     require_feature,
+    validate_dataset_limits,
 )
 from timan_intelligence.entitlements.subscriptions import assign_subscription
 
@@ -133,3 +135,35 @@ def test_invalid_metric_and_amount_are_rejected(entitlement_database):
         consume_monthly_usage("unknown_metric", user_id="user-1")
     with pytest.raises(ValueError):
         consume_monthly_usage("monthly_analyses", user_id="user-1", amount=0)
+
+
+def test_free_dataset_upload_and_row_limits(entitlement_database):
+    limits = validate_dataset_limits(
+        user_id="user-1", file_size_bytes=25 * 1024 * 1024,
+        row_count=10_000,
+    )
+    assert limits == {"max_upload_size_mb": 25, "max_dataset_rows": 10_000}
+    with pytest.raises(DatasetLimitExceeded):
+        validate_dataset_limits(
+            user_id="user-1", file_size_bytes=25 * 1024 * 1024 + 1
+        )
+    with pytest.raises(DatasetLimitExceeded):
+        validate_dataset_limits(user_id="user-1", row_count=10_001)
+
+
+def test_professional_dataset_limits(entitlement_database):
+    assign_subscription(user_id="user-1", plan_code="professional")
+    validate_dataset_limits(
+        user_id="user-1", file_size_bytes=250 * 1024 * 1024,
+        row_count=250_000,
+    )
+    with pytest.raises(DatasetLimitExceeded):
+        validate_dataset_limits(user_id="user-1", row_count=250_001)
+
+
+def test_enterprise_dataset_limits_are_unlimited(entitlement_database):
+    assign_subscription(user_id="user-1", plan_code="enterprise")
+    validate_dataset_limits(
+        user_id="user-1", file_size_bytes=500 * 1024 * 1024,
+        row_count=1_000_000,
+    )
