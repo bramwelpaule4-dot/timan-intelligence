@@ -5,7 +5,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from timan_intelligence.identity.service import _verify_password
 from timan_intelligence.database.connection import (
     database_connection,
     get_database_type,
@@ -492,6 +491,9 @@ def disable_totp_for_user(
     Returns False when credentials are incorrect or the account cannot
     be updated. Invalid user IDs raise TOTPServiceError.
     """
+
+    # Import locally to avoid an identity/security module import cycle.
+    from timan_intelligence.identity.service import _verify_password
 
     user_id = _validate_user_id(user_id)
 
