@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from timan_intelligence.identity.service import _verify_password
 from timan_intelligence.database.connection import (
     database_connection,
     get_database_type,
@@ -322,6 +323,7 @@ def confirm_totp_enrolment(
             UPDATE users
             SET
                 totp_enabled = TRUE,
+                session_version = session_version + 1,
                 totp_secret_encrypted = {p},
                 totp_pending_secret_encrypted = NULL,
                 totp_last_accepted_counter = {p},
@@ -455,3 +457,92 @@ def verify_totp_for_user(
         )
 
         return True
+
+
+
+def get_totp_status(user_id: str) -> bool:
+    """Return whether an active account has TOTP enabled."""
+
+    user_id = _validate_user_id(user_id)
+
+    with database_connection() as connection:
+        user = _get_active_user(connection, user_id)
+
+        if user is None:
+            raise TOTPServiceError(
+                "The requested active user account was not found."
+            )
+
+        return bool(user["totp_enabled"])
+
+
+def disable_totp_for_user(
+    user_id: str,
+    current_password: str,
+    code: str,
+    at_time: float | None = None,
+) -> bool:
+    """
+    Disable TOTP after re-authenticating with the account password
+    and a fresh authenticator code.
+
+    Successful removal clears all enrolled and pending TOTP material
+    and increments session_version so every active session is revoked.
+
+    Returns False when credentials are incorrect or the account cannot
+    be updated. Invalid user IDs raise TOTPServiceError.
+    """
+
+    user_id = _validate_user_id(user_id)
+
+    if not isinstance(current_password, str) or not current_password:
+        return False
+
+    if not isinstance(code, str) or not code.strip():
+        return False
+
+    p = _placeholder()
+
+    with database_connection() as connection:
+        user = connection.execute(
+            f"""
+            SELECT password_hash, totp_enabled
+            FROM users
+            WHERE id = {p}
+              AND is_active = TRUE
+            """,
+            (user_id,),
+        ).fetchone()
+
+        if user is None or not bool(user["totp_enabled"]):
+            return False
+
+        if not _verify_password(current_password, user["password_hash"]):
+            return False
+
+    # This validates and consumes a fresh, non-replayed authenticator
+    # code before the destructive operation is attempted.
+    if not verify_totp_for_user(user_id, code.strip(), at_time=at_time):
+        return False
+
+    with database_connection() as connection:
+        updated = connection.execute(
+            f"""
+            UPDATE users
+            SET
+                totp_enabled = FALSE,
+                totp_secret_encrypted = NULL,
+                totp_pending_secret_encrypted = NULL,
+                totp_last_accepted_counter = NULL,
+                totp_enrolled_at = NULL,
+                totp_pending_created_at = NULL,
+                session_version = session_version + 1,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = {p}
+              AND is_active = TRUE
+              AND totp_enabled = TRUE
+            """,
+            (user_id,),
+        )
+
+        return updated.rowcount == 1
