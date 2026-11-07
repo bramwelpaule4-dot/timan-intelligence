@@ -14,6 +14,12 @@ from timan_intelligence.security.totp_service import (
     disable_totp_for_user,
     get_totp_status,
 )
+from timan_intelligence.security.recovery_codes import (
+    RecoveryCodeError,
+    generate_recovery_codes,
+    get_recovery_code_count,
+    regenerate_recovery_codes,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -60,9 +66,86 @@ def render_totp_management() -> None:
         _clear_pending_enrolment()
         st.success("Authenticator-based two-factor authentication is enabled.")
         st.write(
-            "Your account requires a fresh authenticator code after "
-            "password verification when you sign in."
+            "Your account requires a fresh authenticator code or a "
+            "single-use recovery code after password verification."
         )
+
+        try:
+            remaining_codes = get_recovery_code_count(user_id)
+            st.caption(f"{remaining_codes} unused recovery codes remain.")
+        except Exception as exc:
+            logger.error(
+                "TimanStat recovery-code count lookup failed. error_type=%s",
+                type(exc).__name__,
+            )
+            st.warning("Recovery-code status is temporarily unavailable.")
+
+        st.info(
+            "Recovery codes let you sign in if you lose access to your "
+            "authenticator. Each code works once. Generate a new set "
+            "to invalidate every code from the previous set."
+        )
+
+        with st.form("timanstat_regenerate_recovery_codes_form"):
+            recovery_password = st.text_input(
+                "Current password for recovery-code regeneration",
+                type="password",
+                max_chars=1024,
+            )
+            recovery_factor = st.text_input(
+                "Authenticator code or unused recovery code",
+                max_chars=40,
+            )
+            regenerate_submitted = st.form_submit_button(
+                "Generate new recovery codes",
+                use_container_width=True,
+            )
+
+        if regenerate_submitted:
+            if not recovery_password or not recovery_factor.strip():
+                st.error(
+                    "Enter your current password and an authenticator "
+                    "or unused recovery code."
+                )
+                return
+
+            try:
+                new_codes = regenerate_recovery_codes(
+                    user_id,
+                    recovery_password,
+                    recovery_factor.strip(),
+                )
+            except Exception as exc:
+                logger.error(
+                    "TimanStat recovery-code regeneration failed. error_type=%s",
+                    type(exc).__name__,
+                )
+                st.error(
+                    "Recovery codes could not be regenerated. "
+                    "Please try again later."
+                )
+                return
+
+            if not new_codes:
+                st.error(
+                    "The password or second-factor code is incorrect, "
+                    "or recovery codes could not be regenerated."
+                )
+                return
+
+            st.success("A new set of recovery codes has been generated.")
+            st.warning(
+                "Save these codes now. They are displayed only once; "
+                "all previous recovery codes have been invalidated."
+            )
+            st.code("\\n".join(new_codes))
+            logout()
+            st.info(
+                "All active sessions have been signed out. "
+                "Sign in again to continue."
+            )
+            st.stop()
+            return
 
         st.warning(
             "Disabling two-factor authentication requires your current "
@@ -237,12 +320,35 @@ def render_totp_management() -> None:
             )
             return
 
+        try:
+            recovery_codes = generate_recovery_codes(user_id)
+        except Exception as exc:
+            logger.error(
+                "TimanStat initial recovery-code generation failed. "
+                "error_type=%s",
+                type(exc).__name__,
+            )
+            _clear_pending_enrolment()
+            logout()
+            st.error(
+                "Two-factor authentication was enabled, but recovery "
+                "codes could not be generated. Sign in and use Account "
+                "& Security to generate them."
+            )
+            st.stop()
+            return
+
         _clear_pending_enrolment()
-        logout()
         st.success("Two-factor authentication has been enabled.")
+        st.warning(
+            "Save these recovery codes in a secure location. Each code "
+            "can be used once, and they will not be displayed again."
+        )
+        st.code("\\n".join(recovery_codes))
+        logout()
         st.info(
-            "For your security, all active sessions have been signed out. "
-            "Sign in again; your authenticator code will now be required."
+            "All active sessions have been signed out. Sign in again; "
+            "your authenticator or a recovery code will be required."
         )
         st.stop()
         return
