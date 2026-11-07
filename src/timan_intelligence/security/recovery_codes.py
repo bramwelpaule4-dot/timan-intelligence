@@ -93,6 +93,18 @@ def generate_recovery_codes(user_id: str) -> list[str]:
                 (str(uuid.uuid4()), user_id, _hash_code(code)),
             )
 
+        connection.execute(
+            f"""
+            UPDATE users
+            SET session_version = session_version + 1,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = {p}
+              AND is_active = TRUE
+              AND totp_enabled = TRUE
+            """,
+            (user_id,),
+        )
+
     return [f"{code[:8]}-{code[8:16]}-{code[16:24]}-{code[24:]}" for code in codes]
 
 
@@ -202,7 +214,13 @@ def regenerate_recovery_codes(
     if user is None or not _verify_password(current_password, user["password_hash"]):
         return None
 
-    if not verify_totp_for_user(user_id, authenticator_code.strip()):
+    compact_code = _normalise_code(authenticator_code)
+    if compact_code is not None:
+        verified = consume_recovery_code(user_id, authenticator_code)
+    else:
+        verified = verify_totp_for_user(user_id, authenticator_code.strip())
+
+    if not verified:
         return None
 
     return generate_recovery_codes(user_id)
