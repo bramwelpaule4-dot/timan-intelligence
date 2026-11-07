@@ -263,10 +263,6 @@ def authenticate_user(
     Returns:
         A user record without the password hash, or None if
         authentication fails.
-
-        The returned record includes totp_enabled so the
-        authentication layer can determine whether a second
-        authentication factor is required.
     """
 
     if not isinstance(login_identifier, str) or not isinstance(password, str):
@@ -324,6 +320,92 @@ def authenticate_user(
         result.pop("password_hash", None)
 
         return result
+
+
+def change_password(
+    user_id: str,
+    current_password: str,
+    new_password: str,
+) -> bool:
+    """
+    Change the password of an authenticated active account.
+
+    The current password must be correct. A successful change
+    increments session_version, invalidating all existing sessions.
+
+    Password replacement and session revocation occur in one
+    database transaction.
+
+    Returns:
+        True when the password is successfully changed.
+        False when the account is unavailable, the current password
+        is incorrect, or another concurrent change has occurred.
+
+    Raises:
+        ValueError: If the user ID or new password is invalid.
+    """
+
+    if not isinstance(user_id, str) or not user_id.strip():
+        raise ValueError("A valid user ID is required.")
+
+    if not isinstance(current_password, str) or not current_password:
+        return False
+
+    if not isinstance(new_password, str):
+        raise ValueError("A valid new password is required.")
+
+    user_id = user_id.strip()
+    p = _placeholder()
+
+    with database_connection() as connection:
+        user = connection.execute(
+            f"""
+            SELECT password_hash
+            FROM users
+            WHERE id = {p}
+              AND is_active = TRUE
+            """,
+            (user_id,),
+        ).fetchone()
+
+        if user is None:
+            return False
+
+        current_hash = user["password_hash"]
+
+        if not _verify_password(current_password, current_hash):
+            return False
+
+        if _verify_password(new_password, current_hash):
+            raise ValueError(
+                "Your new password must be different from your current password."
+            )
+
+        new_password_hash = _hash_password(new_password)
+
+        # Compare the existing hash as part of the update. This prevents
+        # a concurrent password change from being silently overwritten.
+        updated = connection.execute(
+            f"""
+            UPDATE users
+            SET password_hash = {p},
+                session_version = session_version + 1,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = {p}
+              AND password_hash = {p}
+              AND is_active = TRUE
+            """,
+            (
+                new_password_hash,
+                user_id,
+                current_hash,
+            ),
+        )
+
+        if updated.rowcount != 1:
+            return False
+
+    return True
 
 
 def get_user_by_id(user_id: str) -> dict[str, Any] | None:
