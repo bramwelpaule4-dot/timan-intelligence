@@ -1,4 +1,3 @@
-
 """Streamlit password-recovery interface for TimanStat."""
 
 from __future__ import annotations
@@ -83,6 +82,27 @@ def _show_development_reset_link(
     )
 
 
+def _clear_password_reset_query_param() -> None:
+    """Remove the reset token from the browser URL."""
+
+    query_params = getattr(st, "query_params", None)
+
+    if query_params is None:
+        return
+
+    try:
+        if "reset_password" in query_params:
+            del query_params["reset_password"]
+
+    except Exception as exc:
+        # Do not log the token or the complete URL.
+        logger.warning(
+            "Could not clear password-reset query parameter. "
+            "error_type=%s",
+            type(exc).__name__,
+        )
+
+
 def render_password_reset_request() -> None:
     """Render the public password-reset request form."""
 
@@ -153,8 +173,7 @@ def render_password_reset_request() -> None:
     # Do not reveal whether the email address belongs to an account.
     st.success(PASSWORD_RESET_GENERIC_MESSAGE)
 
-    # The link is exposed only when the authorised development
-    # simulator is enabled and a mock email was actually generated.
+    # Expose a link only through the authorised development simulator.
     _show_development_reset_link(development_sender)
 
 
@@ -231,6 +250,9 @@ def render_password_reset_form(token: str) -> None:
             "has already been used. Request a new link and try again."
         )
         return
+
+    # The reset succeeded. Remove the sensitive token from the URL.
+    _clear_password_reset_query_param()
 
     st.success(
         "Your password has been changed successfully. "
