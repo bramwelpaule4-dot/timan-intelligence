@@ -19,6 +19,9 @@ from timan_intelligence.security.recovery_codes import (
     regenerate_recovery_codes,
 )
 from timan_intelligence.security.totp import generate_totp_code
+
+
+TEST_TIMESTAMP = 1_700_000_000
 from timan_intelligence.security.totp_service import (
     begin_totp_enrolment,
     confirm_totp_enrolment,
@@ -52,8 +55,15 @@ def totp_user(unprotected_user):
     """Return an enrolled user and their authenticator secret."""
 
     enrolment = begin_totp_enrolment(unprotected_user)
-    code = generate_totp_code(enrolment["secret"])
-    assert confirm_totp_enrolment(unprotected_user, code) is True
+    code = generate_totp_code(
+        enrolment["secret"],
+        at_time=TEST_TIMESTAMP,
+    )
+    assert confirm_totp_enrolment(
+        unprotected_user,
+        code,
+        at_time=TEST_TIMESTAMP,
+    ) is True
     return unprotected_user, enrolment["secret"]
 
 
@@ -115,12 +125,16 @@ def test_invalid_recovery_code_is_rejected(totp_user):
 def test_regeneration_invalidates_all_previous_codes(totp_user):
     user_id, secret = totp_user
     previous = generate_recovery_codes(user_id)
-    fresh_totp = generate_totp_code(secret)
+    fresh_totp = generate_totp_code(
+        secret,
+        at_time=TEST_TIMESTAMP + 30,
+    )
 
     replacement = regenerate_recovery_codes(
         user_id,
         "SecureTestPassword123!",
         fresh_totp,
+        at_time=TEST_TIMESTAMP + 30,
     )
 
     assert replacement is not None
