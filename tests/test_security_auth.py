@@ -17,7 +17,7 @@ VALID_PASSWORD = "SecureTestPassword123!"
 
 @pytest.fixture
 def mock_session(monkeypatch):
-    """Provide isolated Streamlit session state and login rate limiter."""
+    """Provide isolated Streamlit session state and login services."""
 
     session_state = {}
 
@@ -27,20 +27,27 @@ def mock_session(monkeypatch):
         SimpleNamespace(session_state=session_state),
     )
 
-    # Each test gets a fresh limiter. This prevents failed attempts in one
-    # test from locking out valid logins in another test.
     monkeypatch.setattr(
         auth,
         "LOGIN_RATE_LIMITER",
         LoginRateLimiter(),
     )
 
+    # Test accounts are artificial and do not exist in the database.
+    # Their session version is therefore controlled by this test loader.
+    manager = SessionManager(
+        session_version_loader=lambda user_id: 0,
+        require_versioned_sessions=False,
+    )
+
+    monkeypatch.setattr(auth, "SESSION_MANAGER", manager)
+
     return session_state
 
 
 @pytest.fixture
 def valid_account():
-    """Return a valid database identity-service account record."""
+    """Return a valid simulated identity-service account."""
 
     return {
         "id": "test-user-id",
@@ -60,10 +67,7 @@ def mock_identity_authentication(monkeypatch, valid_account):
     def authenticate(identifier, password):
         calls.append((identifier, password))
 
-        if (
-            identifier == "testuser"
-            and password == VALID_PASSWORD
-        ):
+        if identifier == "testuser" and password == VALID_PASSWORD:
             return dict(valid_account)
 
         return None
@@ -90,6 +94,8 @@ def controlled_session_manager(monkeypatch):
         idle_timeout_seconds=1800,
         absolute_timeout_seconds=43200,
         clock=lambda: current_time[0],
+        session_version_loader=lambda user_id: 0,
+        require_versioned_sessions=False,
     )
 
     monkeypatch.setattr(auth, "SESSION_MANAGER", manager)
@@ -174,6 +180,8 @@ def test_authentication_accepts_valid_active_account(
     assert mock_session["role"] == "user"
     assert mock_session["authenticated_at"] == 1_000_000.0
     assert mock_session["last_activity_at"] == 1_000_000.0
+    assert mock_session["user_id"] == "test-user-id"
+    assert mock_session["session_version"] == 0
 
     assert auth.is_authenticated() is True
 
@@ -458,6 +466,8 @@ def test_pending_totp_authentication_can_be_promoted(
     assert mock_session["authenticated"] is True
     assert mock_session["username"] == "testuser"
     assert mock_session["role"] == "user"
+    assert mock_session["user_id"] == "test-user-id"
+    assert mock_session["session_version"] == 0
     assert "pending_authentication" not in mock_session
 
     assert auth.is_authenticated() is True
@@ -581,6 +591,8 @@ def test_logout_clears_full_and_pending_authentication(mock_session):
             "authenticated": True,
             "username": "testuser",
             "role": "admin",
+            "user_id": "test-user-id",
+            "session_version": 0,
             "authenticated_at": time.monotonic(),
             "last_activity_at": time.monotonic(),
             "pending_authentication": True,
@@ -599,6 +611,8 @@ def test_logout_clears_full_and_pending_authentication(mock_session):
         "authenticated",
         "username",
         "role",
+        "user_id",
+        "session_version",
         "authenticated_at",
         "last_activity_at",
         "pending_authentication",
@@ -621,9 +635,7 @@ def test_unauthenticated_session_has_no_permissions(mock_session):
     assert auth.has_permission("manage_users") is False
 
 
-def test_authenticated_user_receives_only_assigned_permissions(
-    mock_session,
-):
+def test_authenticated_user_receives_only_assigned_permissions(mock_session):
     """A normal user should receive only explicitly assigned permissions."""
 
     auth.SESSION_MANAGER.create_session(
