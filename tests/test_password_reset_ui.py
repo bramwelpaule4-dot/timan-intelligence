@@ -21,7 +21,7 @@ class FakeStreamlit:
     ):
         self.inputs = list(inputs or [])
         self.submitted = submitted
-        self.query_params = query_params or {}
+        self.query_params = query_params if query_params is not None else {}
         self.errors = []
         self.warnings = []
         self.successes = []
@@ -309,7 +309,6 @@ def test_extract_password_reset_url_from_email():
         "?reset_password=test-token-123"
     )
 
-    # These are actual newline characters, not literal backslash-n text.
     body = (
         "Hello,\n\n"
         "Reset your password using this link:\n"
@@ -551,3 +550,64 @@ def test_password_recovery_handles_missing_query_params(
     assert "Forgot your password?" in (
         fake_streamlit.subheaders
     )
+
+
+def test_successful_password_reset_clears_token_from_url(
+    fake_streamlit,
+    monkeypatch,
+):
+    fake_streamlit.inputs = [
+        "SecurePassword123!",
+        "SecurePassword123!",
+    ]
+
+    fake_streamlit.query_params = {
+        "reset_password": "valid-token"
+    }
+
+    monkeypatch.setattr(
+        password_reset_ui,
+        "reset_password_with_token",
+        Mock(return_value=True),
+    )
+
+    password_reset_ui.render_password_reset_form(
+        "valid-token"
+    )
+
+    assert "reset_password" not in fake_streamlit.query_params
+
+    assert len(fake_streamlit.successes) == 1
+    assert fake_streamlit.errors == []
+
+
+def test_failed_password_reset_preserves_token_in_url(
+    fake_streamlit,
+    monkeypatch,
+):
+    fake_streamlit.inputs = [
+        "SecurePassword123!",
+        "SecurePassword123!",
+    ]
+
+    fake_streamlit.query_params = {
+        "reset_password": "invalid-token"
+    }
+
+    monkeypatch.setattr(
+        password_reset_ui,
+        "reset_password_with_token",
+        Mock(return_value=False),
+    )
+
+    password_reset_ui.render_password_reset_form(
+        "invalid-token"
+    )
+
+    assert (
+        fake_streamlit.query_params["reset_password"]
+        == "invalid-token"
+    )
+
+    assert fake_streamlit.successes == []
+    assert len(fake_streamlit.errors) == 1
