@@ -161,11 +161,13 @@ class DatabaseRateLimiter:
             connection.execute(
                 f"""
                 DELETE FROM rate_limit_states
-                WHERE locked_until IS NOT NULL
-                  AND locked_until <= {p}
-                  AND window_started_at <= {p}
+                WHERE window_started_at <= {p}
+                  AND (locked_until IS NULL OR locked_until <= {p})
                 """,
-                (now, now - max(self.window_seconds, self.lockout_seconds)),
+                (
+                    now - max(self.window_seconds, self.lockout_seconds),
+                    now,
+                ),
             )
 
         return bool(
@@ -247,6 +249,18 @@ class DatabaseRateLimiter:
                     cutoff, now, self.max_failed_attempts, lockout_until,
                     self.max_failed_attempts, lockout_until,
                     now, cutoff, self.max_failed_attempts, now,
+                ),
+            )
+
+            connection.execute(
+                f"""
+                DELETE FROM rate_limit_states
+                WHERE window_started_at <= {p}
+                  AND (locked_until IS NULL OR locked_until <= {p})
+                """,
+                (
+                    now - max(self.window_seconds, self.lockout_seconds),
+                    now,
                 ),
             )
 
