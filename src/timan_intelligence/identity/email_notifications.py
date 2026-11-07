@@ -3,8 +3,14 @@
 
 from __future__ import annotations
 
+import re
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode, urlsplit, urlunsplit
 
+from timan_intelligence.database.connection import (
+    database_connection,
+    get_database_type,
+)
 from timan_intelligence.identity.email_delivery import (
     EmailSender,
     OutboundEmail,
@@ -18,6 +24,14 @@ from timan_intelligence.identity.service import get_user_by_id
 
 
 EMAIL_VERIFICATION_SUBJECT = "Verify your TimanStat account"
+DEFAULT_RESEND_COOLDOWN_SECONDS = 60
+MAX_RESEND_COOLDOWN_SECONDS = 3600
+
+
+def _placeholder() -> str:
+    """Return the parameter placeholder for the configured database."""
+
+    return "%s" if get_database_type() == "postgresql" else "?"
 
 
 def _validate_base_url(base_url: str) -> str:
@@ -81,21 +95,8 @@ def send_email_verification(
     """
     Generate and send an email-verification message.
 
-    The verification token is stored as a hash by the token service.
-    Its plaintext value is included only in the outgoing verification
-    link.
-
-    Args:
-        user_id: ID of the registered user.
-        base_url: Public application URL, or a localhost URL for
-            development.
-        sender: Optional email sender. When omitted, the configured
-            provider is constructed automatically.
-        expiry_minutes: Token validity period.
-
-    Raises:
-        ValueError: If the user or application URL is invalid.
-        EmailDeliveryError: If email delivery fails.
+    Only the token hash is stored in the database. The plaintext
+    token is included only in the outgoing verification link.
     """
 
     application_url = _validate_base_url(base_url)
@@ -141,3 +142,89 @@ def send_email_verification(
 
     email_sender = sender or build_email_sender()
     email_sender.send(message)
+
+
+def resend_email_verification(
+    email: str,
+    base_url: str,
+    sender: EmailSender | None = None,
+    cooldown_seconds: int = DEFAULT_RESEND_COOLDOWN_SECONDS,
+) -> bool:
+    """
+    Request another email-verification message.
+
+    Returns True when a verification message is successfully sent.
+
+    Returns False for unknown, inactive, already verified, or
+    recently contacted accounts. This avoids exposing account
+    existence through the public resend workflow.
+
+    A cooldown prevents repeated requests from generating excessive
+    verification emails and invalidating previously issued tokens.
+    """
+
+    if not isinstance(email, str):
+        return False
+
+    email = email.strip().lower()
+
+    if (
+        len(email) > 254
+        or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email)
+    ):
+        return False
+
+    if (
+        isinstance(cooldown_seconds, bool)
+        or not isinstance(cooldown_seconds, int)
+        or not 1 <= cooldown_seconds <= MAX_RESEND_COOLDOWN_SECONDS
+    ):
+        raise ValueError(
+            "Resend cooldown must be between 1 and 3600 seconds."
+        )
+
+    p = _placeholder()
+
+    cutoff = (
+        datetime.now(timezone.utc).replace(tzinfo=None)
+        - timedelta(seconds=cooldown_seconds)
+    )
+
+    with database_connection() as connection:
+        user = connection.execute(
+            f"""
+            SELECT id
+            FROM users
+            WHERE email = {p}
+              AND is_active = TRUE
+              AND email_verified = FALSE
+            """,
+            (email,),
+        ).fetchone()
+
+        if user is None:
+            return False
+
+        recent_token = connection.execute(
+            f"""
+            SELECT id
+            FROM email_verification_tokens
+            WHERE user_id = {p}
+              AND created_at >= {p}
+            LIMIT 1
+            """,
+            (user["id"], cutoff),
+        ).fetchone()
+
+        if recent_token is not None:
+            return False
+
+        user_id = user["id"]
+
+    send_email_verification(
+        user_id=user_id,
+        base_url=base_url,
+        sender=sender,
+    )
+
+    return True
