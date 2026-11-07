@@ -20,9 +20,11 @@ class FakeStreamlit:
         self.subheaders = []
         self.infos = []
         self.buttons = []
+        self.forms = []
         self.rerun_count = 0
 
     def form(self, *args, **kwargs):
+        self.forms.append(args[0] if args else None)
         return nullcontext()
 
     def text_input(self, *args, **kwargs):
@@ -71,9 +73,7 @@ def test_login_starts_with_identifier_step(login_ui):
     auth.render_login()
 
     assert login_ui.subheaders == ["Welcome back"]
-    assert "timanstat_login_identifier_form" in login_ui.subheaders or (
-        login_ui.errors == []
-    )
+    assert login_ui.forms == ["timanstat_login_identifier_form"]
     assert login_ui.errors == []
 
 
