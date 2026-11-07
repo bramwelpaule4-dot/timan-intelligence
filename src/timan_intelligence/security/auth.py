@@ -77,7 +77,11 @@ def _verify_password(password: str, stored_hash: str) -> bool:
 def _reject_login(identifier: str) -> bool:
     """Record a failed password attempt and reject authentication."""
 
-    LOGIN_RATE_LIMITER.record_failure(identifier)
+    try:
+        LOGIN_RATE_LIMITER.record_failure(identifier)
+    except Exception:
+        # A rate-limit storage failure must never permit authentication.
+        pass
     return False
 
 
@@ -239,7 +243,11 @@ def authenticate_user(username: str, password: str) -> bool:
     SESSION_MANAGER.clear_session(st.session_state)
     _clear_pending_authentication(st.session_state)
 
-    if LOGIN_RATE_LIMITER.is_locked(identifier):
+    try:
+        if LOGIN_RATE_LIMITER.is_locked(identifier):
+            return False
+    except Exception:
+        # Fail closed if shared rate-limit state cannot be read.
         return False
 
     try:
@@ -269,7 +277,11 @@ def authenticate_user(username: str, password: str) -> bool:
     ):
         return _reject_login(identifier)
 
-    LOGIN_RATE_LIMITER.record_success(identifier)
+    try:
+        LOGIN_RATE_LIMITER.record_success(identifier)
+    except Exception:
+        # Do not establish a session if rate-limit state cannot be cleared.
+        return False
 
     # Password authentication succeeded. TOTP-enabled accounts must
     # complete the second factor before receiving a full session.
