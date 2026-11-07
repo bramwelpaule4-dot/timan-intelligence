@@ -14,6 +14,7 @@ from timan_intelligence.identity.service import (
     authenticate_user as authenticate_identity_user,
 )
 from timan_intelligence.security.rate_limit import LoginRateLimiter
+from timan_intelligence.security.recovery_codes import consume_recovery_code
 from timan_intelligence.security.session import SessionManager
 from timan_intelligence.security.totp_service import (
     TOTPServiceError,
