@@ -545,3 +545,87 @@ def test_totp_services_reject_invalid_user_ids(
             code="123456",
             at_time=TEST_TIMESTAMP,
         )
+
+
+def test_totp_enrolment_fails_closed_when_rate_limiter_is_unavailable(
+    totp_user,
+    monkeypatch,
+):
+    """A limiter read failure must prevent TOTP enrolment confirmation."""
+    import timan_intelligence.security.totp_service as service
+
+    enrolment = begin_totp_enrolment(totp_user["user_id"])
+    code = generate_totp_code(
+        enrolment["secret"],
+        at_time=TEST_TIMESTAMP,
+    )
+
+    def unavailable(*args, **kwargs):
+        raise RuntimeError("rate-limit database unavailable")
+
+    monkeypatch.setattr(
+        service.totp_attempt_limiter,
+        "is_locked",
+        unavailable,
+    )
+
+    with pytest.raises(
+        TOTPServiceError,
+        match="rate-limit service is unavailable",
+    ):
+        confirm_totp_enrolment(
+            user_id=totp_user["user_id"],
+            code=code,
+            at_time=TEST_TIMESTAMP,
+        )
+
+    state = _get_user_totp_state(totp_user["user_id"])
+    assert state[0] in (False, 0)
+    assert state[2] is not None
+
+
+def test_totp_verification_fails_closed_when_rate_limiter_is_unavailable(
+    totp_user,
+    monkeypatch,
+):
+    """A limiter read failure must prevent successful TOTP verification."""
+    import timan_intelligence.security.totp_service as service
+
+    enrolment = begin_totp_enrolment(totp_user["user_id"])
+    enrolment_code = generate_totp_code(
+        enrolment["secret"],
+        at_time=TEST_TIMESTAMP,
+    )
+    assert confirm_totp_enrolment(
+        user_id=totp_user["user_id"],
+        code=enrolment_code,
+        at_time=TEST_TIMESTAMP,
+    ) is True
+
+    verification_code = generate_totp_code(
+        enrolment["secret"],
+        at_time=TEST_TIMESTAMP + 30,
+    )
+
+    def unavailable(*args, **kwargs):
+        raise RuntimeError("rate-limit database unavailable")
+
+    monkeypatch.setattr(
+        service.totp_attempt_limiter,
+        "is_locked",
+        unavailable,
+    )
+
+    with pytest.raises(
+        TOTPServiceError,
+        match="rate-limit service is unavailable",
+    ):
+        verify_totp_for_user(
+            user_id=totp_user["user_id"],
+            code=verification_code,
+            at_time=TEST_TIMESTAMP + 30,
+        )
+
+    state = _get_user_totp_state(totp_user["user_id"])
+    assert state[0] in (True, 1)
+    assert state[3] is not None
