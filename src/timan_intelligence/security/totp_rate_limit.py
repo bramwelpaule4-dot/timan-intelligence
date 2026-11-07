@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from timan_intelligence.security.distributed_rate_limit import DatabaseRateLimiter
 from timan_intelligence.security.rate_limit import LoginRateLimiter
 
 
@@ -32,7 +33,17 @@ class TOTPAttemptRateLimiter:
         if clock is not None:
             kwargs["clock"] = clock
 
-        self._limiter = LoginRateLimiter(**kwargs)
+        # Injected clocks are used by isolated unit tests. The production
+        # singleton uses shared database state across application workers.
+        if clock is not None:
+            self._limiter = LoginRateLimiter(**kwargs)
+        else:
+            self._limiter = DatabaseRateLimiter(
+                scope="totp",
+                max_failed_attempts=max_failed_attempts,
+                window_seconds=window_seconds,
+                lockout_seconds=lockout_seconds,
+            )
 
     @staticmethod
     def _key(user_id: str, operation: str) -> str:
@@ -62,5 +73,6 @@ class TOTPAttemptRateLimiter:
         self._limiter.record_success(self._key(user_id, operation))
 
 
-# Shared application-process limiter.
+# Shared database-backed limiter. The same database state is visible to
+# every worker connected to the configured shared PostgreSQL database.
 totp_attempt_limiter = TOTPAttemptRateLimiter()
