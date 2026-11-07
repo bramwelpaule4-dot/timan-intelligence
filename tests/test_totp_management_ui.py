@@ -166,7 +166,7 @@ def test_totp_management_confirms_enrolment_and_revokes_local_session(
     assert logout_calls == [True]
     assert fake_st.stop_called
     assert _message_contains(fake_st, "Two-factor authentication has been enabled.")
-    assert "CODE-ONE\\nCODE-TWO" in fake_st.codes
+    assert "CODE-ONE\nCODE-TWO" in fake_st.codes
 
 
 def test_totp_management_rejects_invalid_confirmation_code(
