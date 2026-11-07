@@ -17,6 +17,10 @@ def upgrade(connection) -> None:
     if get_database_type() != "postgresql":
         return
 
+    # Rate-limit records are short-lived. Clear any values created by an
+    # earlier REAL (float4) schema so no rounded epoch timestamps survive.
+    connection.execute("DELETE FROM rate_limit_states")
+
     connection.execute(
         """
         ALTER TABLE rate_limit_states
