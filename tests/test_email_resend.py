@@ -8,6 +8,7 @@ import pytest
 from timan_intelligence.database.connection import database_connection
 from timan_intelligence.database.initialise import initialise_database
 from timan_intelligence.identity.email_notifications import (
+    EMAIL_VERIFICATION_REQUEST_LIMITER,
     resend_email_verification,
     send_email_verification,
 )
@@ -81,6 +82,10 @@ def _make_previous_token_expired_from_cooldown(user_id):
             """,
             ("2000-01-01 00:00:00", user_id),
         )
+
+    EMAIL_VERIFICATION_REQUEST_LIMITER.record_success(
+        "resend@example.com"
+    )
 
 
 def test_resends_verification_email_after_cooldown(test_user):
