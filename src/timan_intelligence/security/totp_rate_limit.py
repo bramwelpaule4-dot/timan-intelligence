@@ -1,8 +1,8 @@
-
 """Rate limiting for TimanStat TOTP operations."""
 
 from __future__ import annotations
 
+from timan_intelligence.database.connection import get_database_type
 from timan_intelligence.security.distributed_rate_limit import DatabaseRateLimiter
 from timan_intelligence.security.rate_limit import LoginRateLimiter
 
@@ -33,9 +33,11 @@ class TOTPAttemptRateLimiter:
         if clock is not None:
             kwargs["clock"] = clock
 
-        # Injected clocks are used by isolated unit tests. The production
-        # singleton uses shared database state across application workers.
-        if clock is not None:
+        # SQLite is retained for local development and automated tests. Its
+        # single-writer locking model makes it unsuitable for high-frequency,
+        # cross-worker rate-limit writes. Use process-local state with SQLite;
+        # PostgreSQL provides the shared, atomic production implementation.
+        if clock is not None or get_database_type() == "sqlite":
             self._limiter = LoginRateLimiter(**kwargs)
         else:
             self._limiter = DatabaseRateLimiter(
@@ -73,6 +75,5 @@ class TOTPAttemptRateLimiter:
         self._limiter.record_success(self._key(user_id, operation))
 
 
-# Shared database-backed limiter. The same database state is visible to
-# every worker connected to the configured shared PostgreSQL database.
+# PostgreSQL shares state across workers. SQLite uses a process-local fallback.
 totp_attempt_limiter = TOTPAttemptRateLimiter()
