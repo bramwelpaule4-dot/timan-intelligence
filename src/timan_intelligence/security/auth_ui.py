@@ -1,3 +1,4 @@
+
 """Streamlit authentication interface for TimanStat."""
 
 from __future__ import annotations
@@ -45,12 +46,7 @@ def _application_base_url() -> str:
 def _development_email_sender(
     base_url: str,
 ) -> MockEmailSender | None:
-    """
-    Construct a mock email sender only for an authorised development host.
-
-    Production and other environments retain their configured email
-    delivery provider.
-    """
+    """Create a mock sender only for an authorised development host."""
 
     environment = _configuration_value(
         "TIMAN_ENVIRONMENT"
@@ -113,7 +109,7 @@ def _extract_verification_url(body: str) -> str | None:
 
 
 def _log_email_delivery_failure(exc: Exception) -> None:
-    """Log safe diagnostic details without exposing credentials or tokens."""
+    """Log safe diagnostics without exposing credentials or tokens."""
 
     cause = exc.__cause__ or exc.__context__
 
@@ -234,27 +230,34 @@ def render_registration() -> None:
             base_url
         )
 
-        send_email_verification(
-            user_id=user_id,
-            base_url=base_url,
-            sender=development_sender,
-        )
+        if development_sender is not None:
+            send_email_verification(
+                user_id=user_id,
+                base_url=base_url,
+                sender=development_sender,
+            )
+        else:
+            # Preserve the established production call signature.
+            send_email_verification(
+                user_id=user_id,
+                base_url=base_url,
+            )
 
     except (ValueError, EmailDeliveryError) as exc:
         _log_email_delivery_failure(exc)
         st.warning(
-            "Your account has been created, but the verification "
-            "process could not be completed. Please contact the "
-            "platform administrator for assistance."
+            "Your account has been created, but email delivery "
+            "could not be completed. Please contact the platform "
+            "administrator for assistance."
         )
         return
 
     except Exception as exc:
         _log_email_delivery_failure(exc)
         st.warning(
-            "Your account has been created, but the verification "
-            "process could not be completed. Please contact the "
-            "platform administrator."
+            "Your account has been created, but email delivery "
+            "could not be completed. Please contact the platform "
+            "administrator for assistance."
         )
         return
 
