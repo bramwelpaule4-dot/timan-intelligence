@@ -165,3 +165,19 @@ def test_regeneration_requires_current_password_and_authenticator(totp_user):
 def test_recovery_codes_require_totp_enabled_account(unprotected_user):
     with pytest.raises(RecoveryCodeError):
         generate_recovery_codes(unprotected_user)
+
+
+def test_regeneration_can_use_an_existing_recovery_code(totp_user):
+    user_id, _ = totp_user
+    previous = generate_recovery_codes(user_id)
+
+    replacement = regenerate_recovery_codes(
+        user_id,
+        "SecureTestPassword123!",
+        previous[0],
+    )
+
+    assert replacement is not None
+    assert len(replacement) == RECOVERY_CODE_COUNT
+    assert consume_recovery_code(user_id, previous[0]) is False
+    assert consume_recovery_code(user_id, replacement[0]) is True
