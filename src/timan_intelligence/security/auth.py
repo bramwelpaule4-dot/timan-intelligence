@@ -1,4 +1,3 @@
-
 """Authentication and role-based access control for TimanStat."""
 
 from __future__ import annotations
@@ -26,8 +25,9 @@ VALID_ROLES = {"developer", "admin", "user"}
 # Five failed password attempts within 15 minutes trigger a 15-minute lockout.
 LOGIN_RATE_LIMITER = LoginRateLimiter()
 
-# Manage authenticated session creation, validation and expiry.
-SESSION_MANAGER = SessionManager()
+# Every authenticated session must have a valid database-backed
+# account identity and session version.
+SESSION_MANAGER = SessionManager(require_versioned_sessions=True)
 
 # A pending second-factor challenge expires after five minutes.
 PENDING_TOTP_TIMEOUT_SECONDS = 5 * 60
@@ -245,6 +245,7 @@ def authenticate_user(username: str, password: str) -> bool:
         st.session_state,
         actual_username,
         role,
+        user_id=user_id,
     )
 
     return True
@@ -300,6 +301,7 @@ def verify_pending_totp(code: str) -> bool:
         session_state,
         username,
         role,
+        user_id=user_id,
     )
 
     return True
