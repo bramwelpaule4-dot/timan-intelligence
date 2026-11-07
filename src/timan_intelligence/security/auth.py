@@ -39,6 +39,7 @@ PENDING_AUTHENTICATION_KEYS = (
     "pending_user_id",
     "pending_username",
     "pending_role",
+    "pending_session_version",
     "pending_authenticated_at",
     "pending_expires_at",
 )
@@ -109,12 +110,31 @@ def _create_pending_authentication(
     ):
         raise ValueError("The authenticated account record is invalid.")
 
+    try:
+        session_version = SESSION_MANAGER.get_current_session_version(
+            user_id.strip()
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            "The account security state could not be verified."
+        ) from exc
+
+    if (
+        isinstance(session_version, bool)
+        or not isinstance(session_version, int)
+        or session_version < 0
+    ):
+        raise ValueError(
+            "The account security state is unavailable."
+        )
+
     now = time.monotonic()
 
     session_state["pending_authentication"] = True
     session_state["pending_user_id"] = user_id.strip()
     session_state["pending_username"] = username.strip().casefold()
     session_state["pending_role"] = role
+    session_state["pending_session_version"] = session_version
     session_state["pending_authenticated_at"] = now
     session_state["pending_expires_at"] = (
         now + PENDING_TOTP_TIMEOUT_SECONDS
@@ -133,6 +153,7 @@ def is_totp_pending() -> bool:
     username = session_state.get("pending_username")
     user_id = session_state.get("pending_user_id")
     role = session_state.get("pending_role")
+    pending_session_version = session_state.get("pending_session_version")
     authenticated_at = session_state.get("pending_authenticated_at")
     expires_at = session_state.get("pending_expires_at")
 
@@ -149,6 +170,9 @@ def is_totp_pending() -> bool:
         or not isinstance(username, str)
         or not username.strip()
         or role not in VALID_ROLES
+        or isinstance(pending_session_version, bool)
+        or not isinstance(pending_session_version, int)
+        or pending_session_version < 0
         or not timestamps_valid
     ):
         _clear_pending_authentication(session_state)
@@ -160,6 +184,23 @@ def is_totp_pending() -> bool:
         authenticated_at > now
         or expires_at <= now
         or expires_at <= authenticated_at
+    ):
+        _clear_pending_authentication(session_state)
+        return False
+
+    # Bind the challenge to the account security state observed
+    # immediately after password authentication. Any password change,
+    # recovery-code regeneration, or other session revocation invalidates it.
+    try:
+        current_version = SESSION_MANAGER.get_current_session_version(user_id)
+    except Exception:
+        _clear_pending_authentication(session_state)
+        return False
+
+    if (
+        isinstance(current_version, bool)
+        or not isinstance(current_version, int)
+        or current_version != pending_session_version
     ):
         _clear_pending_authentication(session_state)
         return False
@@ -263,11 +304,15 @@ def verify_pending_recovery_code(code: str) -> bool:
     user_id = session_state.get("pending_user_id")
     username = session_state.get("pending_username")
     role = session_state.get("pending_role")
+    expected_session_version = session_state.get("pending_session_version")
 
     if (
         not isinstance(user_id, str)
         or not isinstance(username, str)
         or role not in VALID_ROLES
+        or isinstance(expected_session_version, bool)
+        or not isinstance(expected_session_version, int)
+        or expected_session_version < 0
     ):
         _clear_pending_authentication(session_state)
         return False
@@ -286,6 +331,7 @@ def verify_pending_recovery_code(code: str) -> bool:
         username,
         role,
         user_id=user_id,
+        expected_session_version=expected_session_version,
     )
     return True
 
@@ -323,11 +369,15 @@ def verify_pending_totp(code: str) -> bool:
     user_id = session_state.get("pending_user_id")
     username = session_state.get("pending_username")
     role = session_state.get("pending_role")
+    expected_session_version = session_state.get("pending_session_version")
 
     if (
         not isinstance(user_id, str)
         or not isinstance(username, str)
         or role not in VALID_ROLES
+        or isinstance(expected_session_version, bool)
+        or not isinstance(expected_session_version, int)
+        or expected_session_version < 0
     ):
         _clear_pending_authentication(session_state)
         return False
@@ -354,6 +404,7 @@ def verify_pending_totp(code: str) -> bool:
         username,
         role,
         user_id=user_id,
+        expected_session_version=expected_session_version,
     )
 
     return True
