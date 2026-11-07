@@ -15,6 +15,7 @@ from timan_intelligence.database.migrations.versions import (
     v0004_password_reset,
     v0005_session_version,
     v0006_totp_recovery_codes,
+    v0007_distributed_rate_limits,
 )
 
 
@@ -57,6 +58,11 @@ MIGRATIONS = (
         version=v0006_totp_recovery_codes.VERSION,
         name=v0006_totp_recovery_codes.NAME,
         upgrade=v0006_totp_recovery_codes.upgrade,
+    ),
+    Migration(
+        version=v0007_distributed_rate_limits.VERSION,
+        name=v0007_distributed_rate_limits.NAME,
+        upgrade=v0007_distributed_rate_limits.upgrade,
     ),
 )
 
