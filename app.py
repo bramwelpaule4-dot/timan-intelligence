@@ -1051,280 +1051,280 @@ elif page == "Descriptive Statistics":
             )
         else:
             numeric_cols = list(df.select_dtypes(include="number").columns)
-        categorical_cols = [
-            col for col in df.columns
-            if not pd.api.types.is_numeric_dtype(df[col].dtype)
-        ]
+            categorical_cols = [
+                col for col in df.columns
+                if not pd.api.types.is_numeric_dtype(df[col].dtype)
+            ]
 
-        st.subheader("Dataset profile")
-        a, b, c, d = st.columns(4)
-        a.metric("Records", f"{len(df):,}")
-        b.metric("Variables", f"{df.shape[1]:,}")
-        c.metric("Numeric variables", f"{len(numeric_cols):,}")
-        d.metric("Other variables", f"{len(categorical_cols):,}")
-
-        st.caption(
-            "Variable types follow the types assigned during import. A number "
-            "stored as text will not be included in numeric summaries until "
-            "it is appropriately converted in a future data-preparation step."
-        )
-
-        st.subheader("Numeric descriptive statistics")
-        if not numeric_cols:
-            st.info(
-                "No numeric columns were detected. Check whether numeric "
-                "values were imported as text."
-            )
-        else:
-            numeric_records = []
-            for col in numeric_cols:
-                series = pd.to_numeric(df[col], errors="coerce")
-                valid = series.dropna()
-                count = int(valid.count())
-                mean = valid.mean() if count else float("nan")
-                median = valid.median() if count else float("nan")
-                std = valid.std() if count > 1 else float("nan")
-                q1 = valid.quantile(0.25) if count else float("nan")
-                q3 = valid.quantile(0.75) if count else float("nan")
-                minimum = valid.min() if count else float("nan")
-                maximum = valid.max() if count else float("nan")
-                numeric_records.append({
-                    "Variable": str(col),
-                    "Valid n": count,
-                    "Missing n": int(series.isna().sum()),
-                    "Missing (%)": round(float(series.isna().mean() * 100), 2),
-                    "Mean": mean,
-                    "Median": median,
-                    "Standard deviation": std,
-                    "Variance": valid.var() if count > 1 else float("nan"),
-                    "Minimum": minimum,
-                    "Q1 (25%)": q1,
-                    "Q3 (75%)": q3,
-                    "Maximum": maximum,
-                    "Range": maximum - minimum if count else float("nan"),
-                    "IQR": q3 - q1 if count else float("nan"),
-                    "Skewness": valid.skew() if count > 2 else float("nan"),
-                    "Excess kurtosis": valid.kurt() if count > 3 else float("nan"),
-                    "Coefficient of variation (%)": (
-                        std / abs(mean) * 100
-                        if count > 1 and pd.notna(mean) and mean != 0
-                        else float("nan")
-                    ),
-                })
-
-            summary = pd.DataFrame(numeric_records)
-            st.dataframe(summary, hide_index=True, use_container_width=True)
-            quota_download_button(
-                "Download full numeric summary",
-                data=summary.to_csv(index=False).encode("utf-8-sig"),
-                file_name="timan_descriptive_statistics.csv",
-                mime="text/csv",
-                key="download_numeric_summary",
-            )
+            st.subheader("Dataset profile")
+            a, b, c, d = st.columns(4)
+            a.metric("Records", f"{len(df):,}")
+            b.metric("Variables", f"{df.shape[1]:,}")
+            c.metric("Numeric variables", f"{len(numeric_cols):,}")
+            d.metric("Other variables", f"{len(categorical_cols):,}")
 
             st.caption(
-                "Interpretation guide: the mean is sensitive to extreme values; "                "the median is more resistant. Standard deviation describes "
-                "spread around the mean; IQR describes the middle 50% of values. "
-                "Skewness and excess kurtosis are exploratory distribution "
-                "indicators and should be interpreted with sample size and plots."
+                "Variable types follow the types assigned during import. A number "
+                "stored as text will not be included in numeric summaries until "
+                "it is appropriately converted in a future data-preparation step."
             )
 
-            st.subheader("Explore one numeric variable")
-            selected_numeric = st.selectbox(
-                "Choose a numeric variable",
-                numeric_cols,
-                key="descriptive_numeric_variable",
-            )
-            values = pd.to_numeric(
-                df[selected_numeric], errors="coerce"
-            ).dropna()
-            if values.empty:
-                st.info("This variable has no valid numeric observations.")
+            st.subheader("Numeric descriptive statistics")
+            if not numeric_cols:
+                st.info(
+                    "No numeric columns were detected. Check whether numeric "
+                    "values were imported as text."
+                )
             else:
-                left, right = st.columns(2)
-                with left:
-                    st.markdown("**Distribution summary**")
-                    st.write({
-                        "Valid observations": int(values.count()),
-                        "Mean": round(float(values.mean()), 4),
-                        "Median": round(float(values.median()), 4),
-                        "Mode(s)": [
-                            str(value) for value in values.mode().head(5).tolist()
-                        ],
-                        "Minimum": float(values.min()),
-                        "Maximum": float(values.max()),
+                numeric_records = []
+                for col in numeric_cols:
+                    series = pd.to_numeric(df[col], errors="coerce")
+                    valid = series.dropna()
+                    count = int(valid.count())
+                    mean = valid.mean() if count else float("nan")
+                    median = valid.median() if count else float("nan")
+                    std = valid.std() if count > 1 else float("nan")
+                    q1 = valid.quantile(0.25) if count else float("nan")
+                    q3 = valid.quantile(0.75) if count else float("nan")
+                    minimum = valid.min() if count else float("nan")
+                    maximum = valid.max() if count else float("nan")
+                    numeric_records.append({
+                        "Variable": str(col),
+                        "Valid n": count,
+                        "Missing n": int(series.isna().sum()),
+                        "Missing (%)": round(float(series.isna().mean() * 100), 2),
+                        "Mean": mean,
+                        "Median": median,
+                        "Standard deviation": std,
+                        "Variance": valid.var() if count > 1 else float("nan"),
+                        "Minimum": minimum,
+                        "Q1 (25%)": q1,
+                        "Q3 (75%)": q3,
+                        "Maximum": maximum,
+                        "Range": maximum - minimum if count else float("nan"),
+                        "IQR": q3 - q1 if count else float("nan"),
+                        "Skewness": valid.skew() if count > 2 else float("nan"),
+                        "Excess kurtosis": valid.kurt() if count > 3 else float("nan"),
+                        "Coefficient of variation (%)": (
+                            std / abs(mean) * 100
+                            if count > 1 and pd.notna(mean) and mean != 0
+                            else float("nan")
+                        ),
                     })
-                with right:
-                    st.markdown("**Selected quantiles**")
-                    quantiles = values.quantile(
-                        [0.01, 0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95, 0.99]
-                    ).rename_axis("Quantile").reset_index(name="Value")
-                    quantiles["Quantile"] = (
-                        quantiles["Quantile"] * 100
-                    ).map(lambda value: f"P{value:g}")
-                    st.dataframe(
-                        quantiles,
-                        hide_index=True,
-                        use_container_width=True,
-                    )
 
-                st.markdown("**Distribution by value range**")
-                if values.nunique() > 1:
-                    bins = st.slider(
-                        "Number of histogram bins",
-                        min_value=5,
-                        max_value=40,
-                        value=15,
-                        key="descriptive_histogram_bins",
-                    )
-                    hist, edges = np.histogram(values, bins=bins)
-                    hist_df = pd.DataFrame({
-                        "Value range": [
-                            f"{edges[i]:.4g} – {edges[i + 1]:.4g}"
-                            for i in range(len(hist))
-                        ],
-                        "Frequency": hist,
-                    }).set_index("Value range")
-                    st.bar_chart(hist_df)
+                summary = pd.DataFrame(numeric_records)
+                st.dataframe(summary, hide_index=True, use_container_width=True)
+                quota_download_button(
+                    "Download full numeric summary",
+                    data=summary.to_csv(index=False).encode("utf-8-sig"),
+                    file_name="timan_descriptive_statistics.csv",
+                    mime="text/csv",
+                    key="download_numeric_summary",
+                )
+
+                st.caption(
+                    "Interpretation guide: the mean is sensitive to extreme values; "                "the median is more resistant. Standard deviation describes "
+                    "spread around the mean; IQR describes the middle 50% of values. "
+                    "Skewness and excess kurtosis are exploratory distribution "
+                    "indicators and should be interpreted with sample size and plots."
+                )
+
+                st.subheader("Explore one numeric variable")
+                selected_numeric = st.selectbox(
+                    "Choose a numeric variable",
+                    numeric_cols,
+                    key="descriptive_numeric_variable",
+                )
+                values = pd.to_numeric(
+                    df[selected_numeric], errors="coerce"
+                ).dropna()
+                if values.empty:
+                    st.info("This variable has no valid numeric observations.")
                 else:
-                    st.info(
-                        "All valid observations have the same value; a histogram "
-                        "would not show a meaningful distribution."
-                    )
+                    left, right = st.columns(2)
+                    with left:
+                        st.markdown("**Distribution summary**")
+                        st.write({
+                            "Valid observations": int(values.count()),
+                            "Mean": round(float(values.mean()), 4),
+                            "Median": round(float(values.median()), 4),
+                            "Mode(s)": [
+                                str(value) for value in values.mode().head(5).tolist()
+                            ],
+                            "Minimum": float(values.min()),
+                            "Maximum": float(values.max()),
+                        })
+                    with right:
+                        st.markdown("**Selected quantiles**")
+                        quantiles = values.quantile(
+                            [0.01, 0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95, 0.99]
+                        ).rename_axis("Quantile").reset_index(name="Value")
+                        quantiles["Quantile"] = (
+                            quantiles["Quantile"] * 100
+                        ).map(lambda value: f"P{value:g}")
+                        st.dataframe(
+                            quantiles,
+                            hide_index=True,
+                            use_container_width=True,
+                        )
 
-        st.divider()
-        st.subheader("Categorical frequency analysis")
-        if not categorical_cols:
-            st.info("No non-numeric variables were detected.")
-        else:
-            selected_col = st.selectbox(
-                "Select a categorical variable",
-                categorical_cols,
-                format_func=str,
-                key="descriptive_categorical_variable",
-            )
-            include_missing = st.checkbox(
-                "Include missing and blank values in the frequency table",
-                value=True,
-                key="descriptive_include_missing",
-            )
-            series = df[selected_col].astype("object")
-            blank_mask = series.notna() & series.astype(str).str.strip().eq("")
-            series = series.mask(blank_mask, "(Blank text)")
-            if include_missing:
-                series = series.where(series.notna(), "(Missing)")
-                denominator = len(series)
-                counts = series.value_counts(dropna=False)
+                    st.markdown("**Distribution by value range**")
+                    if values.nunique() > 1:
+                        bins = st.slider(
+                            "Number of histogram bins",
+                            min_value=5,
+                            max_value=40,
+                            value=15,
+                            key="descriptive_histogram_bins",
+                        )
+                        hist, edges = np.histogram(values, bins=bins)
+                        hist_df = pd.DataFrame({
+                            "Value range": [
+                                f"{edges[i]:.4g} – {edges[i + 1]:.4g}"
+                                for i in range(len(hist))
+                            ],
+                            "Frequency": hist,
+                        }).set_index("Value range")
+                        st.bar_chart(hist_df)
+                    else:
+                        st.info(
+                            "All valid observations have the same value; a histogram "
+                            "would not show a meaningful distribution."
+                        )
+
+            st.divider()
+            st.subheader("Categorical frequency analysis")
+            if not categorical_cols:
+                st.info("No non-numeric variables were detected.")
             else:
-                series = series[series.notna() & ~blank_mask]
-                denominator = len(series)
-                counts = series.value_counts(dropna=True)
+                selected_col = st.selectbox(
+                    "Select a categorical variable",
+                    categorical_cols,
+                    format_func=str,
+                    key="descriptive_categorical_variable",
+                )
+                include_missing = st.checkbox(
+                    "Include missing and blank values in the frequency table",
+                    value=True,
+                    key="descriptive_include_missing",
+                )
+                series = df[selected_col].astype("object")
+                blank_mask = series.notna() & series.astype(str).str.strip().eq("")
+                series = series.mask(blank_mask, "(Blank text)")
+                if include_missing:
+                    series = series.where(series.notna(), "(Missing)")
+                    denominator = len(series)
+                    counts = series.value_counts(dropna=False)
+                else:
+                    series = series[series.notna() & ~blank_mask]
+                    denominator = len(series)
+                    counts = series.value_counts(dropna=True)
 
-            frequencies = counts.rename_axis("Category").reset_index(
-                name="Frequency"
-            )
-            frequencies["Percentage (%)"] = (
-                (frequencies["Frequency"] / denominator * 100).round(2)
-                if denominator else 0.0
-            )
-            frequencies["Cumulative (%)"] = (
-                frequencies["Percentage (%)"].cumsum().round(2)
-            )
-            st.dataframe(
-                frequencies,
-                hide_index=True,
-                use_container_width=True,
-            )
-            st.caption(
-                f"Percentage denominator: {denominator:,} records. "
-                "Cumulative percentages follow the displayed frequency order. "
-                "If the variable has many unique values, the table may be long."
-            )
-            quota_download_button(
-                "Download categorical frequency table",
-                data=frequencies.to_csv(index=False).encode("utf-8-sig"),
-                file_name="timan_frequency_table.csv",
-                mime="text/csv",
-                key="download_frequency_table",
-            )
+                frequencies = counts.rename_axis("Category").reset_index(
+                    name="Frequency"
+                )
+                frequencies["Percentage (%)"] = (
+                    (frequencies["Frequency"] / denominator * 100).round(2)
+                    if denominator else 0.0
+                )
+                frequencies["Cumulative (%)"] = (
+                    frequencies["Percentage (%)"].cumsum().round(2)
+                )
+                st.dataframe(
+                    frequencies,
+                    hide_index=True,
+                    use_container_width=True,
+                )
+                st.caption(
+                    f"Percentage denominator: {denominator:,} records. "
+                    "Cumulative percentages follow the displayed frequency order. "
+                    "If the variable has many unique values, the table may be long."
+                )
+                quota_download_button(
+                    "Download categorical frequency table",
+                    data=frequencies.to_csv(index=False).encode("utf-8-sig"),
+                    file_name="timan_frequency_table.csv",
+                    mime="text/csv",
+                    key="download_frequency_table",
+                )
 
-        st.divider()
-        st.subheader("Grouped numeric summaries")
-        if numeric_cols and categorical_cols:
-            group_col = st.selectbox(
-                "Group records by",
-                categorical_cols,
-                key="descriptive_group_column",
-            )
-            measure_col = st.selectbox(
-                "Summarise numeric variable",
-                numeric_cols,
-                key="descriptive_group_measure",
-            )
-            group_df = pd.DataFrame({
-                "Group": df[group_col].astype("object").where(
-                    df[group_col].notna(), "(Missing)"
-                ).astype(str),
-                "Value": pd.to_numeric(df[measure_col], errors="coerce"),
-            })
-            grouped = group_df.groupby("Group", dropna=False)["Value"].agg(
-                ["count", "mean", "median", "std", "min", "max"]
-            ).reset_index()
-            grouped = grouped.rename(columns={
-                "count": "Valid n",
-                "mean": "Mean",
-                "median": "Median",
-                "std": "Standard deviation",
-                "min": "Minimum",
-                "max": "Maximum",
-            })
-            st.dataframe(grouped, hide_index=True, use_container_width=True)
-            st.caption(
-                "Grouped summaries are descriptive comparisons only. Differences "
-                "between groups do not, by themselves, demonstrate that group "
-                "membership caused the observed outcome."
-            )
-            quota_download_button(
-                "Download grouped summary",
-                data=grouped.to_csv(index=False).encode("utf-8-sig"),
-                file_name="timan_grouped_descriptive_summary.csv",
-                mime="text/csv",
-                key="download_grouped_summary",
-            )
-        else:
-            st.info(
-                "Grouped summaries require at least one numeric variable and "
-                "one non-numeric grouping variable."
-            )
+            st.divider()
+            st.subheader("Grouped numeric summaries")
+            if numeric_cols and categorical_cols:
+                group_col = st.selectbox(
+                    "Group records by",
+                    categorical_cols,
+                    key="descriptive_group_column",
+                )
+                measure_col = st.selectbox(
+                    "Summarise numeric variable",
+                    numeric_cols,
+                    key="descriptive_group_measure",
+                )
+                group_df = pd.DataFrame({
+                    "Group": df[group_col].astype("object").where(
+                        df[group_col].notna(), "(Missing)"
+                    ).astype(str),
+                    "Value": pd.to_numeric(df[measure_col], errors="coerce"),
+                })
+                grouped = group_df.groupby("Group", dropna=False)["Value"].agg(
+                    ["count", "mean", "median", "std", "min", "max"]
+                ).reset_index()
+                grouped = grouped.rename(columns={
+                    "count": "Valid n",
+                    "mean": "Mean",
+                    "median": "Median",
+                    "std": "Standard deviation",
+                    "min": "Minimum",
+                    "max": "Maximum",
+                })
+                st.dataframe(grouped, hide_index=True, use_container_width=True)
+                st.caption(
+                    "Grouped summaries are descriptive comparisons only. Differences "
+                    "between groups do not, by themselves, demonstrate that group "
+                    "membership caused the observed outcome."
+                )
+                quota_download_button(
+                    "Download grouped summary",
+                    data=grouped.to_csv(index=False).encode("utf-8-sig"),
+                    file_name="timan_grouped_descriptive_summary.csv",
+                    mime="text/csv",
+                    key="download_grouped_summary",
+                )
+            else:
+                st.info(
+                    "Grouped summaries require at least one numeric variable and "
+                    "one non-numeric grouping variable."
+                )
 
-        st.divider()
-        st.subheader("Exploratory correlation matrix")
-        if len(numeric_cols) >= 2:
-            corr_method = st.selectbox(
-                "Correlation method",
-                ["Pearson", "Spearman", "Kendall"],
-                key="descriptive_correlation_method",
-            )
-            corr = df[numeric_cols].corr(method=corr_method.lower())
-            st.dataframe(corr.round(3), use_container_width=True)
-            st.caption(
-                "Correlation describes the strength and direction of association "
-                "between numeric variables. It does not establish causation; "
-                "Pearson measures linear association, while Spearman and Kendall "
-                "are rank-based measures."
-            )
-            quota_download_button(
-                "Download correlation matrix",
-                data=corr.to_csv().encode("utf-8-sig"),
-                file_name="timan_correlation_matrix.csv",
-                mime="text/csv",
-                key="download_correlation_matrix",
-            )
-        else:
-            st.info(
-                "A correlation matrix requires at least two numeric variables."
-            )
-            # ============================================================
+            st.divider()
+            st.subheader("Exploratory correlation matrix")
+            if len(numeric_cols) >= 2:
+                corr_method = st.selectbox(
+                    "Correlation method",
+                    ["Pearson", "Spearman", "Kendall"],
+                    key="descriptive_correlation_method",
+                )
+                corr = df[numeric_cols].corr(method=corr_method.lower())
+                st.dataframe(corr.round(3), use_container_width=True)
+                st.caption(
+                    "Correlation describes the strength and direction of association "
+                    "between numeric variables. It does not establish causation; "
+                    "Pearson measures linear association, while Spearman and Kendall "
+                    "are rank-based measures."
+                )
+                quota_download_button(
+                    "Download correlation matrix",
+                    data=corr.to_csv().encode("utf-8-sig"),
+                    file_name="timan_correlation_matrix.csv",
+                    mime="text/csv",
+                    key="download_correlation_matrix",
+                )
+            else:
+                st.info(
+                    "A correlation matrix requires at least two numeric variables."
+                )
+                # ============================================================
 # VISUALISATIONS
 # ============================================================
 
