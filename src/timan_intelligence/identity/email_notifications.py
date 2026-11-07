@@ -20,12 +20,20 @@ from timan_intelligence.identity.email_verification import (
     DEFAULT_TOKEN_EXPIRY_MINUTES,
     create_email_verification_token,
 )
-from timan_intelligence.identity.service import get_user_by_id
+from timan_intelligence.identity.password_reset import (
+    DEFAULT_PASSWORD_RESET_EXPIRY_MINUTES,
+    create_password_reset_token,
+)
 
 
 EMAIL_VERIFICATION_SUBJECT = "Verify your TimanStat account"
+PASSWORD_RESET_SUBJECT = "Reset your TimanStat password"
+
 DEFAULT_RESEND_COOLDOWN_SECONDS = 60
 MAX_RESEND_COOLDOWN_SECONDS = 3600
+
+DEFAULT_PASSWORD_RESET_COOLDOWN_SECONDS = 60
+MAX_PASSWORD_RESET_COOLDOWN_SECONDS = 3600
 
 
 def _placeholder() -> str:
@@ -86,6 +94,52 @@ def _build_verification_url(base_url: str, token: str) -> str:
     return f"{base_url}/?{query}"
 
 
+def _build_password_reset_url(base_url: str, token: str) -> str:
+    """Build the application password-reset URL."""
+
+    query = urlencode({"reset_password": token})
+
+    return f"{base_url}/?{query}"
+
+
+def _validate_email(email: str) -> str | None:
+    """Return a normalised email address or None when invalid."""
+
+    if not isinstance(email, str):
+        return None
+
+    normalised = email.strip().lower()
+
+    if (
+        len(normalised) > 254
+        or not re.fullmatch(
+            r"[^@\s]+@[^@\s]+\.[^@\s]+",
+            normalised,
+        )
+    ):
+        return None
+
+    return normalised
+
+
+def _validate_cooldown(
+    cooldown_seconds: int,
+    maximum_seconds: int,
+    workflow_name: str,
+) -> None:
+    """Validate a notification cooldown setting."""
+
+    if (
+        isinstance(cooldown_seconds, bool)
+        or not isinstance(cooldown_seconds, int)
+        or not 1 <= cooldown_seconds <= maximum_seconds
+    ):
+        raise ValueError(
+            f"{workflow_name} cooldown must be between "
+            f"1 and {maximum_seconds} seconds."
+        )
+
+
 def send_email_verification(
     user_id: str,
     base_url: str,
@@ -101,7 +155,18 @@ def send_email_verification(
 
     application_url = _validate_base_url(base_url)
 
-    user = get_user_by_id(user_id)
+    p = _placeholder()
+
+    with database_connection() as connection:
+        user = connection.execute(
+            f"""
+            SELECT id, email, full_name, email_verified
+            FROM users
+            WHERE id = {p}
+              AND is_active = TRUE
+            """,
+            (user_id,),
+        ).fetchone()
 
     if user is None:
         raise ValueError(
@@ -158,31 +223,20 @@ def resend_email_verification(
     Returns False for unknown, inactive, already verified, or
     recently contacted accounts. This avoids exposing account
     existence through the public resend workflow.
-
-    A cooldown prevents repeated requests from generating excessive
-    verification emails and invalidating previously issued tokens.
     """
 
-    if not isinstance(email, str):
+    normalised_email = _validate_email(email)
+
+    if normalised_email is None:
         return False
 
-    email = email.strip().lower()
+    _validate_cooldown(
+        cooldown_seconds,
+        MAX_RESEND_COOLDOWN_SECONDS,
+        "Resend",
+    )
 
-    if (
-        len(email) > 254
-        or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email)
-    ):
-        return False
-
-    if (
-        isinstance(cooldown_seconds, bool)
-        or not isinstance(cooldown_seconds, int)
-        or not 1 <= cooldown_seconds <= MAX_RESEND_COOLDOWN_SECONDS
-    ):
-        raise ValueError(
-            "Resend cooldown must be between 1 and 3600 seconds."
-        )
-
+    application_url = _validate_base_url(base_url)
     p = _placeholder()
 
     cutoff = (
@@ -199,7 +253,7 @@ def resend_email_verification(
               AND is_active = TRUE
               AND email_verified = FALSE
             """,
-            (email,),
+            (normalised_email,),
         ).fetchone()
 
         if user is None:
@@ -223,7 +277,153 @@ def resend_email_verification(
 
     send_email_verification(
         user_id=user_id,
-        base_url=base_url,
+        base_url=application_url,
+        sender=sender,
+    )
+
+    return True
+
+
+def send_password_reset_email(
+    user_id: str,
+    base_url: str,
+    sender: EmailSender | None = None,
+    expiry_minutes: int = DEFAULT_PASSWORD_RESET_EXPIRY_MINUTES,
+) -> None:
+    """
+    Generate and send a password-reset email.
+
+    Only the token hash is stored in the database. The plaintext
+    token is included only in the outgoing reset link.
+
+    Password recovery does not automatically verify an email address.
+    """
+
+    application_url = _validate_base_url(base_url)
+    p = _placeholder()
+
+    with database_connection() as connection:
+        user = connection.execute(
+            f"""
+            SELECT id, email, full_name
+            FROM users
+            WHERE id = {p}
+              AND is_active = TRUE
+            """,
+            (user_id,),
+        ).fetchone()
+
+    if user is None:
+        raise ValueError(
+            "The requested user does not exist or is inactive."
+        )
+
+    token = create_password_reset_token(
+        user_id,
+        expiry_minutes=expiry_minutes,
+    )
+
+    reset_url = _build_password_reset_url(
+        application_url,
+        token,
+    )
+
+    message = OutboundEmail(
+        recipient=user["email"],
+        subject=PASSWORD_RESET_SUBJECT,
+        body=(
+            f"Hello {user['full_name']},\n\n"
+            "We received a request to reset your TimanStat password.\n\n"
+            "To choose a new password, open the link below:\n\n"
+            f"{reset_url}\n\n"
+            f"This link expires in {expiry_minutes} minutes and "
+            "can only be used once.\n\n"
+            "If you did not request a password reset, ignore this "
+            "message. Your existing password will remain unchanged.\n\n"
+            "For your security, do not share this link with anyone.\n\n"
+            "Regards,\n"
+            "TimanStat\n"
+            "Timan Analytics"
+        ),
+    )
+
+    email_sender = sender or build_email_sender()
+    email_sender.send(message)
+
+
+def request_password_reset(
+    email: str,
+    base_url: str,
+    sender: EmailSender | None = None,
+    cooldown_seconds: int = DEFAULT_PASSWORD_RESET_COOLDOWN_SECONDS,
+) -> bool:
+    """
+    Request a password-reset email without disclosing account existence.
+
+    Returns True when a reset email is successfully sent.
+
+    Returns False for invalid, unknown, inactive, or recently
+    contacted email addresses.
+
+    Active accounts can request password recovery whether or not
+    their email address has been verified. Completing a password
+    reset does not change the email-verification status.
+
+    A separate cooldown is applied to password-reset requests.
+    """
+
+    normalised_email = _validate_email(email)
+
+    if normalised_email is None:
+        return False
+
+    _validate_cooldown(
+        cooldown_seconds,
+        MAX_PASSWORD_RESET_COOLDOWN_SECONDS,
+        "Password-reset",
+    )
+
+    application_url = _validate_base_url(base_url)
+    p = _placeholder()
+
+    cutoff = (
+        datetime.now(timezone.utc).replace(tzinfo=None)
+        - timedelta(seconds=cooldown_seconds)
+    )
+
+    with database_connection() as connection:
+        user = connection.execute(
+            f"""
+            SELECT id
+            FROM users
+            WHERE email = {p}
+              AND is_active = TRUE
+            """,
+            (normalised_email,),
+        ).fetchone()
+
+        if user is None:
+            return False
+
+        recent_token = connection.execute(
+            f"""
+            SELECT id
+            FROM password_reset_tokens
+            WHERE user_id = {p}
+              AND created_at >= {p}
+            LIMIT 1
+            """,
+            (user["id"], cutoff),
+        ).fetchone()
+
+        if recent_token is not None:
+            return False
+
+        user_id = user["id"]
+
+    send_password_reset_email(
+        user_id=user_id,
+        base_url=application_url,
         sender=sender,
     )
 
