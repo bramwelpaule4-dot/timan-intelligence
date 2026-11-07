@@ -326,13 +326,18 @@ def verify_pending_recovery_code(code: str) -> bool:
         return False
 
     _clear_pending_authentication(session_state)
-    SESSION_MANAGER.create_session(
-        session_state,
-        username,
-        role,
-        user_id=user_id,
-        expected_session_version=expected_session_version,
-    )
+    try:
+        SESSION_MANAGER.create_session(
+            session_state,
+            username,
+            role,
+            user_id=user_id,
+            expected_session_version=expected_session_version,
+        )
+    except (RuntimeError, ValueError):
+        SESSION_MANAGER.clear_session(session_state)
+        return False
+
     return True
 
 
@@ -399,13 +404,17 @@ def verify_pending_totp(code: str) -> bool:
     # Remove the pending state before creating the full session.
     _clear_pending_authentication(session_state)
 
-    SESSION_MANAGER.create_session(
-        session_state,
-        username,
-        role,
-        user_id=user_id,
-        expected_session_version=expected_session_version,
-    )
+    try:
+        SESSION_MANAGER.create_session(
+            session_state,
+            username,
+            role,
+            user_id=user_id,
+            expected_session_version=expected_session_version,
+        )
+    except (RuntimeError, ValueError):
+        SESSION_MANAGER.clear_session(session_state)
+        return False
 
     return True
 
