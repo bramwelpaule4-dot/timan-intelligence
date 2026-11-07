@@ -288,3 +288,31 @@ def test_invalid_cooldown_raises_value_error(
         )
 
     assert sender.sent_messages == []
+
+
+
+def test_repeated_verification_resend_is_throttled_across_requests(test_user):
+    sender = RecordingEmailSender()
+
+    assert resend_email_verification(
+        email="resend@example.com",
+        base_url="https://timanstat.example.com",
+        sender=sender,
+    ) is True
+
+    with database_connection() as connection:
+        connection.execute(
+            """
+            UPDATE email_verification_tokens
+            SET created_at = ?
+            WHERE user_id = ?
+            """,
+            ("2000-01-01 00:00:00", test_user),
+        )
+
+    assert resend_email_verification(
+        email="resend@example.com",
+        base_url="https://timanstat.example.com",
+        sender=sender,
+    ) is False
+    assert len(sender.sent_messages) == 1
