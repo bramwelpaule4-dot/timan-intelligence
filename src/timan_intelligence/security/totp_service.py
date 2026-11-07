@@ -34,6 +34,36 @@ class TOTPServiceError(Exception):
     """Raised when a TOTP enrolment or service operation fails."""
 
 
+def _rate_limit_is_locked(user_id: str, operation: str) -> bool:
+    """Check the TOTP limiter and fail closed with a controlled service error."""
+    try:
+        return totp_attempt_limiter.is_locked(user_id, operation)
+    except Exception as exc:
+        raise TOTPServiceError(
+            "The TOTP rate-limit service is unavailable."
+        ) from exc
+
+
+def _rate_limit_record_failure(user_id: str, operation: str) -> None:
+    """Record a failed TOTP attempt or fail closed."""
+    try:
+        totp_attempt_limiter.record_failure(user_id, operation)
+    except Exception as exc:
+        raise TOTPServiceError(
+            "The TOTP rate-limit service is unavailable."
+        ) from exc
+
+
+def _rate_limit_record_success(user_id: str, operation: str) -> None:
+    """Clear successful TOTP attempt history or fail closed."""
+    try:
+        totp_attempt_limiter.record_success(user_id, operation)
+    except Exception as exc:
+        raise TOTPServiceError(
+            "The TOTP rate-limit service is unavailable."
+        ) from exc
+
+
 def _placeholder() -> str:
     """Return the correct database parameter placeholder."""
 
@@ -260,7 +290,7 @@ def confirm_totp_enrolment(
 
     user_id = _validate_user_id(user_id)
 
-    if totp_attempt_limiter.is_locked(user_id, "enrolment"):
+    if _rate_limit_is_locked(user_id, "enrolment"):
         return False
 
     p = _placeholder()
@@ -311,10 +341,7 @@ def confirm_totp_enrolment(
             ) from exc
 
         if accepted_counter is None:
-            totp_attempt_limiter.record_failure(
-                user_id,
-                "enrolment",
-            )
+            _rate_limit_record_failure(user_id, "enrolment")
             return False
 
         result = connection.execute(
@@ -346,10 +373,7 @@ def confirm_totp_enrolment(
         if result.rowcount != 1:
             return False
 
-        totp_attempt_limiter.record_success(
-            user_id,
-            "enrolment",
-        )
+        _rate_limit_record_success(user_id, "enrolment")
 
         return True
 
@@ -375,7 +399,7 @@ def verify_totp_for_user(
 
     user_id = _validate_user_id(user_id)
 
-    if totp_attempt_limiter.is_locked(user_id, "verification"):
+    if _rate_limit_is_locked(user_id, "verification"):
         return False
 
     p = _placeholder()
@@ -412,10 +436,7 @@ def verify_totp_for_user(
             ) from exc
 
         if accepted_counter is None:
-            totp_attempt_limiter.record_failure(
-                user_id,
-                "verification",
-            )
+            _rate_limit_record_failure(user_id, "verification")
             return False
 
         result = connection.execute(
@@ -450,10 +471,7 @@ def verify_totp_for_user(
             )
             return False
 
-        totp_attempt_limiter.record_success(
-            user_id,
-            "verification",
-        )
+        _rate_limit_record_success(user_id, "verification")
 
         return True
 
