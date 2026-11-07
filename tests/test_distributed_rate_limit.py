@@ -100,3 +100,43 @@ def test_invalid_identifiers_are_rejected(rate_limit_database, identifier):
 
     with pytest.raises((TypeError, ValueError)):
         limiter.is_locked(identifier)
+
+
+
+def test_request_throttle_is_shared_between_instances(rate_limit_database):
+    clock = [5_000.0]
+    first = DatabaseRateLimiter(
+        scope="email-reset",
+        max_failed_attempts=1,
+        window_seconds=60,
+        lockout_seconds=60,
+        clock=lambda: clock[0],
+    )
+    second = DatabaseRateLimiter(
+        scope="email-reset",
+        max_failed_attempts=1,
+        window_seconds=60,
+        lockout_seconds=60,
+        clock=lambda: clock[0],
+    )
+
+    assert first.consume_attempt("user@example.com") is True
+    assert second.consume_attempt("USER@example.com") is False
+
+    clock[0] += 61
+
+    assert second.consume_attempt("user@example.com") is True
+
+
+def test_request_throttle_allows_configured_number_of_attempts(rate_limit_database):
+    limiter = DatabaseRateLimiter(
+        scope="email-verification",
+        max_failed_attempts=2,
+        window_seconds=60,
+        lockout_seconds=60,
+        clock=lambda: 8_000.0,
+    )
+
+    assert limiter.consume_attempt("user@example.com") is True
+    assert limiter.consume_attempt("user@example.com") is True
+    assert limiter.consume_attempt("user@example.com") is False
