@@ -24,6 +24,21 @@ from timan_intelligence.identity.password_reset import (
     DEFAULT_PASSWORD_RESET_EXPIRY_MINUTES,
     create_password_reset_token,
 )
+from timan_intelligence.security.distributed_rate_limit import DatabaseRateLimiter
+
+
+EMAIL_VERIFICATION_REQUEST_LIMITER = DatabaseRateLimiter(
+    scope="email-verification-request",
+    max_failed_attempts=1,
+    window_seconds=DEFAULT_RESEND_COOLDOWN_SECONDS,
+    lockout_seconds=DEFAULT_RESEND_COOLDOWN_SECONDS,
+)
+PASSWORD_RESET_REQUEST_LIMITER = DatabaseRateLimiter(
+    scope="password-reset-request",
+    max_failed_attempts=1,
+    window_seconds=DEFAULT_PASSWORD_RESET_COOLDOWN_SECONDS,
+    lockout_seconds=DEFAULT_PASSWORD_RESET_COOLDOWN_SECONDS,
+)
 
 
 EMAIL_VERIFICATION_SUBJECT = "Verify your TimanStat account"
@@ -237,8 +252,13 @@ def resend_email_verification(
     )
 
     application_url = _validate_base_url(base_url)
-    p = _placeholder()
 
+    # Consume a shared request slot before account lookup. This both
+    # closes the multi-worker cooldown race and avoids account enumeration.
+    if not EMAIL_VERIFICATION_REQUEST_LIMITER.consume_attempt(normalised_email):
+        return False
+
+    p = _placeholder()
     cutoff = (
         datetime.now(timezone.utc).replace(tzinfo=None)
         - timedelta(seconds=cooldown_seconds)
@@ -384,8 +404,13 @@ def request_password_reset(
     )
 
     application_url = _validate_base_url(base_url)
-    p = _placeholder()
 
+    # The request throttle is shared by every worker using this database.
+    # It is checked before account lookup to preserve generic responses.
+    if not PASSWORD_RESET_REQUEST_LIMITER.consume_attempt(normalised_email):
+        return False
+
+    p = _placeholder()
     cutoff = (
         datetime.now(timezone.utc).replace(tzinfo=None)
         - timedelta(seconds=cooldown_seconds)
