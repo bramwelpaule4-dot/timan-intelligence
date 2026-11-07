@@ -20,6 +20,7 @@ EXPECTED_MIGRATION_HISTORY = [
     (6, "totp_recovery_codes"),
     (7, "distributed_rate_limits"),
     (8, "rate_limit_timestamp_precision"),
+    (9, "subscriptions"),
 ]
 
 
@@ -385,6 +386,7 @@ def test_fresh_database_applies_all_migrations(migration_database):
         "password_reset_tokens",
         "totp_recovery_codes",
         "rate_limit_states",
+        "subscriptions",
     }
 
     assert expected_tables.issubset(tables)

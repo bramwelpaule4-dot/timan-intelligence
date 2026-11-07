@@ -17,6 +17,7 @@ from timan_intelligence.database.migrations.versions import (
     v0006_totp_recovery_codes,
     v0007_distributed_rate_limits,
     v0008_rate_limit_timestamp_precision,
+    v0009_subscriptions,
 )
 
 
@@ -69,6 +70,11 @@ MIGRATIONS = (
         version=v0008_rate_limit_timestamp_precision.VERSION,
         name=v0008_rate_limit_timestamp_precision.NAME,
         upgrade=v0008_rate_limit_timestamp_precision.upgrade,
+    ),
+    Migration(
+        version=v0009_subscriptions.VERSION,
+        name=v0009_subscriptions.NAME,
+        upgrade=v0009_subscriptions.upgrade,
     ),
 )
 
