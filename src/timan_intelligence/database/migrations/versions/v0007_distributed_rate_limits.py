@@ -12,10 +12,10 @@ def upgrade(connection) -> None:
         """
         CREATE TABLE rate_limit_states (
             key_hash TEXT PRIMARY KEY,
-            window_started_at REAL NOT NULL,
+            window_started_at DOUBLE PRECISION NOT NULL,
             failure_count INTEGER NOT NULL DEFAULT 0
                 CHECK (failure_count >= 0),
-            locked_until REAL
+            locked_until DOUBLE PRECISION
         )
         """
     )
