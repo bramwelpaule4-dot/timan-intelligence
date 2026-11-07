@@ -317,3 +317,31 @@ def test_repeated_verification_resend_is_throttled_across_requests(test_user):
         sender=sender,
     ) is False
     assert len(sender.sent_messages) == 1
+def test_resend_fails_closed_when_shared_rate_limiter_unavailable(
+    test_user,
+    monkeypatch,
+):
+    import timan_intelligence.identity.email_notifications as notifications
+
+    sender = RecordingEmailSender()
+
+    class UnavailableRateLimiter:
+        def __init__(self, **kwargs):
+            pass
+
+        def consume_attempt(self, identifier):
+            raise RuntimeError("rate-limit storage unavailable")
+
+    monkeypatch.setattr(
+        notifications,
+        "DatabaseRateLimiter",
+        UnavailableRateLimiter,
+    )
+
+    assert notifications.resend_email_verification(
+        email="resend@example.com",
+        base_url="https://timanstat.example.com",
+        sender=sender,
+    ) is False
+    assert sender.sent_messages == []
+
