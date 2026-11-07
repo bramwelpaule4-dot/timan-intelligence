@@ -8,6 +8,7 @@ import pytest
 from timan_intelligence.database.connection import database_connection
 from timan_intelligence.database.initialise import initialise_database
 from timan_intelligence.identity.email_notifications import (
+    PASSWORD_RESET_REQUEST_LIMITER,
     request_password_reset,
     send_password_reset_email,
 )
@@ -84,6 +85,10 @@ def _expire_previous_reset_cooldown(user_id):
             """,
             ("2000-01-01 00:00:00", user_id),
         )
+
+    PASSWORD_RESET_REQUEST_LIMITER.record_success(
+        "resetmail@example.com"
+    )
 
 
 def test_direct_reset_email_contains_valid_reset_link(test_user):
