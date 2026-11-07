@@ -463,5 +463,13 @@ def render_authentication() -> None:
         render_login()
         render_resend_verification()
 
+        # Import locally to avoid a circular module import:
+        # password_reset_ui reuses helpers from this module.
+        from timan_intelligence.security.password_reset_ui import (
+            render_password_recovery,
+        )
+
+        render_password_recovery()
+
     with register_tab:
         render_registration()
