@@ -11,6 +11,14 @@ from timan_intelligence.database.migrations.runner import MigrationError
 from timan_intelligence.database.models import SCHEMA_STATEMENTS
 
 
+EXPECTED_MIGRATION_HISTORY = [
+    (1, "initial_schema"),
+    (2, "totp_enrolment"),
+    (3, "email_verification"),
+    (4, "password_reset"),
+]
+
+
 @pytest.fixture
 def migration_database(tmp_path, monkeypatch):
     """Configure an isolated SQLite database for migration tests."""
@@ -146,6 +154,76 @@ def assert_totp_schema():
     assert expected_columns.issubset(columns)
 
 
+def assert_password_reset_schema():
+    """Verify the password-reset token table and its security constraints."""
+
+    with database_connection() as connection:
+        columns = {
+            row["name"]
+            for row in connection.execute(
+                "PRAGMA table_info(password_reset_tokens)"
+            ).fetchall()
+        }
+
+        table = connection.execute(
+            """
+            SELECT sql
+            FROM sqlite_master
+            WHERE type = 'table'
+              AND name = 'password_reset_tokens'
+            """
+        ).fetchone()
+
+        indexes = {
+            row["name"]: row
+            for row in connection.execute(
+                "PRAGMA index_list('password_reset_tokens')"
+            ).fetchall()
+        }
+
+        foreign_keys = connection.execute(
+            "PRAGMA foreign_key_list('password_reset_tokens')"
+        ).fetchall()
+
+        expiry_index = connection.execute(
+            """
+            SELECT name, tbl_name
+            FROM sqlite_master
+            WHERE type = 'index'
+              AND name = 'idx_password_reset_expires'
+            """
+        ).fetchone()
+
+    expected_columns = {
+        "id",
+        "user_id",
+        "token_hash",
+        "expires_at",
+        "created_at",
+        "consumed_at",
+    }
+
+    assert expected_columns == columns
+    assert table is not None
+    assert "UNIQUE" in table["sql"].upper()
+
+    assert any(
+        index["unique"]
+        for index in indexes.values()
+    )
+
+    assert any(
+        row["from"] == "user_id"
+        and row["table"] == "users"
+        and row["to"] == "id"
+        and row["on_delete"].upper() == "CASCADE"
+        for row in foreign_keys
+    )
+
+    assert expiry_index is not None
+    assert expiry_index["tbl_name"] == "password_reset_tokens"
+
+
 def test_fresh_database_applies_all_migrations(migration_database):
     """A fresh database should receive every registered migration."""
 
@@ -153,13 +231,13 @@ def test_fresh_database_applies_all_migrations(migration_database):
 
     history = get_migration_history()
 
-    assert [(row["version"], row["name"]) for row in history] == [
-        (1, "initial_schema"),
-        (2, "totp_enrolment"),
-        (3, "email_verification"),
-    ]
+    assert [
+        (row["version"], row["name"])
+        for row in history
+    ] == EXPECTED_MIGRATION_HISTORY
 
     assert_totp_schema()
+    assert_password_reset_schema()
 
     with database_connection() as connection:
         tables = {
@@ -189,6 +267,7 @@ def test_fresh_database_applies_all_migrations(migration_database):
         "audit_logs",
         "schema_migrations",
         "email_verification_tokens",
+        "password_reset_tokens",
     }
 
     assert expected_tables.issubset(tables)
@@ -209,11 +288,12 @@ def test_repeated_initialisation_does_not_repeat_migration(
 
     history = get_migration_history()
 
-    assert [(row["version"], row["name"]) for row in history] == [
-        (1, "initial_schema"),
-        (2, "totp_enrolment"),
-        (3, "email_verification"),
-    ]
+    assert [
+        (row["version"], row["name"])
+        for row in history
+    ] == EXPECTED_MIGRATION_HISTORY
+
+    assert_password_reset_schema()
 
 
 def test_existing_unversioned_database_is_baselined_and_upgraded(
@@ -248,13 +328,13 @@ def test_existing_unversioned_database_is_baselined_and_upgraded(
 
     history = get_migration_history()
 
-    assert [(row["version"], row["name"]) for row in history] == [
-        (1, "initial_schema"),
-        (2, "totp_enrolment"),
-        (3, "email_verification"),
-    ]
+    assert [
+        (row["version"], row["name"])
+        for row in history
+    ] == EXPECTED_MIGRATION_HISTORY
 
     assert_totp_schema()
+    assert_password_reset_schema()
 
     with database_connection() as connection:
         user = connection.execute(
