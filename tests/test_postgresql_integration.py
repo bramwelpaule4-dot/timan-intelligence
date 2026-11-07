@@ -21,6 +21,7 @@ EXPECTED_MIGRATION_HISTORY = [
     (3, "email_verification"),
     (4, "password_reset"),
     (5, "session_version"),
+    (6, "totp_recovery_codes"),
 ]
 
 
@@ -125,6 +126,19 @@ def test_postgresql_migrations_are_recorded(postgres_database):
 
     assert verification_table is not None
 
+    with database_connection() as connection:
+        recovery_table = connection.execute(
+            """
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = current_schema()
+              AND table_name = 'totp_recovery_codes'
+              AND table_type = 'BASE TABLE'
+            """
+        ).fetchone()
+
+    assert recovery_table is not None
+
 
 def test_postgresql_schema_contains_required_tables(postgres_database):
     """All required application tables should exist."""
@@ -139,6 +153,7 @@ def test_postgresql_schema_contains_required_tables(postgres_database):
         "schema_migrations",
         "email_verification_tokens",
         "password_reset_tokens",
+        "totp_recovery_codes",
     }
 
     with database_connection() as connection:
