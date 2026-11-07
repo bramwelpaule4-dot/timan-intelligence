@@ -22,6 +22,7 @@ EXPECTED_MIGRATION_HISTORY = [
     (4, "password_reset"),
     (5, "session_version"),
     (6, "totp_recovery_codes"),
+    (7, "distributed_rate_limits"),
 ]
 
 
@@ -154,6 +155,7 @@ def test_postgresql_schema_contains_required_tables(postgres_database):
         "email_verification_tokens",
         "password_reset_tokens",
         "totp_recovery_codes",
+        "rate_limit_states",
     }
 
     with database_connection() as connection:
