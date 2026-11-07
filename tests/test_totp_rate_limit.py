@@ -162,3 +162,27 @@ def test_totp_limiter_rejects_unsupported_operation(limiter):
 
     with pytest.raises(ValueError):
         limiter.is_locked("user-1", "password-reset")
+
+
+def test_default_totp_limiter_uses_process_local_state_with_sqlite(monkeypatch):
+    """SQLite development mode avoids shared rate-limit write contention."""
+    import timan_intelligence.security.totp_rate_limit as module
+    from timan_intelligence.security.rate_limit import LoginRateLimiter
+
+    monkeypatch.setattr(module, "get_database_type", lambda: "sqlite")
+
+    limiter = module.TOTPAttemptRateLimiter()
+
+    assert isinstance(limiter._limiter, LoginRateLimiter)
+
+
+def test_default_totp_limiter_uses_database_state_with_postgresql(monkeypatch):
+    """PostgreSQL provides shared rate-limit state across application workers."""
+    import timan_intelligence.security.totp_rate_limit as module
+    from timan_intelligence.security.distributed_rate_limit import DatabaseRateLimiter
+
+    monkeypatch.setattr(module, "get_database_type", lambda: "postgresql")
+
+    limiter = module.TOTPAttemptRateLimiter()
+
+    assert isinstance(limiter._limiter, DatabaseRateLimiter)
