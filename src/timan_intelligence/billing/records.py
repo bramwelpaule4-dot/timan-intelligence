@@ -95,6 +95,7 @@ def create_invoice(
     user_id: str | None = None,
     organisation_id: str | None = None,
     subscription_id: str | None = None,
+    subscription_change_request_id: str | None = None,
     currency: str = "USD",
     tax_minor: int = 0,
     due_at: str | None = None,
@@ -173,17 +174,36 @@ def create_invoice(
             ).fetchone()
             if subscription is None:
                 raise BillingError("Subscription does not belong to the invoice owner.")
+        if subscription_change_request_id:
+            request = connection.execute(
+                f"""
+                SELECT id, requested_plan_code, status, user_id, organisation_id
+                FROM subscription_change_requests
+                WHERE id = {p}
+                """,
+                (subscription_change_request_id.strip(),),
+            ).fetchone()
+            if (
+                request is None
+                or request["status"] != "approved_pending_payment"
+                or request[owner_column] != owner_id
+            ):
+                raise BillingError("Invoice must reference an approved upgrade request for the same owner.")
+            if not any(item[1] == request["requested_plan_code"] for item in normalized):
+                raise BillingError("Invoice items must include the requested subscription plan.")
         connection.execute(
             f"""
             INSERT INTO billing_invoices (
-                id, invoice_number, {owner_column}, subscription_id, status,
-                currency, subtotal_minor, tax_minor, total_minor, due_at,
+                id, invoice_number, {owner_column}, subscription_id,
+                subscription_change_request_id, status, currency,
+                subtotal_minor, tax_minor, total_minor, due_at,
                 created_at, updated_at
             )
-            VALUES ({p}, {p}, {p}, {p}, 'draft', {p}, {p}, {p}, {p}, {p}, {p}, {p})
+            VALUES ({p}, {p}, {p}, {p}, {p}, 'draft', {p}, {p}, {p}, {p}, {p}, {p}, {p})
             """,
             (
                 invoice_id, invoice_number, owner_id, subscription_id,
+                subscription_change_request_id.strip() if subscription_change_request_id else None,
                 currency_code, subtotal, tax, total, due, now, now,
             ),
         )
