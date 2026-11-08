@@ -257,7 +257,8 @@ class DarajaAdapter:
                 (checkout_id, checkout_id, checkout_id),
             ).fetchone()
             existing = connection.execute(
-                f"""SELECT status, originator_conversation_id
+                f"""SELECT status, originator_conversation_id,
+                    candidate_receipt, candidate_amount_minor
                 FROM mpesa_transaction_reconciliations WHERE checkout_request_id = {p}""",
                 (checkout_id,),
             ).fetchone()
@@ -292,6 +293,11 @@ class DarajaAdapter:
             or not re.fullmatch(r"[A-Z0-9]{8,20}", receipt)
         ):
             raise DarajaError("Callback amount or receipt does not match the expected payment.")
+        if existing is not None and (
+            receipt != existing["candidate_receipt"]
+            or callback_amount * 100 != int(existing["candidate_amount_minor"])
+        ):
+            raise DarajaError("Repeated STK callback does not match the original reconciliation attempt.")
         try:
             return self._request_transaction_status(
                 payment, checkout_id, receipt, callback_amount * 100,
