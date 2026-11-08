@@ -8,6 +8,7 @@ from timan_intelligence.security.session import (
     SESSION_AUTHENTICATION_KEYS,
     SESSION_IDLE_TIMEOUT_SECONDS,
     SESSION_EXPIRED_KEY,
+    SESSION_REVOKED_KEY,
     SessionManager,
 )
 
@@ -380,3 +381,29 @@ def test_session_manager_rejects_invalid_timeout_configuration(
 def test_session_manager_rejects_non_callable_clock():
     with pytest.raises(ValueError):
         SessionManager(clock=123)
+
+
+
+def test_session_is_rejected_and_marked_when_account_version_changes(
+    clock,
+    session_state,
+):
+    """A remote security change revokes an existing session with a notice."""
+
+    current_version = [4]
+    manager = SessionManager(
+        clock=clock,
+        session_version_loader=lambda user_id: current_version[0],
+    )
+    manager.create_session(
+        session_state,
+        "bramwel",
+        "user",
+        user_id="user-123",
+    )
+
+    current_version[0] = 5
+
+    assert manager.is_valid(session_state) is False
+    assert_session_cleared(session_state)
+    assert session_state[SESSION_REVOKED_KEY] is True
