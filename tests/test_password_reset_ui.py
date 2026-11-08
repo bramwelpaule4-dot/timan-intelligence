@@ -677,9 +677,10 @@ def test_password_reset_request_email_supports_browser_autofill(
 
     password_reset_ui.render_password_reset_request()
 
-    options_by_label = {
-        options.get("label"): options
+    email_options = [
+        options
         for options in fake_streamlit.text_input_options
-    }
-    assert options_by_label["Registered email address"]["autocomplete"] == "email"
+        if options.get("autocomplete") == "email"
+    ]
+    assert len(email_options) == 1
 
