@@ -387,6 +387,43 @@ def test_registration_handles_unexpected_email_error(
     )
 
 
+def test_login_displays_temporary_service_error_when_security_check_fails(
+    fake_streamlit,
+    monkeypatch,
+):
+    from timan_intelligence.security import auth
+
+    fake_streamlit.session_state.update(
+        {
+            auth.LOGIN_IDENTIFIER_KEY: "testuser",
+            auth.LOGIN_STEP_KEY: "password",
+        }
+    )
+    fake_streamlit.inputs = ["testuser", "SecureTestPassword123!"]
+    fake_streamlit.submitted = True
+
+    monkeypatch.setattr(auth, "st", fake_streamlit)
+    monkeypatch.setattr(auth, "is_authenticated", lambda: False)
+    monkeypatch.setattr(auth, "is_totp_pending", lambda: False)
+    monkeypatch.setattr(
+        auth,
+        "is_login_temporarily_locked",
+        lambda identifier: False,
+    )
+
+    def unavailable_login(identifier, password):
+        fake_streamlit.session_state[auth.LOGIN_UNAVAILABLE_KEY] = True
+        return False
+
+    monkeypatch.setattr(auth, "authenticate_user", unavailable_login)
+
+    auth.render_login()
+
+    assert len(fake_streamlit.errors) == 1
+    assert "Sign-in is temporarily unavailable" in fake_streamlit.errors[0]
+    assert auth.LOGIN_UNAVAILABLE_KEY not in fake_streamlit.session_state
+
+
 def test_authentication_page_renders_login_and_registration_tabs(
     fake_streamlit,
     monkeypatch,
