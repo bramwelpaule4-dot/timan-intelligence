@@ -17,6 +17,7 @@ from timan_intelligence.security.distributed_rate_limit import DatabaseRateLimit
 from timan_intelligence.security.recovery_codes import consume_recovery_code
 from timan_intelligence.security.session import (
     SESSION_EXPIRED_KEY,
+    SESSION_REVOKED_KEY,
     SessionManager,
 )
 from timan_intelligence.security.totp_service import (
@@ -545,6 +546,7 @@ def logout() -> None:
     _clear_pending_authentication(st.session_state)
     st.session_state.pop(PENDING_AUTHENTICATION_EXPIRED_KEY, None)
     st.session_state.pop(SESSION_EXPIRED_KEY, None)
+    st.session_state.pop(SESSION_REVOKED_KEY, None)
 
     # Remove transient sign-in state so account identifiers and UI
     # preferences do not remain in the browser session after logout.
