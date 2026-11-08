@@ -10,6 +10,8 @@ from timan_intelligence.billing.daraja import DarajaAdapter, DarajaError
 def test_normalize_kenyan_phone_numbers():
     assert DarajaAdapter.normalize_phone("0712345678") == "254712345678"
     assert DarajaAdapter.normalize_phone("+254712345678") == "254712345678"
+    assert DarajaAdapter.normalize_phone("0712 345 678") == "254712345678"
+    assert DarajaAdapter.normalize_phone("+254 (712) 345-678") == "254712345678"
     assert DarajaAdapter.normalize_phone("0112345678") == "254112345678"
     with pytest.raises(DarajaError):
         DarajaAdapter.normalize_phone("12345")
