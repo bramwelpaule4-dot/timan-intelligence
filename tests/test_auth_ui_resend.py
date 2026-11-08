@@ -146,6 +146,12 @@ def test_production_resend_calls_service_without_mock_sender(
     )
 
     resend = Mock(return_value=True)
+    email_sender = object()
+    monkeypatch.setattr(
+        auth_ui,
+        "_configured_email_sender",
+        lambda base_url: email_sender,
+    )
     monkeypatch.setattr(
         auth_ui,
         "resend_email_verification",
@@ -157,6 +163,7 @@ def test_production_resend_calls_service_without_mock_sender(
     resend.assert_called_once_with(
         email="test@example.com",
         base_url="https://timanstat.example.com",
+        sender=email_sender,
     )
 
     assert fake_streamlit.successes == [
@@ -180,6 +187,11 @@ def test_production_response_does_not_reveal_account_existence(
         "false",
     )
 
+    monkeypatch.setattr(
+        auth_ui,
+        "_configured_email_sender",
+        lambda base_url: object(),
+    )
     monkeypatch.setattr(
         auth_ui,
         "resend_email_verification",
@@ -304,6 +316,11 @@ def test_resend_handles_email_delivery_failure(
 
     monkeypatch.setattr(
         auth_ui,
+        "_configured_email_sender",
+        lambda base_url: object(),
+    )
+    monkeypatch.setattr(
+        auth_ui,
         "resend_email_verification",
         resend,
     )
@@ -329,6 +346,11 @@ def test_resend_handles_unexpected_service_error(
         )
     )
 
+    monkeypatch.setattr(
+        auth_ui,
+        "_configured_email_sender",
+        lambda base_url: object(),
+    )
     monkeypatch.setattr(
         auth_ui,
         "resend_email_verification",
