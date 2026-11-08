@@ -1,6 +1,8 @@
 """Platform user administration services."""
 
 from datetime import datetime, timezone
+import json
+import uuid
 from typing import Any
 
 from timan_intelligence.administration.permissions import normalise_role
@@ -44,6 +46,26 @@ def _require_user_admin(actor_role: str) -> None:
             "You do not have permission to view platform users."
         )
 
+
+
+def _record_user_admin_audit(connection, actor_user_id, action, target_user_id, details):
+    """Write an administrative audit event in the account-change transaction."""
+    placeholder = _placeholder()
+    connection.execute(
+        f"""
+        INSERT INTO audit_logs (
+            id, user_id, action, resource_type, resource_id, details
+        )
+        VALUES ({placeholder}, {placeholder}, {placeholder}, 'user', {placeholder}, {placeholder})
+        """,
+        (
+            str(uuid.uuid4()),
+            actor_user_id,
+            action,
+            target_user_id,
+            json.dumps(details, default=str),
+        ),
+    )
 
 def list_users(
     actor_role: str,
@@ -181,19 +203,29 @@ def change_user_role(
                     "The last active super administrator cannot be demoted."
                 )
 
-        cursor.execute(
-            f"""
-            UPDATE users
-            SET role = {placeholder},
-                updated_at = {placeholder}
-            WHERE id = {placeholder}
-            """,
-            (
-                validated_role,
-                datetime.now(timezone.utc).isoformat(),
+        old_role = target["role"]
+        if old_role != validated_role:
+            cursor.execute(
+                f"""
+                UPDATE users
+                SET role = {placeholder},
+                    session_version = session_version + 1,
+                    updated_at = {placeholder}
+                WHERE id = {placeholder}
+                """,
+                (
+                    validated_role,
+                    datetime.now(timezone.utc).isoformat(),
+                    target_user_id,
+                ),
+            )
+            _record_user_admin_audit(
+                connection,
+                actor_user_id,
+                "user_role_changed",
                 target_user_id,
-            ),
-        )
+                {"previous_role": old_role, "new_role": validated_role},
+            )
 
 
 def set_user_active_status(
@@ -233,6 +265,9 @@ def set_user_active_status(
         if not target:
             raise ValueError("Target user does not exist.")
 
+        if actor_user_id == target_user_id and not is_active:
+            raise ValueError("A super administrator cannot deactivate their own account.")
+
         if (
             target["role"] == "super_admin"
             and bool(target["is_active"])
@@ -254,16 +289,26 @@ def set_user_active_status(
                     "The last active super administrator cannot be deactivated."
                 )
 
-        cursor.execute(
-            f"""
-            UPDATE users
-            SET is_active = {placeholder},
-                updated_at = {placeholder}
-            WHERE id = {placeholder}
-            """,
-            (
-                is_active,
-                datetime.now(timezone.utc).isoformat(),
+        old_status = bool(target["is_active"])
+        if old_status != is_active:
+            cursor.execute(
+                f"""
+                UPDATE users
+                SET is_active = {placeholder},
+                    session_version = session_version + 1,
+                    updated_at = {placeholder}
+                WHERE id = {placeholder}
+                """,
+                (
+                    is_active,
+                    datetime.now(timezone.utc).isoformat(),
+                    target_user_id,
+                ),
+            )
+            _record_user_admin_audit(
+                connection,
+                actor_user_id,
+                "user_activated" if is_active else "user_deactivated",
                 target_user_id,
-            ),
-        )
+                {"previous_is_active": old_status, "is_active": is_active},
+            )
