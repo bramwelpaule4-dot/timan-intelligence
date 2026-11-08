@@ -349,6 +349,7 @@ def render_resend_verification() -> None:
     with st.form("timanstat_resend_verification_form"):
         email = st.text_input(
             "Registered email address",
+            value=st.session_state.get(VERIFICATION_EMAIL_PREFILL_KEY, ""),
             max_chars=254,
             autocomplete="email",
         )
@@ -449,6 +450,7 @@ def render_resend_verification() -> None:
 
 AUTHENTICATION_VIEW_KEY = "timanstat_authentication_view"
 PASSWORD_RESET_EMAIL_PREFILL_KEY = "timanstat_password_reset_email_prefill"
+VERIFICATION_EMAIL_PREFILL_KEY = "timanstat_verification_email_prefill"
 AUTHENTICATION_VIEWS = {
     "sign_in",
     "password_recovery",
@@ -480,6 +482,25 @@ def _open_password_recovery() -> None:
         st.session_state.pop(PASSWORD_RESET_EMAIL_PREFILL_KEY, None)
 
     _set_authentication_view("password_recovery")
+
+
+def _open_email_verification() -> None:
+    """Open verification resend and reuse a previously entered email."""
+
+    from timan_intelligence.security.auth import LOGIN_IDENTIFIER_KEY
+
+    identifier = st.session_state.get(LOGIN_IDENTIFIER_KEY, "")
+
+    if (
+        isinstance(identifier, str)
+        and "@" in identifier
+        and not any(character.isspace() for character in identifier)
+    ):
+        st.session_state[VERIFICATION_EMAIL_PREFILL_KEY] = identifier.strip()
+    else:
+        st.session_state.pop(VERIFICATION_EMAIL_PREFILL_KEY, None)
+
+    _set_authentication_view("email_verification")
 
 
 def render_authentication() -> None:
@@ -545,8 +566,7 @@ def render_authentication() -> None:
                 st.button(
                     "Resend verification email",
                     key="timanstat_open_email_verification",
-                    on_click=_set_authentication_view,
-                    args=("email_verification",),
+                    on_click=_open_email_verification,
                 )
 
         elif current_view == "password_recovery":
