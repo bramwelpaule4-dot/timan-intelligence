@@ -22,6 +22,7 @@ class FakeStreamlit:
         self.inputs = list(inputs or [])
         self.submitted = submitted
         self.query_params = query_params if query_params is not None else {}
+        self.session_state = {}
         self.errors = []
         self.warnings = []
         self.successes = []
@@ -684,3 +685,26 @@ def test_password_reset_request_email_supports_browser_autofill(
     ]
     assert len(email_options) == 1
 
+
+
+def test_password_reset_request_prefills_email_from_sign_in():
+    """The recovery form displays the email carried from sign-in."""
+
+    from timan_intelligence.security.auth_ui import (
+        PASSWORD_RESET_EMAIL_PREFILL_KEY,
+    )
+
+    fake = FakeStreamlit(submitted=False)
+    fake.session_state[PASSWORD_RESET_EMAIL_PREFILL_KEY] = (
+        "person@example.com"
+    )
+    password_reset_ui.st = fake
+
+    password_reset_ui.render_password_reset_request()
+
+    email_options = next(
+        options
+        for options in fake.text_input_options
+        if options.get("autocomplete") == "email"
+    )
+    assert email_options["value"] == "person@example.com"
