@@ -21,6 +21,9 @@ class FakeStreamlit:
         self.infos = []
         self.buttons = []
         self.forms = []
+        self.checkbox_value = False
+        self.checkboxes = []
+        self.text_input_options = []
         self.rerun_count = 0
 
     def form(self, *args, **kwargs):
@@ -28,9 +31,14 @@ class FakeStreamlit:
         return nullcontext()
 
     def text_input(self, *args, **kwargs):
+        self.text_input_options.append(kwargs.copy())
         if self.inputs:
             return self.inputs.pop(0)
         return ""
+
+    def checkbox(self, label, *args, **kwargs):
+        self.checkboxes.append((label, kwargs.copy()))
+        return self.checkbox_value
 
     def form_submit_button(self, *args, **kwargs):
         return self.submitted
@@ -246,3 +254,47 @@ def test_password_step_explains_temporary_lockout(
         "identifier. Please wait 15 minutes before trying again."
     ]
     assert login_ui.rerun_count == 0
+
+def test_password_step_hides_password_by_default(
+    login_ui,
+):
+    login_ui.submitted = False
+    login_ui.session_state.update(
+        {
+            auth.LOGIN_IDENTIFIER_KEY: "analyst@example.com",
+            auth.LOGIN_STEP_KEY: "password",
+        }
+    )
+
+    auth.render_login()
+
+    password_options = next(
+        options
+        for options in login_ui.text_input_options
+        if options.get("autocomplete") == "current-password"
+    )
+    assert password_options["type"] == "password"
+    assert login_ui.checkboxes[0][0] == "Show password"
+
+
+def test_password_step_can_show_password(
+    login_ui,
+):
+    login_ui.submitted = False
+    login_ui.checkbox_value = True
+    login_ui.session_state.update(
+        {
+            auth.LOGIN_IDENTIFIER_KEY: "analyst@example.com",
+            auth.LOGIN_STEP_KEY: "password",
+        }
+    )
+
+    auth.render_login()
+
+    password_options = next(
+        options
+        for options in login_ui.text_input_options
+        if options.get("autocomplete") == "current-password"
+    )
+    assert password_options["type"] == "default"
+\n
