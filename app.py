@@ -25,6 +25,7 @@ from timan_intelligence.security.totp_management_ui import render_totp_managemen
 from timan_intelligence.organisations.service import list_user_organisations
 from timan_intelligence.entitlements.subscription_ui import render_subscription_page
 from timan_intelligence.entitlements.subscription_admin_ui import render_subscription_administration
+from timan_intelligence.administration.user_admin_ui import render_user_administration
 from timan_intelligence.entitlements.subscriptions import process_due_subscriptions
 from timan_intelligence.entitlements.service import (
     DatasetLimitExceeded,
@@ -194,6 +195,10 @@ MODULES = {
     "Subscription Administration": (
         "Available — platform administrators only",
         "Assign subscription plans to individual accounts and organisations.",
+    ),
+    "User Administration": (
+        "Available — platform administrators only",
+        "Review accounts, manage access and inspect administrative audit history.",
     ),
     "Subscription": (
         "Available",
@@ -618,9 +623,19 @@ try:
 except Exception:
     st.sidebar.caption("Subscription and usage information is temporarily unavailable.")
 
+current_role = st.session_state.get("role")
+navigation_options = [
+    name
+    for name in MODULES
+    if name != "User Administration"
+    or current_role in {"admin", "super_admin"}
+]
+if st.session_state.get("navigation_page") not in navigation_options:
+    st.session_state.navigation_page = "Home"
+
 page = st.sidebar.radio(
     "NAVIGATION",
-    list(MODULES.keys()),
+    navigation_options,
     key="navigation_page",
 )
 
@@ -1733,6 +1748,13 @@ elif page == "About":
 
 elif page == "Subscription Administration":
     render_subscription_administration(
+        actor_user_id=st.session_state.get("user_id"),
+        actor_role=st.session_state.get("role"),
+    )
+
+
+elif page == "User Administration":
+    render_user_administration(
         actor_user_id=st.session_state.get("user_id"),
         actor_role=st.session_state.get("role"),
     )
