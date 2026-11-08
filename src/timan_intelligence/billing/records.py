@@ -353,6 +353,9 @@ def record_payment_transaction(
                 """,
                 (paid_after, new_status, new_status, now, now, invoice_id.strip()),
             )
+            if new_status == "paid":
+                from timan_intelligence.billing.upgrades import fulfil_paid_upgrade
+                fulfil_paid_upgrade(connection, invoice_id.strip(), now)
     return payment_id
 
 
