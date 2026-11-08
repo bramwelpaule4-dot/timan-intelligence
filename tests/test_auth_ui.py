@@ -421,6 +421,11 @@ def test_registration_does_not_leak_unexpected_account_error(
     register = Mock(side_effect=RuntimeError("Database credentials leaked"))
     send_verification = Mock()
 
+    monkeypatch.setattr(
+        auth_ui,
+        "_configured_email_sender",
+        lambda base_url: object(),
+    )
     monkeypatch.setattr(auth_ui, "register_user", register)
     monkeypatch.setattr(
         auth_ui,
