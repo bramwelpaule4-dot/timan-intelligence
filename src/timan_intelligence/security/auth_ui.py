@@ -475,10 +475,26 @@ def render_authentication() -> None:
     )
 
     with login_tab:
-        current_view = st.session_state.get(
-            AUTHENTICATION_VIEW_KEY,
-            "sign_in",
+        query_params = getattr(st, "query_params", None)
+        reset_token = (
+            query_params.get("reset_password")
+            if query_params is not None
+            else None
         )
+
+        if isinstance(reset_token, list):
+            reset_token = reset_token[0] if reset_token else None
+
+        if isinstance(reset_token, str) and reset_token.strip():
+            # Password-reset links must open the reset form directly,
+            # without requiring the user to navigate through Forgot password.
+            current_view = "password_recovery"
+            st.session_state[AUTHENTICATION_VIEW_KEY] = current_view
+        else:
+            current_view = st.session_state.get(
+                AUTHENTICATION_VIEW_KEY,
+                "sign_in",
+            )
 
         if current_view not in AUTHENTICATION_VIEWS:
             current_view = "sign_in"
