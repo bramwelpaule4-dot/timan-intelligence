@@ -490,6 +490,25 @@ def request_plan_change(
             ).fetchone()
             if actor is None:
                 raise SubscriptionError("The requesting account does not exist.")
+            if owner_column == "organisation_id":
+                membership = connection.execute(
+                    f"""
+                    SELECT memberships.id
+                    FROM organisation_memberships AS memberships
+                    INNER JOIN organisations
+                        ON organisations.id = memberships.organisation_id
+                    WHERE memberships.organisation_id = {p}
+                      AND memberships.user_id = {p}
+                      AND memberships.status = 'active'
+                      AND organisations.status = 'active'
+                    """,
+                    (owner_id, actor_id),
+                ).fetchone()
+                if membership is None:
+                    raise SubscriptionError(
+                        "An active organisation membership is required "
+                        "to request a plan change."
+                    )
             connection.execute(
                 f"""
                 INSERT INTO subscription_change_requests (

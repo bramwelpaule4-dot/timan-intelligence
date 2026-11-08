@@ -22,6 +22,7 @@ EXPECTED_MIGRATION_HISTORY = [
     (8, "rate_limit_timestamp_precision"),
     (9, "subscriptions"),
     (10, "entitlement_usage"),
+    (11, "subscription_change_requests"),
 ]
 
 
@@ -389,6 +390,7 @@ def test_fresh_database_applies_all_migrations(migration_database):
         "rate_limit_states",
         "subscriptions",
         "entitlement_usage",
+        "subscription_change_requests",
     }
 
     assert expected_tables.issubset(tables)

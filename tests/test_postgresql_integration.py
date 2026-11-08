@@ -25,6 +25,7 @@ EXPECTED_MIGRATION_HISTORY = [
     (8, "rate_limit_timestamp_precision"),
     (9, "subscriptions"),
     (10, "entitlement_usage"),
+    (11, "subscription_change_requests"),
 ]
 
 
@@ -179,6 +180,7 @@ def test_postgresql_schema_contains_required_tables(postgres_database):
         "rate_limit_states",
         "subscriptions",
         "entitlement_usage",
+        "subscription_change_requests",
     }
 
     with database_connection() as connection:
