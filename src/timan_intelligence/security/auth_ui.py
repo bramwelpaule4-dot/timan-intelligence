@@ -350,6 +350,7 @@ def render_resend_verification() -> None:
         email = st.text_input(
             "Registered email address",
             max_chars=254,
+            autocomplete="email",
         )
 
         submitted = st.form_submit_button(
