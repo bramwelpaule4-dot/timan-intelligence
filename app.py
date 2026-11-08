@@ -27,6 +27,8 @@ from timan_intelligence.entitlements.service import (
     DatasetLimitExceeded,
     UsageLimitExceeded,
     consume_monthly_usage,
+    get_effective_entitlements,
+    get_monthly_usage,
     validate_dataset_limits,
 )
 
@@ -554,6 +556,45 @@ st.sidebar.selectbox(
         "to the selected account or organisation."
     ),
 )
+
+# Display the effective subscription and live monthly usage for this context.
+try:
+    active_organisation_id = st.session_state.get("active_organisation_id")
+    effective_entitlements = get_effective_entitlements(
+        user_id=current_user_id,
+        organisation_id=active_organisation_id,
+    )
+    usage_owner = (
+        {"organisation_id": active_organisation_id}
+        if active_organisation_id
+        else {"user_id": current_user_id}
+    )
+    analysis_used = get_monthly_usage("monthly_analyses", **usage_owner)
+    export_used = get_monthly_usage("monthly_exports", **usage_owner)
+    plan_limits = effective_entitlements["limits"]
+
+    def _usage_label(used, limit):
+        return f"{used:,} used · Unlimited" if limit is None else f"{used:,} / {limit:,}"
+
+    st.sidebar.divider()
+    st.sidebar.caption("SUBSCRIPTION & USAGE")
+    st.sidebar.markdown(f"**{effective_entitlements['plan_name']} plan**")
+    st.sidebar.caption(
+        f"Monthly analyses: {_usage_label(analysis_used, plan_limits['monthly_analyses'])}"
+    )
+    if plan_limits["monthly_analyses"] is not None:
+        st.sidebar.progress(
+            min(analysis_used / plan_limits["monthly_analyses"], 1.0)
+        )
+    st.sidebar.caption(
+        f"Monthly exports: {_usage_label(export_used, plan_limits['monthly_exports'])}"
+    )
+    if plan_limits["monthly_exports"] is not None:
+        st.sidebar.progress(
+            min(export_used / plan_limits["monthly_exports"], 1.0)
+        )
+except Exception:
+    st.sidebar.caption("Subscription and usage information is temporarily unavailable.")
 
 page = st.sidebar.radio(
     "NAVIGATION",
