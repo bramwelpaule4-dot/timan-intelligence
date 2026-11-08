@@ -100,7 +100,7 @@ class DarajaAdapter:
     def normalize_phone(phone):
         if not isinstance(phone, str):
             raise DarajaError("Enter a valid Kenyan M-Pesa phone number.")
-        digits = re.sub(r"[\\s+()-]", "", phone)
+        digits = re.sub(r"[\s+()-]", "", phone)
         if digits.startswith("0"):
             digits = "254" + digits[1:]
         elif digits.startswith("7") or digits.startswith("1"):
