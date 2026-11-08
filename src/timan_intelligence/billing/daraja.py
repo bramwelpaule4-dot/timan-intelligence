@@ -21,7 +21,7 @@ from zoneinfo import ZoneInfo
 from timan_intelligence.billing.gateway import (
     PaymentNotification, get_gateway, process_webhook, register_gateway,
 )
-from timan_intelligence.billing.records import (
+from timan_intelligence.billing.mpesa_reconciliation import (\n    ReconciliationError, attach_originator, create_attempt, mark_timeout, verify_result,\n)\nfrom timan_intelligence.billing.records import (
     BillingError, _p, get_invoice, record_payment_transaction,
 )
 from timan_intelligence.database.connection import database_connection
@@ -178,6 +178,141 @@ class DarajaAdapter:
             },
         )
 
+    def _request_transaction_status(self, payment, checkout_id, receipt, amount_minor):
+        base, cfg, token = self._token()
+        initiator = self.environ.get("DARAJA_INITIATOR_NAME", "").strip()
+        credential = self.environ.get("DARAJA_SECURITY_CREDENTIAL", "").strip()
+        result_url = self.environ.get("DARAJA_TRANSACTION_STATUS_RESULT_URL", "").strip()
+        timeout_url = self.environ.get("DARAJA_TRANSACTION_STATUS_TIMEOUT_URL", "").strip()
+        if not initiator or not credential or not result_url or not timeout_url:
+            raise DarajaError(
+                "Transaction-status initiator, security credential and HTTPS result/timeout URLs must be configured."
+            )
+        for callback_url in (result_url, timeout_url):
+            parsed = urllib.parse.urlparse(callback_url)
+            if parsed.scheme != "https" or not parsed.netloc:
+                raise DarajaError("Transaction-status callback URLs must use public HTTPS.")
+        create_attempt(payment["id"], checkout_id, receipt, amount_minor)
+        response = self._request(
+            base + "/mpesa/transactionstatus/v1/query",
+            method="POST",
+            headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"},
+            payload={
+                "Initiator": initiator,
+                "SecurityCredential": credential,
+                "CommandID": "TransactionStatusQuery",
+                "TransactionID": receipt,
+                "PartyA": cfg["shortcode"],
+                "IdentifierType": self.environ.get("DARAJA_IDENTIFIER_TYPE", "4").strip(),
+                "ResultURL": result_url,
+                "QueueTimeOutURL": timeout_url,
+                "Remarks": "TimanStat payment reconciliation",
+                "Occasion": "Invoice payment",
+            },
+        )
+        originator = response.get("OriginatorConversationID")
+        if str(response.get("ResponseCode", "")) != "0" or not isinstance(originator, str) or not originator:
+            raise DarajaError(
+                str(response.get("ResponseDescription") or "Safaricom did not accept transaction-status query.")
+            )
+        attach_originator(checkout_id, originator)
+        return {"status": "reconciliation_pending", "originator_conversation_id": originator}
+
+    def start_reconciliation(self, raw_body: bytes):
+        try:
+            data = json.loads(raw_body.decode("utf-8"))
+            callback = data["Body"]["stkCallback"]
+            checkout_id = callback["CheckoutRequestID"]
+            callback_code = int(callback["ResultCode"])
+        except (UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+            raise DarajaError("Malformed Daraja STK callback.") from exc
+        if not isinstance(checkout_id, str) or not checkout_id:
+            raise DarajaError("Daraja callback is missing CheckoutRequestID.")
+        query = self._query(checkout_id)
+        try:
+            confirmed_code = int(query["ResultCode"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise DarajaError("Safaricom status query did not return a transaction result.") from exc
+        if confirmed_code != callback_code:
+            raise DarajaError("Callback result does not match Safaricom's transaction status.")
+        if callback_code != 0:
+            return process_webhook("mpesa", raw_body=raw_body, headers={})
+        if str(query.get("ResponseCode", "")) != "0":
+            raise DarajaError("Safaricom has not confirmed successful payment.")
+        p = _p()
+        with database_connection() as connection:
+            payment = connection.execute(
+                f"""SELECT id, amount_minor, currency FROM payment_transactions
+                WHERE provider_code = 'mpesa' AND provider_reference = {p}""",
+                (checkout_id,),
+            ).fetchone()
+            existing = connection.execute(
+                f"""SELECT status, originator_conversation_id
+                FROM mpesa_transaction_reconciliations WHERE checkout_request_id = {p}""",
+                (checkout_id,),
+            ).fetchone()
+        if payment is None:
+            raise DarajaError("Unknown Daraja CheckoutRequestID.")
+        payment = dict(payment)
+        if payment["currency"] != "KES":
+            raise DarajaError("M-Pesa payment ledger currency is invalid.")
+        if existing is not None:
+            if existing["status"] == "pending":
+                return {
+                    "status": "reconciliation_pending",
+                    "originator_conversation_id": existing["originator_conversation_id"],
+                }
+            raise DarajaError("This M-Pesa payment already has a reconciliation attempt.")
+        metadata = callback.get("CallbackMetadata", {}).get("Item", [])
+        if not isinstance(metadata, list):
+            raise DarajaError("Successful callback metadata is malformed.")
+        fields = {
+            item.get("Name"): item.get("Value")
+            for item in metadata if isinstance(item, dict)
+        }
+        try:
+            callback_amount = int(fields["Amount"])
+            receipt = str(fields["MpesaReceiptNumber"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise DarajaError("Successful callback is missing amount or M-Pesa receipt.") from exc
+        if (
+            callback_amount * 100 != int(payment["amount_minor"])
+            or not re.fullmatch(r"[A-Z0-9]{8,20}", receipt)
+        ):
+            raise DarajaError("Callback amount or receipt does not match the expected payment.")
+        try:
+            return self._request_transaction_status(
+                payment, checkout_id, receipt, callback_amount * 100
+            )
+        except ReconciliationError as exc:
+            raise DarajaError("Unable to create Safaricom reconciliation attempt.") from exc
+
+    def handle_transaction_status_result(self, raw_body: bytes):
+        try:
+            verified = verify_result(raw_body)
+        except ReconciliationError as exc:
+            raise DarajaError(str(exc)) from exc
+        # Re-run the STK status query and pass only the independently
+        # reconciled amount and receipt into the existing idempotent ledger.
+        synthetic = {
+            "Body": {
+                "stkCallback": {
+                    "CheckoutRequestID": verified["checkout_request_id"],
+                    "ResultCode": 0,
+                    "ResultDesc": "Independently reconciled by Safaricom Transaction Status API",
+                    "CallbackMetadata": {
+                        "Item": [
+                            {"Name": "Amount", "Value": verified["amount_minor"] // 100},
+                            {"Name": "MpesaReceiptNumber", "Value": verified["receipt"]},
+                        ]
+                    },
+                }
+            }
+        }
+        return process_webhook(
+            "mpesa", raw_body=json.dumps(synthetic).encode("utf-8"), headers={}
+        )
+
     def create_checkout(self, request):
         raise DarajaError("Daraja uses phone-based STK Push, not hosted checkout.")
 
@@ -252,6 +387,18 @@ def initiate_mpesa_payment(invoice_id, phone, *, user_id=None, organisation_id=N
 
 
 def handle_mpesa_callback(raw_body: bytes):
-    """Verify a Daraja callback with Safaricom and settle its ledger attempt."""
-    configure_daraja()
-    return process_webhook("mpesa", raw_body=raw_body, headers={})
+    """Verify STK status and start independent Safaricom transaction reconciliation."""
+    return DarajaAdapter().start_reconciliation(raw_body)
+
+
+def handle_mpesa_transaction_status_callback(raw_body: bytes):
+    """Verify Safaricom's asynchronous transaction-status result before settlement."""
+    return DarajaAdapter().handle_transaction_status_result(raw_body)
+
+
+def handle_mpesa_transaction_status_timeout(raw_body: bytes):
+    """Record a Safaricom transaction-status query timeout without settling payment."""
+    try:
+        return mark_timeout(raw_body)
+    except ReconciliationError as exc:
+        raise DarajaError(str(exc)) from exc
