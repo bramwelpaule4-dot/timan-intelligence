@@ -31,6 +31,7 @@ EXPECTED_MIGRATION_HISTORY = [
     (14, "billing_invoice_item_order"),
     (15, "billing_subscription_change_requests"),
     (16, "unique_subscription_upgrade_invoice"),
+    (17, "payment_gateway_sessions"),
 ]
 
 
@@ -190,6 +191,8 @@ def test_postgresql_schema_contains_required_tables(postgres_database):
         "billing_invoice_items",
         "payment_transactions",
         "billing_events",
+        "payment_checkout_sessions",
+        "payment_webhook_events",
     }
 
     with database_connection() as connection:
