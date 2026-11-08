@@ -26,7 +26,7 @@ EXPECTED_MIGRATION_HISTORY = [
     (9, "subscriptions"),
     (10, "entitlement_usage"),
     (11, "subscription_change_requests"),
-    (12, "completed_subscription_changes"),
+    (12, "completed_subscription_changes"),\n    (13, "billing_records"),
 ]
 
 
@@ -182,6 +182,10 @@ def test_postgresql_schema_contains_required_tables(postgres_database):
         "subscriptions",
         "entitlement_usage",
         "subscription_change_requests",
+        "billing_invoices",
+        "billing_invoice_items",
+        "payment_transactions",
+        "billing_events",
     }
 
     with database_connection() as connection:

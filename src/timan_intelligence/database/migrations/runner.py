@@ -20,7 +20,7 @@ from timan_intelligence.database.migrations.versions import (
     v0009_subscriptions,
     v0010_entitlement_usage,
     v0011_subscription_change_requests,
-    v0012_completed_subscription_changes,
+    v0012_completed_subscription_changes,\n    v0013_billing_records,
 )
 
 
@@ -93,6 +93,11 @@ MIGRATIONS = (
         version=v0012_completed_subscription_changes.VERSION,
         name=v0012_completed_subscription_changes.NAME,
         upgrade=v0012_completed_subscription_changes.upgrade,
+    ),
+    Migration(
+        version=v0013_billing_records.VERSION,
+        name=v0013_billing_records.NAME,
+        upgrade=v0013_billing_records.upgrade,
     ),
 )
 

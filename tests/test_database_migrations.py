@@ -392,6 +392,10 @@ def test_fresh_database_applies_all_migrations(migration_database):
         "subscriptions",
         "entitlement_usage",
         "subscription_change_requests",
+        "billing_invoices",
+        "billing_invoice_items",
+        "payment_transactions",
+        "billing_events",
     }
 
     assert expected_tables.issubset(tables)
