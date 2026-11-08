@@ -11,7 +11,9 @@ import streamlit as st
 
 from timan_intelligence.identity.email_delivery import (
     EmailDeliveryError,
+    EmailDeliverySettings,
     MockEmailSender,
+    build_email_sender,
 )
 from timan_intelligence.identity.email_notifications import (
     resend_email_verification,
@@ -105,6 +107,30 @@ def _development_email_sender(
         )
 
     return MockEmailSender()
+
+
+def _configured_email_sender(base_url: str):
+    """Return a real SMTP sender, or an explicitly authorised dev simulator.
+
+    Public registration and verification-resend flows must never use the
+    default in-memory mock provider: it accepts messages without delivering
+    them and would leave users unable to verify their accounts.
+    """
+
+    development_sender = _development_email_sender(base_url)
+
+    if development_sender is not None:
+        return development_sender
+
+    settings = EmailDeliverySettings.from_environment()
+
+    if settings.provider != "smtp":
+        raise EmailDeliveryError(
+            "Real email delivery is not configured.",
+            stage="configuration",
+        )
+
+    return build_email_sender(settings)
 
 
 def _extract_verification_url(body: str) -> str | None:
@@ -225,6 +251,25 @@ def render_registration() -> None:
         return
 
     try:
+        email_sender = _configured_email_sender(base_url)
+    except (ValueError, EmailDeliveryError) as exc:
+        _log_email_delivery_failure(exc)
+        st.error(
+            "Account registration is temporarily unavailable because "
+            "the email verification service is not configured. "
+            "Please try again later or contact the platform administrator."
+        )
+        return
+    except Exception as exc:
+        _log_email_delivery_failure(exc)
+        st.error(
+            "Account registration is temporarily unavailable because "
+            "the email verification service could not be prepared. "
+            "Please try again later."
+        )
+        return
+
+    try:
         user_id = register_user(
             username=username,
             email=email,
@@ -247,24 +292,18 @@ def render_registration() -> None:
         )
         return
 
-    development_sender = None
+    development_sender = (
+        email_sender
+        if isinstance(email_sender, MockEmailSender)
+        else None
+    )
 
     try:
-        development_sender = _development_email_sender(
-            base_url
+        send_email_verification(
+            user_id=user_id,
+            base_url=base_url,
+            sender=email_sender,
         )
-
-        if development_sender is not None:
-            send_email_verification(
-                user_id=user_id,
-                base_url=base_url,
-                sender=development_sender,
-            )
-        else:
-            send_email_verification(
-                user_id=user_id,
-                base_url=base_url,
-            )
 
     except (ValueError, EmailDeliveryError) as exc:
         _log_email_delivery_failure(exc)
@@ -382,21 +421,15 @@ def render_resend_verification() -> None:
     development_sender = None
 
     try:
-        development_sender = _development_email_sender(
-            base_url
-        )
+        email_sender = _configured_email_sender(base_url)
+        if isinstance(email_sender, MockEmailSender):
+            development_sender = email_sender
 
-        if development_sender is not None:
-            resend_email_verification(
-                email=email,
-                base_url=base_url,
-                sender=development_sender,
-            )
-        else:
-            resend_email_verification(
-                email=email,
-                base_url=base_url,
-            )
+        resend_email_verification(
+            email=email,
+            base_url=base_url,
+            sender=email_sender,
+        )
 
     except (ValueError, EmailDeliveryError) as exc:
         _log_email_delivery_failure(exc)
