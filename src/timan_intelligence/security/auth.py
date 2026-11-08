@@ -645,6 +645,13 @@ def render_login() -> None:
         return
 
     st.subheader("Enter your password")
+    login_locked = is_login_temporarily_locked(identifier)
+    if login_locked:
+        st.error(
+            "Too many unsuccessful sign-in attempts. For your "
+            "security, sign-in is temporarily paused for this "
+            "identifier. Please wait 15 minutes before trying again."
+        )
 
     with st.form("timanstat_login_password_form"):
         # Keep the username/email field beside the password field so browser
@@ -654,22 +661,26 @@ def render_login() -> None:
             value=identifier,
             max_chars=254,
             autocomplete="username",
+            disabled=login_locked,
         )
         show_password = st.checkbox(
             "Show password",
             key="timanstat_show_login_password",
+            disabled=login_locked,
         )
         password = st.text_input(
             "Password",
             type="default" if show_password else "password",
             autocomplete="current-password",
+            disabled=login_locked,
         )
         submitted = st.form_submit_button(
             "Sign in",
             use_container_width=True,
+            disabled=login_locked,
         )
 
-    if submitted:
+    if submitted and not login_locked:
         identifier = entered_identifier.strip()
 
         if not identifier:
