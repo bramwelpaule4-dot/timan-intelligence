@@ -343,3 +343,68 @@ def test_login_explains_expired_mfa_challenge_once(login_ui, monkeypatch):
     auth.render_login()
     assert login_ui.infos == []
 
+
+
+def test_mfa_login_explains_temporary_verification_lockout(
+    login_ui,
+    monkeypatch,
+):
+    """A locked MFA challenge receives a clear cooldown message."""
+
+    login_ui.inputs = ["123456"]
+    monkeypatch.setattr(
+        auth,
+        "is_totp_pending",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        auth,
+        "verify_pending_second_factor",
+        lambda code: False,
+    )
+    monkeypatch.setattr(
+        auth,
+        "is_pending_second_factor_temporarily_locked",
+        lambda: True,
+    )
+
+    auth.render_login()
+
+    assert login_ui.errors == [
+        "Too many unsuccessful verification attempts. For your "
+        "security, verification is temporarily paused for this "
+        "account. Please wait 15 minutes before trying again."
+    ]
+    assert login_ui.rerun_count == 0
+
+
+def test_mfa_login_keeps_generic_error_when_not_locked(
+    login_ui,
+    monkeypatch,
+):
+    """An ordinary invalid code keeps the existing safe error message."""
+
+    login_ui.inputs = ["000000"]
+    monkeypatch.setattr(
+        auth,
+        "is_totp_pending",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        auth,
+        "verify_pending_second_factor",
+        lambda code: False,
+    )
+    monkeypatch.setattr(
+        auth,
+        "is_pending_second_factor_temporarily_locked",
+        lambda: False,
+    )
+
+    auth.render_login()
+
+    assert login_ui.errors == [
+        "We could not verify that code. Check it and try again, "
+        "or sign in again if the verification request has expired."
+    ]
+    assert login_ui.rerun_count == 0
