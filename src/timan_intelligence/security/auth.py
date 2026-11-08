@@ -218,6 +218,24 @@ def is_totp_pending() -> bool:
     return True
 
 
+def is_login_temporarily_locked(identifier: str) -> bool:
+    """Return whether a login identifier is currently under lockout.
+
+    Database or rate-limit failures are treated as an unavailable status;
+    authentication itself remains fail-closed in authenticate_user().
+    """
+
+    if not isinstance(identifier, str) or not identifier.strip():
+        return False
+
+    try:
+        return LOGIN_RATE_LIMITER.is_locked(
+            identifier.strip().casefold()
+        )
+    except Exception:
+        return False
+
+
 def authenticate_user(username: str, password: str) -> bool:
     """
     Authenticate using the database-backed identity service.
