@@ -9,6 +9,7 @@ import streamlit as st
 
 from timan_intelligence.entitlements.plans import PLAN_CATALOG
 from timan_intelligence.billing.records import BillingError, get_invoice, list_invoices
+from timan_intelligence.billing.invoice_pdf import build_invoice_pdf
 from timan_intelligence.entitlements.service import (
     get_effective_entitlements,
     get_monthly_usage,
@@ -347,12 +348,28 @@ def render_subscription_page(
                 f"{int(summary['total_minor']):,} · {str(summary['status']).title()}"
             ):
                 try:
-                    detail = get_invoice(summary["id"])
+                    detail = get_invoice(
+                        summary["id"],
+                        user_id=user_id if not organisation_id else None,
+                        organisation_id=organisation_id,
+                    )
                 except Exception:
                     detail = None
                 if detail is None:
                     st.warning("Invoice details are temporarily unavailable.")
                     continue
+
+                try:
+                    pdf_bytes = build_invoice_pdf(detail)
+                    st.download_button(
+                        "Download invoice (PDF)",
+                        data=pdf_bytes,
+                        file_name=f"{detail['invoice_number']}.pdf",
+                        mime="application/pdf",
+                        key=f"download_invoice_pdf_{detail['id']}",
+                    )
+                except Exception:
+                    st.warning("The invoice PDF could not be generated. Please try again later.")
 
                 st.markdown("**Invoice items**")
                 item_rows = [
