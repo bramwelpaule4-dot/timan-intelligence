@@ -288,3 +288,39 @@ def test_upgrade_invoice_requires_approved_request_and_explicit_period(billing_d
             period_start="2026-11-08T00:00:00Z",
             period_end="2026-12-08T00:00:00Z",
         )
+
+def test_upgrade_invoice_rejects_zero_amount_and_duplicate_request_invoice(billing_database):
+    request_id = _approved_upgrade_request()
+    with pytest.raises(BillingError, match="positive integer"):
+        create_upgrade_invoice(
+            request_id,
+            amount_minor=0,
+            currency="KES",
+            period_start="2026-11-08T00:00:00Z",
+            period_end="2026-12-08T00:00:00Z",
+        )
+
+    first_invoice = create_upgrade_invoice(
+        request_id,
+        amount_minor=15000,
+        currency="KES",
+        period_start="2026-11-08T00:00:00Z",
+        period_end="2026-12-08T00:00:00Z",
+    )
+    assert get_invoice(first_invoice)["subscription_change_request_id"] == request_id
+
+    with pytest.raises(BillingError, match="already has an invoice"):
+        create_upgrade_invoice(
+            request_id,
+            amount_minor=15000,
+            currency="KES",
+            period_start="2026-11-08T00:00:00Z",
+            period_end="2026-12-08T00:00:00Z",
+        )
+
+    with database_connection() as connection:
+        count = connection.execute(
+            "SELECT COUNT(*) AS n FROM billing_invoices WHERE subscription_change_request_id = ?",
+            (request_id,),
+        ).fetchone()["n"]
+    assert count == 1
