@@ -19,7 +19,10 @@ from timan_intelligence.identity.email_notifications import (
 )
 from timan_intelligence.identity.service import register_user
 from timan_intelligence.security.auth import render_login
-from timan_intelligence.security.session import SESSION_EXPIRED_KEY
+from timan_intelligence.security.session import (
+    SESSION_EXPIRED_KEY,
+    SESSION_REVOKED_KEY,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -550,6 +553,13 @@ def render_authentication() -> None:
                 f"{st.session_state.get('username', 'user')}."
             )
             return
+
+    revoked_notice = st.session_state.pop(SESSION_REVOKED_KEY, False)
+    if revoked_notice is True:
+        st.info(
+            "Your session ended because your account security settings "
+            "changed. Please sign in again."
+        )
 
     login_tab, register_tab = st.tabs(
         ["Sign in", "Create account"]
