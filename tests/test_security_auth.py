@@ -209,6 +209,52 @@ def test_authentication_normalises_username(
     ]
 
 
+def test_login_fails_closed_and_marks_unavailable_when_rate_limiter_fails(
+    mock_session,
+    monkeypatch,
+    mock_identity_authentication,
+):
+    """A missing security key must not look like an incorrect password."""
+
+    monkeypatch.setattr(
+        auth,
+        "LOGIN_RATE_LIMITER",
+        SimpleNamespace(
+            is_locked=lambda identifier: (_ for _ in ()).throw(
+                RuntimeError("rate limiter unavailable")
+            )
+        ),
+    )
+
+    result = auth.authenticate_user("testuser", VALID_PASSWORD)
+
+    assert result is False
+    assert mock_session.get("authenticated") is not True
+    assert mock_session[auth.LOGIN_UNAVAILABLE_KEY] is True
+    assert mock_identity_authentication.calls == []
+
+
+def test_login_marks_identity_database_failure_as_unavailable(
+    mock_session,
+    monkeypatch,
+):
+    """An identity database outage must not be presented as bad credentials."""
+
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        lambda identifier, password: (_ for _ in ()).throw(
+            RuntimeError("database unavailable")
+        ),
+    )
+
+    result = auth.authenticate_user("testuser", VALID_PASSWORD)
+
+    assert result is False
+    assert mock_session.get("authenticated") is not True
+    assert mock_session[auth.LOGIN_UNAVAILABLE_KEY] is True
+
+
 def test_authentication_rejects_unknown_user(
     monkeypatch,
     mock_session,
