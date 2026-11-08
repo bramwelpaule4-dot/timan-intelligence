@@ -614,11 +614,18 @@ def render_login() -> None:
         elif is_totp_pending():
             st.rerun()
         else:
-            st.error(
-                "We could not sign you in with those details. Check your "
-                "password, verify your email address if you have not already, "
-                "or try again later if sign-in attempts are temporarily limited."
-            )
+            if is_login_temporarily_locked(identifier):
+                st.error(
+                    "Too many unsuccessful sign-in attempts. For your "
+                    "security, sign-in is temporarily paused for this "
+                    "identifier. Please wait 15 minutes before trying again."
+                )
+            else:
+                st.error(
+                    "We could not sign you in with those details. Check your "
+                    "password, verify your email address if you have not already, "
+                    "or try again later if sign-in attempts are temporarily limited."
+                )
 
     if st.button(
         "Use a different account",
