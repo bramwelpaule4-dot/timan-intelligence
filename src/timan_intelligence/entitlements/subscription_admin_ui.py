@@ -114,12 +114,9 @@ def render_subscription_administration(
     st.subheader("Current subscription")
     if current:
         st.write(
-            f"**Plan:** {PLAN_CATALOG[current['plan_code']].name}  
-"
-            f"**Status:** {current['status'].replace('_', ' ').title()}  
-"
-            f"**Started:** {current.get('started_at') or 'Not recorded'}  
-"
+            f"**Plan:** {PLAN_CATALOG[current['plan_code']].name}  \n"
+            f"**Status:** {current['status'].replace('_', ' ').title()}  \n"
+            f"**Started:** {current.get('started_at') or 'Not recorded'}  \n"
             f"**Period ends:** {current.get('current_period_end') or 'Not specified'}"
         )
         if current.get("cancel_at_period_end"):
@@ -268,12 +265,9 @@ def render_subscription_administration(
         requested_plan = PLAN_CATALOG[request["requested_plan_code"]].name
         current_plan = PLAN_CATALOG[request["current_plan_code"]].name
         st.write(
-            f"**{request['change_type'].title()}:** {current_plan} → {requested_plan}  
-"
-            f"**Requested by:** {request.get('requester_name') or request.get('requester_email')}  
-"
-            f"**Submitted:** {request.get('created_at')}  
-"
+            f"**{request['change_type'].title()}:** {current_plan} → {requested_plan}  \n"
+            f"**Requested by:** {request.get('requester_name') or request.get('requester_email')}  \n"
+            f"**Submitted:** {request.get('created_at')}  \n"
             f"**Proposed effective date:** {request.get('effective_at') or 'Requires billing-period review'}"
         )
         with st.form(f"review_plan_change_{request['id']}"):
