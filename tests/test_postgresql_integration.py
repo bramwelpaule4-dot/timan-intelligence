@@ -194,6 +194,7 @@ def test_postgresql_schema_contains_required_tables(postgres_database):
         "billing_events",
         "payment_checkout_sessions",
         "payment_webhook_events",
+        "mpesa_transaction_reconciliations",
     }
 
     with database_connection() as connection:
