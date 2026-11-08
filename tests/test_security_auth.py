@@ -938,7 +938,13 @@ def test_expired_pending_authentication_sets_one_time_ui_notice(
     )
 
     assert auth.authenticate_user("testuser", VALID_PASSWORD) is False
-    mock_session["pending_expires_at"] = time.monotonic() - 1
+    authenticated_at = mock_session["pending_authenticated_at"]
+    mock_session["pending_expires_at"] = authenticated_at + 1
+    monkeypatch.setattr(
+        auth.time,
+        "monotonic",
+        lambda: authenticated_at + 2,
+    )
 
     assert auth.is_totp_pending() is False
     assert mock_session[auth.PENDING_AUTHENTICATION_EXPIRED_KEY] is True
