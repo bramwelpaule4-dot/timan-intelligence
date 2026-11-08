@@ -96,6 +96,6 @@ def finalize_payment_transaction(
                     updated_at = {p}
                 WHERE id = {p} AND status = 'open'
                 """,
-                (paid_after, invoice_status, invoice_status, now, payment["invoice_id"]),
+                (paid_after, invoice_status, invoice_status, invoice_status, now, payment["invoice_id"]),
             )
     return True
