@@ -300,3 +300,27 @@ def test_password_step_can_show_password(
     )
     assert password_options["type"] == "default"
 
+
+
+
+def test_mfa_code_field_supports_one_time_code_autofill(
+    login_ui,
+    monkeypatch,
+):
+    """Authenticator fields advertise OTP autofill to supported devices."""
+
+    login_ui.submitted = False
+    monkeypatch.setattr(
+        auth,
+        "is_totp_pending",
+        lambda: True,
+    )
+
+    auth.render_login()
+
+    mfa_options = next(
+        options
+        for options in login_ui.text_input_options
+        if options.get("max_chars") == 40
+    )
+    assert mfa_options["autocomplete"] == "one-time-code"
