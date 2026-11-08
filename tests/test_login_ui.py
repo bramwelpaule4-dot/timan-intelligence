@@ -258,6 +258,7 @@ def test_password_step_explains_temporary_lockout(
 def test_password_step_hides_password_by_default(
     login_ui,
 ):
+    """The password field is masked until the user opts to reveal it."""
     login_ui.submitted = False
     login_ui.session_state.update(
         {
@@ -280,6 +281,7 @@ def test_password_step_hides_password_by_default(
 def test_password_step_can_show_password(
     login_ui,
 ):
+    """The visibility control switches the password field to plain text."""
     login_ui.submitted = False
     login_ui.checkbox_value = True
     login_ui.session_state.update(
