@@ -530,6 +530,7 @@ def render_login() -> None:
                 "Authenticator code or recovery code",
                 max_chars=40,
                 placeholder="Enter your verification code",
+                autocomplete="one-time-code",
             )
             submitted = st.form_submit_button("Verify and sign in")
 
