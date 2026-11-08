@@ -13,6 +13,7 @@ from timan_intelligence.security.totp_service import (
     confirm_totp_enrolment,
     disable_totp_for_user,
     get_totp_status,
+    is_security_reauthentication_locked,
 )
 from timan_intelligence.security.recovery_codes import (
     RecoveryCodeError,
@@ -63,6 +64,30 @@ def render_totp_management() -> None:
         return
 
     if enabled:
+        try:
+            security_reauthentication_locked = (
+                is_security_reauthentication_locked(user_id)
+            )
+        except Exception as exc:
+            logger.error(
+                "TimanStat account security rate-limit check failed. "
+                "error_type=%s",
+                type(exc).__name__,
+            )
+            st.error(
+                "Account security changes are temporarily unavailable. "
+                "Please try again later."
+            )
+            return
+
+        if security_reauthentication_locked:
+            st.error(
+                "Too many unsuccessful password confirmations for account "
+                "security changes. These actions are temporarily paused."
+            )
+            st.info("Please wait 15 minutes before trying again.")
+            return
+
         _clear_pending_enrolment()
         st.success("Authenticator-based two-factor authentication is enabled.")
         st.write(
