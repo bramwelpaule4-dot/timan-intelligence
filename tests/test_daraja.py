@@ -136,3 +136,54 @@ def test_transaction_status_rejects_unknown_originator(reconciliation_database):
     payload["Result"]["OriginatorConversationID"] = "unknown-originator"
     with pytest.raises(ReconciliationError, match="Unknown"):
         verify_result(json.dumps(payload).encode())
+
+
+
+def test_verified_transaction_status_callback_settles_invoice(reconciliation_database, monkeypatch):
+    monkeypatch.setattr(
+        DarajaAdapter,
+        "_query",
+        lambda self, checkout_id: {
+            "ResponseCode": "0",
+            "ResultCode": "0",
+            "CheckoutRequestID": checkout_id,
+        },
+    )
+    adapter = DarajaAdapter(environ={})
+    result = adapter.handle_transaction_status_result(
+        json.dumps(_transaction_status_result()).encode()
+    )
+    assert result == {"processed": True, "duplicate": False}
+    with database_connection() as connection:
+        payment = connection.execute(
+            "SELECT status, provider_reference FROM payment_transactions WHERE id = ?",
+            (reconciliation_database,),
+        ).fetchone()
+        reconciliation = connection.execute(
+            "SELECT status, verified_receipt, verified_amount_minor "
+            "FROM mpesa_transaction_reconciliations WHERE checkout_request_id = ?",
+            ("ws_CO_test_001",),
+        ).fetchone()
+    assert payment["status"] == "succeeded"
+    assert payment["provider_reference"] == "QHT7ABC123"
+    assert reconciliation["status"] == "verified"
+    assert reconciliation["verified_receipt"] == "QHT7ABC123"
+    assert reconciliation["verified_amount_minor"] == 150000
+
+
+def test_transaction_status_request_requires_https_callbacks(reconciliation_database, monkeypatch):
+    adapter = DarajaAdapter(environ={
+        "DARAJA_INITIATOR_NAME": "api-user",
+        "DARAJA_SECURITY_CREDENTIAL": "encrypted-credential",
+        "DARAJA_TRANSACTION_STATUS_RESULT_URL": "http://example.org/result",
+        "DARAJA_TRANSACTION_STATUS_TIMEOUT_URL": "https://example.org/timeout",
+    })
+    monkeypatch.setattr(
+        adapter, "_token",
+        lambda: ("https://sandbox.safaricom.co.ke", {"shortcode": "174379"}, "token"),
+    )
+    with pytest.raises(DarajaError, match="public HTTPS"):
+        adapter._request_transaction_status(
+            {"id": reconciliation_database}, "ws_CO_test_001",
+            "QHT7ABC123", 150000, create_record=False,
+        )
