@@ -297,4 +297,4 @@ def test_password_step_can_show_password(
         if options.get("autocomplete") == "current-password"
     )
     assert password_options["type"] == "default"
-\n
+
