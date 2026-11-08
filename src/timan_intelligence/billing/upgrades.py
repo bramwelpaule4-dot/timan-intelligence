@@ -26,6 +26,8 @@ def create_upgrade_invoice(
     """
     if not isinstance(request_id, str) or not request_id.strip():
         raise BillingError("A valid subscription change request ID is required.")
+    if isinstance(amount_minor, bool) or not isinstance(amount_minor, int) or amount_minor <= 0:
+        raise BillingError("An upgrade invoice amount must be a positive integer in minor currency units.")
     if not isinstance(period_start, str) or not period_start.strip():
         raise BillingError("A subscription period start is required.")
     if not isinstance(period_end, str) or not period_end.strip():
