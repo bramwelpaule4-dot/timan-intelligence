@@ -20,6 +20,9 @@ from timan_intelligence.security.totp_service import (
     TOTPServiceError,
     verify_totp_for_user,
 )
+from timan_intelligence.security.totp_rate_limit import (
+    totp_attempt_limiter,
+)
 
 
 VALID_ROLES = {"developer", "admin", "user"}
@@ -456,6 +459,30 @@ def verify_pending_totp(code: str) -> bool:
     return True
 
 
+def is_pending_second_factor_temporarily_locked() -> bool:
+    """Return whether the pending account is locked out of MFA verification.
+
+    Check both authenticator and recovery-code operations because the
+    sign-in form accepts either credential type. Fail closed if the
+    shared rate-limit state cannot be checked.
+    """
+
+    if not is_totp_pending():
+        return False
+
+    user_id = st.session_state.get("pending_user_id")
+    if not isinstance(user_id, str) or not user_id.strip():
+        return True
+
+    try:
+        return any(
+            totp_attempt_limiter.is_locked(user_id, operation)
+            for operation in ("verification", "recovery")
+        )
+    except Exception:
+        return True
+
+
 def is_authenticated() -> bool:
     """Validate the current full session and enforce session expiry."""
 
@@ -549,6 +576,12 @@ def render_login() -> None:
             if verify_pending_second_factor(code):
                 st.success("Authentication successful.")
                 st.rerun()
+            elif is_pending_second_factor_temporarily_locked():
+                st.error(
+                    "Too many unsuccessful verification attempts. For your "
+                    "security, verification is temporarily paused for this "
+                    "account. Please wait 15 minutes before trying again."
+                )
             else:
                 st.error(
                     "We could not verify that code. Check it and try again, "
