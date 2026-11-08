@@ -813,3 +813,31 @@ def test_resend_verification_form_prefills_login_email(monkeypatch):
         if args and args[0] == "Registered email address"
     )
     assert email_options["value"] == "person@example.com"
+
+def test_back_from_password_recovery_clears_reset_token_and_returns_to_sign_in(
+    monkeypatch,
+):
+    """An invalid or expired reset link must not trap the user in recovery."""
+
+    fake = FakeStreamlit()
+    fake.query_params = {"reset_password": "expired-or-invalid-token"}
+    fake.session_state[auth_ui.AUTHENTICATION_VIEW_KEY] = "password_recovery"
+    monkeypatch.setattr(auth_ui, "st", fake)
+
+    auth_ui._back_to_sign_in_from_password_recovery()
+
+    assert "reset_password" not in fake.query_params
+    assert fake.session_state[auth_ui.AUTHENTICATION_VIEW_KEY] == "sign_in"
+
+
+def test_back_from_password_recovery_works_without_query_params(monkeypatch):
+    """Sign-in navigation remains available without browser query support."""
+
+    fake = FakeStreamlit()
+    fake.query_params = None
+    monkeypatch.setattr(auth_ui, "st", fake)
+
+    auth_ui._back_to_sign_in_from_password_recovery()
+
+    assert fake.session_state[auth_ui.AUTHENTICATION_VIEW_KEY] == "sign_in"
+
