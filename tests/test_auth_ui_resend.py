@@ -21,6 +21,7 @@ class FakeStreamlit:
                 "https://timanstat.example.com"
             )
         }
+        self.session_state = {}
         self.errors = []
         self.warnings = []
         self.successes = []
