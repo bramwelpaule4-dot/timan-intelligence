@@ -589,9 +589,16 @@ def render_login() -> None:
         return
 
     st.subheader("Enter your password")
-    st.caption(f"Signing in as {identifier}")
 
     with st.form("timanstat_login_password_form"):
+        # Keep the username/email field beside the password field so browser
+        # password managers can reliably associate and autofill both values.
+        entered_identifier = st.text_input(
+            "Email address or username",
+            value=identifier,
+            max_chars=254,
+            autocomplete="username",
+        )
         show_password = st.checkbox(
             "Show password",
             key="timanstat_show_login_password",
@@ -607,6 +614,15 @@ def render_login() -> None:
         )
 
     if submitted:
+        identifier = entered_identifier.strip()
+
+        if not identifier:
+            st.error("Enter your email address or username.")
+            return
+
+        # Preserve an edited identifier if the password needs correcting.
+        st.session_state[LOGIN_IDENTIFIER_KEY] = identifier
+
         if not password:
             st.error("Enter your password.")
             return
