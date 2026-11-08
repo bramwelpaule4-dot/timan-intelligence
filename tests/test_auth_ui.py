@@ -226,6 +226,37 @@ def test_registration_requires_application_base_url(
     register.assert_not_called()
 
 
+def test_registration_refuses_unconfigured_email_before_creating_account(
+    fake_streamlit,
+    monkeypatch,
+    valid_registration_inputs,
+):
+    fake_streamlit.inputs = valid_registration_inputs.copy()
+    register = Mock()
+
+    def reject_unconfigured_email(base_url):
+        raise auth_ui.EmailDeliveryError(
+            "Real email delivery is not configured.",
+            stage="configuration",
+        )
+
+    monkeypatch.setattr(
+        auth_ui,
+        "_configured_email_sender",
+        reject_unconfigured_email,
+    )
+    monkeypatch.setattr(auth_ui, "register_user", register)
+
+    auth_ui.render_registration()
+
+    register.assert_not_called()
+    assert fake_streamlit.successes == []
+    assert len(fake_streamlit.errors) == 1
+    assert "email verification service is not configured" in (
+        fake_streamlit.errors[0]
+    )
+
+
 def test_registration_creates_account_and_sends_verification(
     fake_streamlit,
     monkeypatch,
@@ -234,7 +265,13 @@ def test_registration_creates_account_and_sends_verification(
     fake_streamlit.inputs = valid_registration_inputs.copy()
     register = Mock(return_value="user-123")
     send_verification = Mock()
+    email_sender = object()
 
+    monkeypatch.setattr(
+        auth_ui,
+        "_configured_email_sender",
+        lambda base_url: email_sender,
+    )
     monkeypatch.setattr(auth_ui, "register_user", register)
     monkeypatch.setattr(
         auth_ui,
@@ -253,6 +290,7 @@ def test_registration_creates_account_and_sends_verification(
     send_verification.assert_called_once_with(
         user_id="user-123",
         base_url="https://timanstat.example.com",
+        sender=email_sender,
     )
     assert len(fake_streamlit.successes) == 1
     assert "Check your email" in fake_streamlit.successes[0]
@@ -267,6 +305,11 @@ def test_registration_displays_validation_error_from_service(
     register = Mock(side_effect=ValueError("Email is already registered."))
     send_verification = Mock()
 
+    monkeypatch.setattr(
+        auth_ui,
+        "_configured_email_sender",
+        lambda base_url: object(),
+    )
     monkeypatch.setattr(auth_ui, "register_user", register)
     monkeypatch.setattr(
         auth_ui,
@@ -293,6 +336,11 @@ def test_registration_handles_email_delivery_failure(
         side_effect=auth_ui.EmailDeliveryError("SMTP unavailable")
     )
 
+    monkeypatch.setattr(
+        auth_ui,
+        "_configured_email_sender",
+        lambda base_url: object(),
+    )
     monkeypatch.setattr(auth_ui, "register_user", register)
     monkeypatch.setattr(
         auth_ui,
@@ -319,6 +367,11 @@ def test_registration_handles_unexpected_email_error(
         side_effect=RuntimeError("Unexpected provider error")
     )
 
+    monkeypatch.setattr(
+        auth_ui,
+        "_configured_email_sender",
+        lambda base_url: object(),
+    )
     monkeypatch.setattr(auth_ui, "register_user", register)
     monkeypatch.setattr(
         auth_ui,
