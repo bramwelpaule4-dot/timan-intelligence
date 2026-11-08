@@ -376,7 +376,7 @@ def render_subscription_page(
                 outstanding_minor = max(
                     0, int(detail["total_minor"]) - int(detail["amount_paid_minor"])
                 )
-                if detail["status"] in {"open", "overdue"} and detail["currency"] == "KES" and outstanding_minor > 0:
+                if detail["status"] == "open" and detail["currency"] == "KES" and outstanding_minor > 0:
                     st.markdown("**Pay this invoice with M-Pesa**")
                     st.caption(
                         "Enter the Kenyan mobile number that should receive the "
