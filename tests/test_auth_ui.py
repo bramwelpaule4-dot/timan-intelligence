@@ -20,6 +20,7 @@ class FakeStreamlit:
         self.errors = []
         self.warnings = []
         self.successes = []
+        self.infos = []
         self.titles = []
         self.captions = []
         self.subheaders = []
@@ -61,6 +62,9 @@ class FakeStreamlit:
 
     def warning(self, value):
         self.warnings.append(value)
+
+    def info(self, value):
+        self.infos.append(value)
 
     def success(self, value):
         self.successes.append(value)
@@ -841,3 +845,21 @@ def test_back_from_password_recovery_works_without_query_params(monkeypatch):
 
     assert fake.session_state[auth_ui.AUTHENTICATION_VIEW_KEY] == "sign_in"
 
+
+
+def test_authentication_page_explains_expired_session_once(
+    fake_streamlit,
+):
+    """An expired session is explained on the next sign-in screen."""
+
+    from timan_intelligence.security.session import SESSION_EXPIRED_KEY
+
+    fake_streamlit.session_state[SESSION_EXPIRED_KEY] = "idle"
+
+    auth_ui.render_authentication()
+
+    assert fake_streamlit.infos == [
+        "Your TimanStat session expired for security. "
+        "Please sign in again to continue."
+    ]
+    assert SESSION_EXPIRED_KEY not in fake_streamlit.session_state
