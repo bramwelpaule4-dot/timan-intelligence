@@ -9,8 +9,10 @@ from timan_intelligence.identity.email_verification import (
     verify_email_token,
 )
 from timan_intelligence.identity.service import (
+    PASSWORD_CHANGE_RATE_LIMITER,
     register_user,
     authenticate_user,
+    change_password,
     get_user_by_id,
 )
 
@@ -26,6 +28,10 @@ def test_database(tmp_path, monkeypatch):
         f"sqlite:///{database_file.as_posix()}",
     )
 
+    monkeypatch.setenv(
+        "TIMANSTAT_RATE_LIMIT_HMAC_KEY",
+        "test-rate-limit-hmac-key-with-at-least-32-bytes",
+    )
     initialise_database()
 
     return database_file
@@ -199,3 +205,69 @@ def test_inactive_user_cannot_login(test_database):
     )
 
     assert user is None
+
+
+
+def test_password_change_locks_after_five_incorrect_current_passwords(
+    test_database,
+):
+    """Repeated incorrect current-password attempts trigger account lockout."""
+
+    user_id = register_test_user()
+    verify_test_user(user_id)
+
+    for _ in range(5):
+        assert change_password(
+            user_id,
+            "WrongPassword123!",
+            "NewSecurePassword456!",
+        ) is False
+
+    assert PASSWORD_CHANGE_RATE_LIMITER.is_locked(user_id) is True
+
+    assert change_password(
+        user_id,
+        "SecureTestPassword123!",
+        "NewSecurePassword456!",
+    ) is False
+
+    with database_connection() as connection:
+        user = connection.execute(
+            "SELECT password_hash, session_version FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+
+    assert user["session_version"] == 0
+    assert user["password_hash"] != "NewSecurePassword456!"
+
+
+def test_successful_password_change_clears_failed_attempt_history(
+    test_database,
+):
+    """A successful password change clears earlier incorrect attempts."""
+
+    user_id = register_test_user()
+    verify_test_user(user_id)
+
+    for _ in range(4):
+        assert change_password(
+            user_id,
+            "WrongPassword123!",
+            "NewSecurePassword456!",
+        ) is False
+
+    assert PASSWORD_CHANGE_RATE_LIMITER.is_locked(user_id) is False
+
+    assert change_password(
+        user_id,
+        "SecureTestPassword123!",
+        "NewSecurePassword456!",
+    ) is True
+
+    assert PASSWORD_CHANGE_RATE_LIMITER.is_locked(user_id) is False
+
+    user = authenticate_user(
+        "testuser",
+        "NewSecurePassword456!",
+    )
+    assert user is not None
