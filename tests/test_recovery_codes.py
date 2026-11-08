@@ -23,6 +23,7 @@ from timan_intelligence.security.totp import generate_totp_code
 
 TEST_TIMESTAMP = 1_700_000_000
 from timan_intelligence.security.totp_service import (
+    SECURITY_REAUTHENTICATION_LIMITER,
     begin_totp_enrolment,
     confirm_totp_enrolment,
 )
@@ -40,6 +41,10 @@ def unprotected_user(tmp_path, monkeypatch):
     monkeypatch.setenv(
         "TIMANSTAT_TOTP_ENCRYPTION_KEY",
         generate_totp_encryption_key(),
+    )
+    monkeypatch.setenv(
+        "TIMANSTAT_RATE_LIMIT_HMAC_KEY",
+        "test-rate-limit-hmac-key-with-at-least-32-bytes",
     )
     initialise_database()
     return register_user(
@@ -181,3 +186,32 @@ def test_regeneration_can_use_an_existing_recovery_code(totp_user):
     assert len(replacement) == RECOVERY_CODE_COUNT
     assert consume_recovery_code(user_id, previous[0]) is False
     assert consume_recovery_code(user_id, replacement[0]) is True
+
+
+
+def test_recovery_code_regeneration_password_attempts_share_security_lockout(
+    totp_user,
+):
+    """Repeated wrong passwords lock recovery-code regeneration."""
+
+    user_id, secret = totp_user
+    fresh_code = generate_totp_code(
+        secret,
+        at_time=TEST_TIMESTAMP + 30,
+    )
+
+    for _ in range(5):
+        assert regenerate_recovery_codes(
+            user_id,
+            "WrongPassword123!",
+            fresh_code,
+            at_time=TEST_TIMESTAMP + 30,
+        ) is None
+
+    assert SECURITY_REAUTHENTICATION_LIMITER.is_locked(user_id) is True
+    assert regenerate_recovery_codes(
+        user_id,
+        "SecureTestPassword123!",
+        fresh_code,
+        at_time=TEST_TIMESTAMP + 30,
+    ) is None
