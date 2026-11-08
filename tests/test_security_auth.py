@@ -9,7 +9,10 @@ import pytest
 from timan_intelligence.identity.service import _hash_password
 from timan_intelligence.security import auth
 from timan_intelligence.security.rate_limit import LoginRateLimiter
-from timan_intelligence.security.session import SessionManager
+from timan_intelligence.security.session import (
+    SESSION_EXPIRED_KEY,
+    SessionManager,
+)
 
 
 VALID_PASSWORD = "SecureTestPassword123!"
@@ -755,7 +758,7 @@ def test_is_authenticated_rejects_and_clears_expired_session(
     controlled_session_manager.clock[0] += 1800
 
     assert auth.is_authenticated() is False
-    assert mock_session == {}
+    assert mock_session == {SESSION_EXPIRED_KEY: "idle"}
 
 
 def test_permission_check_rejects_expired_session(
@@ -773,7 +776,7 @@ def test_permission_check_rejects_expired_session(
     controlled_session_manager.clock[0] += 1800
 
     assert auth.has_permission("manage_users") is False
-    assert mock_session == {}
+    assert mock_session == {SESSION_EXPIRED_KEY: "idle"}
 
 
 def test_current_username_rejects_expired_session(
@@ -791,7 +794,7 @@ def test_current_username_rejects_expired_session(
     controlled_session_manager.clock[0] += 1800
 
     assert auth.current_username() is None
-    assert mock_session == {}
+    assert mock_session == {SESSION_EXPIRED_KEY: "idle"}
 
 
 def test_current_role_rejects_expired_session(
@@ -809,7 +812,7 @@ def test_current_role_rejects_expired_session(
     controlled_session_manager.clock[0] += 1800
 
     assert auth.current_role() is None
-    assert mock_session == {}
+    assert mock_session == {SESSION_EXPIRED_KEY: "idle"}
 
 
 def test_valid_session_activity_refreshes_idle_timeout(
@@ -855,7 +858,7 @@ def test_absolute_timeout_is_enforced_through_authentication(
     controlled_session_manager.clock[0] += 1200
 
     assert auth.is_authenticated() is False
-    assert mock_session == {}
+    assert mock_session == {SESSION_EXPIRED_KEY: "absolute"}
 
 
 def test_pending_recovery_code_authentication_can_be_promoted(
