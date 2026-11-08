@@ -135,6 +135,37 @@ def test_resend_requires_application_base_url(
     resend.assert_not_called()
 
 
+def test_resend_refuses_unconfigured_mock_provider(
+    fake_streamlit,
+    monkeypatch,
+):
+    monkeypatch.setenv("TIMAN_ENVIRONMENT", "production")
+    monkeypatch.setattr(
+        auth_ui,
+        "_configured_email_sender",
+        Mock(
+            side_effect=auth_ui.EmailDeliveryError(
+                "Real email delivery is not configured.",
+                stage="configuration",
+            )
+        ),
+    )
+
+    resend = Mock()
+    monkeypatch.setattr(
+        auth_ui,
+        "resend_email_verification",
+        resend,
+    )
+
+    auth_ui.render_resend_verification()
+
+    resend.assert_not_called()
+    assert fake_streamlit.successes == []
+    assert len(fake_streamlit.warnings) == 1
+    assert "could not be completed" in fake_streamlit.warnings[0]
+
+
 def test_production_resend_calls_service_without_mock_sender(
     fake_streamlit,
     monkeypatch,
