@@ -187,18 +187,19 @@ def create_invoice(
                 currency_code, subtotal, tax, total, due, now, now,
             ),
         )
-        for label, plan, quantity, unit, line_total, start, end in normalized:
+        for line_number, (label, plan, quantity, unit, line_total, start, end) in enumerate(normalized, start=1):
             connection.execute(
                 f"""
                 INSERT INTO billing_invoice_items (
                     id, invoice_id, description, plan_code, quantity,
-                    unit_amount_minor, line_total_minor, period_start, period_end
+                    unit_amount_minor, line_total_minor, period_start, period_end,
+                    line_number
                 )
-                VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p})
+                VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p})
                 """,
                 (
                     str(uuid.uuid4()), invoice_id, label, plan, quantity,
-                    unit, line_total, start, end,
+                    unit, line_total, start, end, line_number,
                 ),
             )
         _event(
@@ -347,7 +348,7 @@ def get_invoice(invoice_id: str) -> dict[str, Any] | None:
         if invoice is None:
             return None
         items = connection.execute(
-            f"SELECT * FROM billing_invoice_items WHERE invoice_id = {p} ORDER BY created_at, id",
+            f"SELECT * FROM billing_invoice_items WHERE invoice_id = {p} ORDER BY line_number, created_at, id",
             (invoice_id.strip(),),
         ).fetchall()
         payments = connection.execute(
