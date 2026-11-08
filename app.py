@@ -24,6 +24,7 @@ from timan_intelligence.security.password_change_ui import render_password_chang
 from timan_intelligence.security.totp_management_ui import render_totp_management
 from timan_intelligence.organisations.service import list_user_organisations
 from timan_intelligence.entitlements.subscription_ui import render_subscription_page
+from timan_intelligence.entitlements.subscription_admin_ui import render_subscription_administration
 from timan_intelligence.entitlements.service import (
     DatasetLimitExceeded,
     UsageLimitExceeded,
@@ -177,6 +178,10 @@ MODULES = {
     "Reports & Exports": (
         "Available — data exports",
         "Download the current dataset and available descriptive outputs.",
+    ),
+    "Subscription Administration": (
+        "Available — platform administrators only",
+        "Assign subscription plans to individual accounts and organisations.",
     ),
     "Subscription": (
         "Available",
@@ -1713,6 +1718,13 @@ elif page == "About":
 # ============================================================
 # ACCOUNT & SECURITY
 # ============================================================
+
+elif page == "Subscription Administration":
+    render_subscription_administration(
+        actor_user_id=st.session_state.get("user_id"),
+        actor_role=st.session_state.get("role"),
+    )
+
 
 elif page == "Subscription":
     render_subscription_page(
