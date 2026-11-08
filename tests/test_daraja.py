@@ -32,7 +32,7 @@ def test_production_mode_is_blocked_until_independent_reconciliation_exists():
         "DARAJA_PASSKEY": "pass",
         "DARAJA_CALLBACK_URL": "https://example.org/api/v1/payments/mpesa/callback",
     }
-    with pytest.raises(DarajaError, match="independent Safaricom"):
+    with pytest.raises(DarajaError, match="sandbox end-to-end"):
         DarajaAdapter(environ=env)._config()
 
 
