@@ -20,6 +20,7 @@ class FakeStreamlit:
         self.subheaders = []
         self.infos = []
         self.buttons = []
+        self.button_results = {}
         self.forms = []
         self.checkbox_value = False
         self.checkboxes = []
@@ -62,7 +63,7 @@ class FakeStreamlit:
 
     def button(self, label, *args, **kwargs):
         self.buttons.append(label)
-        return False
+        return self.button_results.get(label, False)
 
     def rerun(self):
         self.rerun_count += 1
@@ -501,3 +502,41 @@ def test_locked_password_step_disables_credentials_and_sign_in(
         "identifier. Please wait 15 minutes before trying again."
     ]
     assert "Use a different account" in login_ui.buttons
+
+
+def test_locked_password_step_can_recheck_lockout(login_ui, monkeypatch):
+    """The user can refresh the password lockout status after waiting."""
+
+    login_ui.submitted = False
+    login_ui.session_state.update(
+        {
+            auth.LOGIN_IDENTIFIER_KEY: "analyst@example.com",
+            auth.LOGIN_STEP_KEY: "password",
+        }
+    )
+    monkeypatch.setattr(
+        auth,
+        "is_login_temporarily_locked",
+        lambda identifier: True,
+    )
+    login_ui.button_results["Check sign-in again"] = True
+
+    auth.render_login()
+
+    assert login_ui.rerun_count == 1
+
+
+def test_locked_mfa_challenge_can_recheck_lockout(login_ui, monkeypatch):
+    """The user can refresh the MFA lockout status after waiting."""
+
+    monkeypatch.setattr(auth, "is_totp_pending", lambda: True)
+    monkeypatch.setattr(
+        auth,
+        "is_pending_second_factor_temporarily_locked",
+        lambda: True,
+    )
+    login_ui.button_results["Check verification again"] = True
+
+    auth.render_login()
+
+    assert login_ui.rerun_count == 1
