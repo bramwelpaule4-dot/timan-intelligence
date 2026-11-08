@@ -540,3 +540,66 @@ def test_locked_mfa_challenge_can_recheck_lockout(login_ui, monkeypatch):
     auth.render_login()
 
     assert login_ui.rerun_count == 1
+
+
+def test_switching_accounts_resets_password_visibility(login_ui):
+    """A revealed password must not remain revealed for another account."""
+
+    login_ui.submitted = False
+    login_ui.session_state.update(
+        {
+            auth.LOGIN_IDENTIFIER_KEY: "analyst@example.com",
+            auth.LOGIN_STEP_KEY: "password",
+            "timanstat_show_login_password": True,
+        }
+    )
+    login_ui.button_results["Use a different account"] = True
+
+    auth.render_login()
+
+    assert "timanstat_show_login_password" not in login_ui.session_state
+    assert auth.LOGIN_IDENTIFIER_KEY not in login_ui.session_state
+    assert auth.LOGIN_STEP_KEY not in login_ui.session_state
+    assert login_ui.rerun_count == 1
+
+
+def test_successful_password_login_resets_password_visibility(
+    login_ui,
+    monkeypatch,
+):
+    """A successful sign-in clears the password visibility preference."""
+
+    login_ui.session_state.update(
+        {
+            auth.LOGIN_IDENTIFIER_KEY: "analyst@example.com",
+            auth.LOGIN_STEP_KEY: "password",
+            "timanstat_show_login_password": True,
+        }
+    )
+    login_ui.inputs = ["analyst@example.com", "StrongPassword123!"]
+    monkeypatch.setattr(auth, "authenticate_user", lambda identifier, password: True)
+
+    auth.render_login()
+
+    assert "timanstat_show_login_password" not in login_ui.session_state
+    assert auth.LOGIN_IDENTIFIER_KEY not in login_ui.session_state
+    assert auth.LOGIN_STEP_KEY not in login_ui.session_state
+    assert login_ui.rerun_count == 1
+
+
+def test_canceling_mfa_sign_in_resets_password_visibility(
+    login_ui,
+    monkeypatch,
+):
+    """Canceling a pending MFA login clears the prior password reveal state."""
+
+    login_ui.session_state["timanstat_show_login_password"] = True
+    login_ui.button_results["Cancel sign in"] = True
+    monkeypatch.setattr(auth, "is_totp_pending", lambda: True)
+
+    auth.render_login()
+
+    assert "timanstat_show_login_password" not in login_ui.session_state
+    assert auth.LOGIN_IDENTIFIER_KEY not in login_ui.session_state
+    assert auth.LOGIN_STEP_KEY not in login_ui.session_state
+    assert login_ui.rerun_count == 1
