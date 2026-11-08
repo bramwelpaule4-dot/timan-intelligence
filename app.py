@@ -113,9 +113,19 @@ if verification_token is not None:
     if "verify_email" in st.query_params:
         del st.query_params["verify_email"]
 
+# A password-reset link must remain usable even when it is opened
+# in a browser that already has an authenticated TimanStat session.
+password_reset_requested = bool(
+    st.query_params.get("reset_password")
+)
+
+if password_reset_requested and is_authenticated():
+    logout()
+
 # No statistical module or dataset functionality is rendered unless
-# the current session has passed the authentication checks.
-if not is_authenticated():
+# the current session has passed the authentication checks. A valid
+# password-reset URL is the only public exception to the normal gate.
+if not is_authenticated() or password_reset_requested:
     render_authentication()
     st.stop()
 
