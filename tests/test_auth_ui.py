@@ -863,3 +863,22 @@ def test_authentication_page_explains_expired_session_once(
         "Please sign in again to continue."
     ]
     assert SESSION_EXPIRED_KEY not in fake_streamlit.session_state
+
+
+
+def test_authentication_page_explains_revoked_session_once(
+    fake_streamlit,
+):
+    """A remotely revoked session receives a one-time sign-in notice."""
+
+    from timan_intelligence.security.session import SESSION_REVOKED_KEY
+
+    fake_streamlit.session_state[SESSION_REVOKED_KEY] = True
+
+    auth_ui.render_authentication()
+
+    assert fake_streamlit.infos == [
+        "Your session ended because your account security settings "
+        "changed. Please sign in again."
+    ]
+    assert SESSION_REVOKED_KEY not in fake_streamlit.session_state
