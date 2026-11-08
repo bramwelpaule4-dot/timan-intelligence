@@ -93,8 +93,9 @@ def _reject_login(identifier: str) -> bool:
     try:
         LOGIN_RATE_LIMITER.record_failure(identifier)
     except Exception:
-        # A rate-limit storage failure must never permit authentication.
-        pass
+        # A failed attempt that cannot be recorded means the security
+        # control is unavailable; never disguise this as bad credentials.
+        st.session_state[LOGIN_UNAVAILABLE_KEY] = True
     return False
 
 
@@ -295,8 +296,6 @@ def authenticate_user(username: str, password: str) -> bool:
 
     try:
         user = authenticate_identity_user(identifier, password)
-    except (TypeError, ValueError):
-        return _reject_login(identifier)
     except Exception:
         # Database or identity-service failures are not bad credentials.
         st.session_state[LOGIN_UNAVAILABLE_KEY] = True
