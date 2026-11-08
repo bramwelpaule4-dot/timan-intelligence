@@ -17,6 +17,13 @@ actual credentials):
 - `DARAJA_PASSKEY`
 - `DARAJA_CALLBACK_URL`: public HTTPS URL ending in
   `/api/v1/payments/mpesa/callback`
+- `DARAJA_INITIATOR_NAME`: Safaricom M-Pesa API initiator username with Transaction Status Query permission
+- `DARAJA_SECURITY_CREDENTIAL`: Safaricom RSA-encrypted initiator credential for the active environment
+- `DARAJA_TRANSACTION_STATUS_RESULT_URL`: public HTTPS URL ending in
+  `/api/v1/payments/mpesa/transaction-status/result`
+- `DARAJA_TRANSACTION_STATUS_TIMEOUT_URL`: public HTTPS URL ending in
+  `/api/v1/payments/mpesa/transaction-status/timeout`
+- `DARAJA_IDENTIFIER_TYPE`: receiving organisation identifier type (default `4` for shortcode)
 
 The callback service is started separately from Streamlit:
 
@@ -24,8 +31,8 @@ The callback service is started separately from Streamlit:
 uvicorn timan_intelligence.payment_api:app --host 0.0.0.0 --port 8000
 ```
 
-Point the configured Daraja callback URL to the public HTTPS URL routed to
-that service. Keep the endpoint behind TLS and standard infrastructure
+Point all three configured callback URLs to the public HTTPS endpoints routed
+to that service. Keep the endpoints behind TLS and standard infrastructure
 protections (request-size limits, rate limits, monitoring and restricted
 network exposure where possible).
 
@@ -62,6 +69,6 @@ a subscription.
 Use Daraja sandbox credentials and Safaricom's test shortcode for integration
 testing. Although production credentials may be obtained through Safaricom's
 onboarding, setting `DARAJA_ENVIRONMENT=production` currently causes the
-adapter to fail closed. Do not remove this guard until independent transaction
-reconciliation and its tests are implemented. No live credentials are included
+adapter to fail closed. Do not remove this guard until Safaricom sandbox end-to-end testing, callback
+hardening, reconciliation retry controls, and production-readiness review are complete. No live credentials are included
 in this repository.
