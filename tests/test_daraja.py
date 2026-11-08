@@ -159,6 +159,10 @@ def test_verified_transaction_status_callback_settles_invoice(reconciliation_dat
         json.dumps(_transaction_status_result()).encode()
     )
     assert result == {"processed": True, "duplicate": False}
+    duplicate = adapter.handle_transaction_status_result(
+        json.dumps(_transaction_status_result()).encode()
+    )
+    assert duplicate == {"processed": True, "duplicate": True}
     with database_connection() as connection:
         payment = connection.execute(
             "SELECT status, provider_reference FROM payment_transactions WHERE id = ?",
