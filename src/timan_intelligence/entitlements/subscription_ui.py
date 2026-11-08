@@ -313,8 +313,8 @@ def render_subscription_page(
         invoice_metrics[0].metric("Invoices", f"{len(invoices):,}")
         invoice_metrics[1].metric("Outstanding invoices", f"{unpaid_count:,}")
         invoice_metrics[2].metric(
-            "Outstanding balance",
-            f"{outstanding_minor / 100:,.2f} (minor-unit conversion)",
+            "Outstanding balance (minor units)",
+            f"{outstanding_minor:,}",
         )
         invoice_rows = [
             {
