@@ -31,22 +31,26 @@ network exposure where possible).
 
 ## Starting a payment
 
-Call `initiate_mpesa_payment(invoice_id, phone, user_id=...)` or use
-`organisation_id=...` for an organisation-owned invoice. Phone numbers may
-be entered as Kenyan 07..., 01..., or 254... numbers. Only whole-shilling
-KES invoice balances are supported. The function returns a pending payment
-transaction ID and Daraja CheckoutRequestID. The customer completes the
-prompt on their phone.
+On the Subscription & Plans page, expand an eligible invoice and enter the
+Kenyan phone number that should receive the STK prompt. The checkout is scoped
+to the signed-in user's personal account or selected organisation. Phone
+numbers may be entered as Kenyan 07..., 01..., or 254... numbers. Only
+whole-shilling KES invoice balances are supported. The underlying service is
+also available through `initiate_mpesa_payment(invoice_id, phone, user_id=...)`
+or `organisation_id=...`. The customer completes the prompt on their phone.
 
 ## Callback and reconciliation
 
 Daraja's STK callback is not cryptographically signed. TimanStat does not
 trust a callback success by itself: it matches CheckoutRequestID to a pending
-M-Pesa ledger transaction, then queries Safaricom's STK Push Query API. Only
-a successful query plus a matching callback amount and receipt can settle
-the invoice. Failed/cancelled callbacks are recorded as final unsuccessful
-attempts. Duplicate callbacks are idempotently handled by the existing
-webhook-event ledger.
+M-Pesa ledger transaction, then queries Safaricom's STK Push Query API. An STK Push Query response does not independently attest the callback's
+amount and receipt metadata. Therefore sandbox settlement is suitable only
+for integration testing; it is not a production-grade reconciliation control.
+Production mode is deliberately blocked in the adapter until an independent
+Safaricom Transaction Status reconciliation flow verifies the receipt,
+amount, currency and transaction identity before settlement. Failed/cancelled
+callbacks are queried against Safaricom before being recorded. Duplicate
+callbacks are idempotently handled by the existing webhook-event ledger.
 
 A production deployment should also schedule reconciliation for pending
 requests where Safaricom does not deliver a callback. Never use the browser
@@ -55,7 +59,9 @@ a subscription.
 
 ## Sandbox and production
 
-Use Daraja sandbox credentials and Safaricom's test shortcode first. Obtain
-production credentials and complete Safaricom's onboarding before setting
-`DARAJA_ENVIRONMENT=production`. No live credentials are included in this
-repository.
+Use Daraja sandbox credentials and Safaricom's test shortcode for integration
+testing. Although production credentials may be obtained through Safaricom's
+onboarding, setting `DARAJA_ENVIRONMENT=production` currently causes the
+adapter to fail closed. Do not remove this guard until independent transaction
+reconciliation and its tests are implemented. No live credentials are included
+in this repository.
