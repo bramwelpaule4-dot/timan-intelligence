@@ -921,3 +921,26 @@ def test_invalid_recovery_code_does_not_create_session(
 
     assert mock_session["pending_authentication"] is True
     assert "authenticated" not in mock_session
+
+def test_expired_pending_authentication_sets_one_time_ui_notice(
+    monkeypatch,
+    mock_session,
+    valid_account,
+):
+    """Expiry is recorded for one user-facing notice, without retaining MFA state."""
+
+    account = dict(valid_account)
+    account["totp_enabled"] = True
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        lambda identifier, password: account,
+    )
+
+    assert auth.authenticate_user("testuser", VALID_PASSWORD) is False
+    mock_session["pending_expires_at"] = time.monotonic() - 1
+
+    assert auth.is_totp_pending() is False
+    assert mock_session[auth.PENDING_AUTHENTICATION_EXPIRED_KEY] is True
+    assert "pending_authentication" not in mock_session
+
