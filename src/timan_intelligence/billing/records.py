@@ -365,14 +365,27 @@ def record_payment_transaction(
     return payment_id
 
 
-def get_invoice(invoice_id: str) -> dict[str, Any] | None:
-    """Fetch invoice, itemised charges, and payment attempts."""
+def get_invoice(
+    invoice_id: str,
+    *,
+    user_id: str | None = None,
+    organisation_id: str | None = None,
+) -> dict[str, Any] | None:
+    """Fetch invoice details, optionally enforcing the invoice owner scope."""
     if not isinstance(invoice_id, str) or not invoice_id.strip():
         raise BillingError("A valid invoice ID is required.")
+    scoped = user_id is not None or organisation_id is not None
+    if scoped:
+        owner_column, owner_id = _owner(user_id, organisation_id)
+        where = f"id = {p} AND {owner_column} = {p}"
+        params = (invoice_id.strip(), owner_id)
+    else:
+        where = f"id = {p}"
+        params = (invoice_id.strip(),)
     p = _p()
     with database_connection() as connection:
         invoice = connection.execute(
-            f"SELECT * FROM billing_invoices WHERE id = {p}", (invoice_id.strip(),)
+            f"SELECT * FROM billing_invoices WHERE {where}", params
         ).fetchone()
         if invoice is None:
             return None
@@ -396,6 +409,20 @@ def get_invoice(invoice_id: str) -> dict[str, Any] | None:
             (invoice_id.strip(), invoice_id.strip()),
         ).fetchall()
     result = dict(invoice)
+    if result.get("user_id"):
+        owner = connection.execute(
+            f"SELECT full_name, email FROM users WHERE id = {p}",
+            (result["user_id"],),
+        ).fetchone()
+        result["owner_name"] = owner["full_name"] if owner else None
+        result["owner_email"] = owner["email"] if owner else None
+    elif result.get("organisation_id"):
+        owner = connection.execute(
+            f"SELECT name FROM organisations WHERE id = {p}",
+            (result["organisation_id"],),
+        ).fetchone()
+        result["owner_name"] = owner["name"] if owner else None
+        result["owner_email"] = None
     result["items"] = [dict(row) for row in items]
     result["payments"] = [dict(row) for row in payments]
     result["events"] = [dict(row) for row in events]
