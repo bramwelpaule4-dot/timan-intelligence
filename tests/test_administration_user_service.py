@@ -444,3 +444,94 @@ def test_set_user_active_status_rejects_unknown_target(
             target_user_id="nonexistent-user-id",
             is_active=False,
         )
+
+
+def test_role_change_revokes_sessions_and_records_audit_event(
+    test_database,
+    test_users,
+):
+    target_id = test_users["user"]
+    with database_connection() as connection:
+        before = connection.execute(
+            "SELECT session_version FROM users WHERE id = ?",
+            (target_id,),
+        ).fetchone()["session_version"]
+
+    change_user_role(
+        actor_role="super_admin",
+        actor_user_id=test_users["super_admin"],
+        target_user_id=target_id,
+        new_role="developer",
+    )
+
+    with database_connection() as connection:
+        after = connection.execute(
+            "SELECT session_version FROM users WHERE id = ?",
+            (target_id,),
+        ).fetchone()["session_version"]
+        event = connection.execute(
+            """
+            SELECT user_id, action, resource_type, resource_id, details
+            FROM audit_logs
+            WHERE action = 'user_role_changed'
+              AND resource_id = ?
+            """,
+            (target_id,),
+        ).fetchone()
+
+    assert after == before + 1
+    assert event is not None
+    assert event["user_id"] == test_users["super_admin"]
+    assert event["resource_type"] == "user"
+
+
+def test_status_change_revokes_sessions_and_records_audit_event(
+    test_database,
+    test_users,
+):
+    target_id = test_users["user"]
+    with database_connection() as connection:
+        before = connection.execute(
+            "SELECT session_version FROM users WHERE id = ?",
+            (target_id,),
+        ).fetchone()["session_version"]
+
+    set_user_active_status(
+        actor_role="super_admin",
+        actor_user_id=test_users["super_admin"],
+        target_user_id=target_id,
+        is_active=False,
+    )
+
+    with database_connection() as connection:
+        after = connection.execute(
+            "SELECT session_version FROM users WHERE id = ?",
+            (target_id,),
+        ).fetchone()["session_version"]
+        event = connection.execute(
+            """
+            SELECT user_id, action, resource_type, resource_id
+            FROM audit_logs
+            WHERE action = 'user_deactivated'
+              AND resource_id = ?
+            """,
+            (target_id,),
+        ).fetchone()
+
+    assert after == before + 1
+    assert event is not None
+    assert event["user_id"] == test_users["super_admin"]
+    assert event["resource_type"] == "user"
+
+
+def test_super_admin_cannot_deactivate_their_own_account(
+    test_database,
+    test_users,
+):
+    with pytest.raises(ValueError):
+        set_user_active_status(
+            actor_role="super_admin",
+            actor_user_id=test_users["super_admin"],
+            target_user_id=test_users["super_admin"],
+            is_active=False,
+        )
