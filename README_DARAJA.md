@@ -19,6 +19,7 @@ actual credentials):
   `/api/v1/payments/mpesa/callback`
 - `DARAJA_INITIATOR_NAME`: Safaricom M-Pesa API initiator username with Transaction Status Query permission
 - `DARAJA_SECURITY_CREDENTIAL`: Safaricom RSA-encrypted initiator credential for the active environment
+  Generate it using the Safaricom public certificate for the active environment and RSA PKCS#1 v1.5; store only the encrypted value as a deployment secret. Never commit the initiator password or certificate-derived credential.
 - `DARAJA_TRANSACTION_STATUS_RESULT_URL`: public HTTPS URL ending in
   `/api/v1/payments/mpesa/transaction-status/result`
 - `DARAJA_TRANSACTION_STATUS_TIMEOUT_URL`: public HTTPS URL ending in
@@ -61,7 +62,8 @@ ReceiptNo, whole-shilling Amount, and `TransactionStatus=Completed` as the
 payment attempt. TimanStat then rechecks the STK status and uses the existing
 idempotent billing settlement path. Failed/cancelled STK results are queried
 against Safaricom before being recorded. Transaction-status timeouts do not
-settle a payment; they remain pending for operational review.
+settle a payment; they remain pending for operational review. Automated retries
+and an administrative reconciliation queue are not yet implemented.
 
 The Transaction Status result callback is also an unsigned callback. Its
 unpredictable request correlation and independently returned transaction
