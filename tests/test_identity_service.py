@@ -1,5 +1,8 @@
 """Tests for TimanStat individual registration and authentication."""
 
+from urllib.parse import parse_qs, urlsplit
+from types import SimpleNamespace
+
 import pytest
 
 from timan_intelligence.database.initialise import initialise_database
@@ -8,6 +11,10 @@ from timan_intelligence.identity.email_verification import (
     create_email_verification_token,
     verify_email_token,
 )
+from timan_intelligence.identity.email_notifications import (
+    send_email_verification,
+)
+from timan_intelligence.security import auth
 from timan_intelligence.identity.service import (
     PASSWORD_CHANGE_RATE_LIMITER,
     register_user,
@@ -133,6 +140,67 @@ def test_verified_user_can_login_with_email(test_database):
 
     assert user is not None
     assert user["email"] == "testuser@example.com"
+
+
+def test_new_user_can_verify_email_and_sign_in_to_a_real_session(
+    test_database,
+    monkeypatch,
+):
+    """Exercise registration, verification and session creation end to end."""
+
+    user_id = register_test_user(
+        username="completeflow",
+        email="completeflow@example.com",
+        full_name="Complete Flow User",
+    )
+
+    session_state = {}
+    monkeypatch.setattr(
+        auth,
+        "st",
+        SimpleNamespace(session_state=session_state),
+    )
+
+    # An unverified account must be denied before its verification link is used.
+    assert auth.authenticate_user(
+        "completeflow@example.com",
+        "SecureTestPassword123!",
+    ) is False
+    assert session_state.get("authenticated") is not True
+
+    class RecordingSender:
+        def __init__(self):
+            self.sent_messages = []
+
+        def send(self, message):
+            self.sent_messages.append(message)
+
+    sender = RecordingSender()
+    send_email_verification(
+        user_id=user_id,
+        base_url="https://timanstat.example.com",
+        sender=sender,
+    )
+
+    verification_url = next(
+        line.strip()
+        for line in sender.sent_messages[0].body.splitlines()
+        if "verify_email=" in line
+    )
+    token = parse_qs(urlsplit(verification_url).query)["verify_email"][0]
+
+    assert verify_email_token(token) is True
+
+    # The same credentials must now create a database-versioned session.
+    assert auth.authenticate_user(
+        "completeflow@example.com",
+        "SecureTestPassword123!",
+    ) is True
+    assert auth.is_authenticated() is True
+    assert session_state["authenticated"] is True
+    assert session_state["user_id"] == user_id
+    assert session_state["username"] == "completeflow"
+    assert session_state["role"] == "user"
 
 
 def test_login_rejects_incorrect_password(test_database):
