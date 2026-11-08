@@ -42,6 +42,11 @@ class DarajaAdapter:
         mode = self.environ.get("DARAJA_ENVIRONMENT", "sandbox").strip().lower()
         if mode not in {"sandbox", "production"}:
             raise DarajaError("DARAJA_ENVIRONMENT must be sandbox or production.")
+        if mode == "production":
+            raise DarajaError(
+                "Production M-Pesa payments are disabled until independent Safaricom "
+                "transaction-status reconciliation verifies the amount and receipt."
+            )
         prefix = "https://sandbox.safaricom.co.ke" if mode == "sandbox" else "https://api.safaricom.co.ke"
         values = {
             "consumer_key": self.environ.get("DARAJA_CONSUMER_KEY", "").strip(),
