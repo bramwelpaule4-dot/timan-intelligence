@@ -722,3 +722,39 @@ def test_login_uses_edited_identifier_after_password_step(
         "corrected@example.com"
     )
     assert len(fake_streamlit.errors) == 1
+
+
+def test_open_password_recovery_prefills_login_email(monkeypatch):
+    """Recovery reuses an email already entered during sign-in."""
+
+    from timan_intelligence.security import auth
+
+    fake = FakeStreamlit()
+    fake.session_state[auth.LOGIN_IDENTIFIER_KEY] = "person@example.com"
+    monkeypatch.setattr(auth_ui, "st", fake)
+
+    auth_ui._open_password_recovery()
+
+    assert fake.session_state[auth_ui.PASSWORD_RESET_EMAIL_PREFILL_KEY] == (
+        "person@example.com"
+    )
+    assert fake.session_state[auth_ui.AUTHENTICATION_VIEW_KEY] == (
+        "password_recovery"
+    )
+
+
+def test_open_password_recovery_does_not_prefill_username(monkeypatch):
+    """A username is not copied into a field that requires an email."""
+
+    from timan_intelligence.security import auth
+
+    fake = FakeStreamlit()
+    fake.session_state[auth.LOGIN_IDENTIFIER_KEY] = "analyst"
+    fake.session_state[auth_ui.PASSWORD_RESET_EMAIL_PREFILL_KEY] = (
+        "old@example.com"
+    )
+    monkeypatch.setattr(auth_ui, "st", fake)
+
+    auth_ui._open_password_recovery()
+
+    assert auth_ui.PASSWORD_RESET_EMAIL_PREFILL_KEY not in fake.session_state
