@@ -9,6 +9,7 @@ import hashlib
 import json
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 
 from timan_intelligence.billing.records import _p
 from timan_intelligence.database.connection import database_connection
@@ -102,9 +103,13 @@ def verify_result(raw_body: bytes):
     receipt = values.get("ReceiptNo")
     status = values.get("TransactionStatus")
     try:
-        amount_minor = int(float(values.get("Amount")) * 100)
-    except (TypeError, ValueError, OverflowError) as exc:
-        raise ReconciliationError("Safaricom result has no valid transaction amount.") from exc
+        amount = Decimal(str(values.get("Amount")))
+        minor = amount * 100
+        if not amount.is_finite() or minor != minor.to_integral_value():
+            raise InvalidOperation
+        amount_minor = int(minor)
+    except (InvalidOperation, TypeError, ValueError, OverflowError) as exc:
+        raise ReconciliationError("Safaricom result has no valid whole-shilling amount.") from exc
     if (
         not isinstance(receipt, str)
         or receipt != attempt["candidate_receipt"]
