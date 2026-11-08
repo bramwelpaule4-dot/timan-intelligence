@@ -13,6 +13,12 @@ from timan_intelligence.billing.records import (
     record_payment_transaction,
 )
 from timan_intelligence.billing.settlement import finalize_payment_transaction
+from timan_intelligence.billing.upgrades import create_upgrade_invoice
+from timan_intelligence.entitlements.subscriptions import (
+    get_effective_plan_code,
+    request_plan_change,
+    review_plan_change_request,
+)
 from timan_intelligence.database.connection import database_connection
 from timan_intelligence.database.initialise import initialise_database
 
@@ -192,3 +198,93 @@ def test_owner_scoped_invoice_listing(billing_database):
     )
     assert [row["id"] for row in list_invoices(user_id="bill-user")] == [personal]
     assert [row["id"] for row in list_invoices(organisation_id="bill-org")] == [organisation]
+
+
+def _approved_upgrade_request():
+    with database_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO users (id, username, email, full_name, password_hash, role)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            ("bill-admin", "billadmin", "admin@example.com", "Billing Admin", "hash", "admin"),
+        )
+    request_id = request_plan_change(
+        requested_by="bill-user",
+        user_id="bill-user",
+        requested_plan_code="professional",
+    )
+    assert review_plan_change_request(
+        request_id,
+        reviewer_id="bill-admin",
+        decision="approve",
+        notes="Approved for upgrade payment.",
+    ) == "approved_pending_payment"
+    return request_id
+
+
+def test_upgrade_entitlement_changes_only_after_full_payment(billing_database):
+    request_id = _approved_upgrade_request()
+    invoice_id = create_upgrade_invoice(
+        request_id,
+        amount_minor=15000,
+        currency="KES",
+        period_start="2026-11-08T00:00:00Z",
+        period_end="2026-12-08T00:00:00Z",
+    )
+    assert get_effective_plan_code(user_id="bill-user") == "free"
+    invoice = get_invoice(invoice_id)
+    assert invoice["subscription_change_request_id"] == request_id
+    assert invoice["status"] == "open"
+
+    partial = record_payment_transaction(
+        invoice_id,
+        amount_minor=5000,
+        currency="KES",
+        provider_code="manual",
+        status="pending",
+        idempotency_key="upgrade-partial-0001",
+    )
+    finalize_payment_transaction(partial, status="succeeded")
+    assert get_effective_plan_code(user_id="bill-user") == "free"
+
+    balance = get_invoice(invoice_id)
+    remaining = int(balance["total_minor"]) - int(balance["amount_paid_minor"])
+    final = record_payment_transaction(
+        invoice_id,
+        amount_minor=remaining,
+        currency="KES",
+        provider_code="manual",
+        status="pending",
+        idempotency_key="upgrade-final-0001",
+    )
+    finalize_payment_transaction(final, status="succeeded")
+    assert get_effective_plan_code(user_id="bill-user") == "professional"
+    assert get_invoice(invoice_id)["status"] == "paid"
+    with database_connection() as connection:
+        request = connection.execute(
+            "SELECT status FROM subscription_change_requests WHERE id = ?",
+            (request_id,),
+        ).fetchone()
+        assert request["status"] == "completed"
+        events = connection.execute(
+            "SELECT COUNT(*) AS n FROM billing_events WHERE invoice_id = ? AND event_type = 'subscription.upgrade_activated'",
+            (invoice_id,),
+        ).fetchone()
+        assert events["n"] == 1
+
+
+def test_upgrade_invoice_requires_approved_request_and_explicit_period(billing_database):
+    request_id = request_plan_change(
+        requested_by="bill-user",
+        user_id="bill-user",
+        requested_plan_code="professional",
+    )
+    with pytest.raises(BillingError, match="approved upgrade"):
+        create_upgrade_invoice(
+            request_id,
+            amount_minor=10000,
+            currency="KES",
+            period_start="2026-11-08T00:00:00Z",
+            period_end="2026-12-08T00:00:00Z",
+        )
