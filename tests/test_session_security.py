@@ -7,6 +7,7 @@ from timan_intelligence.security.session import (
     SESSION_ABSOLUTE_TIMEOUT_SECONDS,
     SESSION_AUTHENTICATION_KEYS,
     SESSION_IDLE_TIMEOUT_SECONDS,
+    SESSION_EXPIRED_KEY,
     SessionManager,
 )
 
@@ -168,6 +169,7 @@ def test_session_expires_after_idle_timeout(
 
     assert manager.is_valid(session_state) is False
     assert_session_cleared(session_state)
+    assert session_state[SESSION_EXPIRED_KEY] == "idle"
 
 
 def test_session_remains_valid_before_idle_timeout(
@@ -214,6 +216,7 @@ def test_session_expires_after_absolute_timeout_despite_activity(
 
     assert manager.is_valid(session_state) is False
     assert_session_cleared(session_state)
+    assert session_state[SESSION_EXPIRED_KEY] == "absolute"
 
 
 def test_expired_session_is_cleared(
