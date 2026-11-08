@@ -13,12 +13,16 @@ stored in this table. The HMAC key is configured separately from the database.
 | TOTP enrolment confirmation | 5 failed attempts | 15 minutes |
 | TOTP verification | 5 failed attempts | 15 minutes |
 | TOTP recovery-code verification | 5 failed attempts | 15 minutes |
+| Sensitive security-change password confirmation | 5 failed attempts | 15 minutes |
 | Email-verification resend | 1 request | 60 seconds |
 | Password-reset request | 1 request | 60 seconds |
 
 Successful password or second-factor authentication clears the matching
-failure history. TOTP operations use separate keys, so a failure in one
-operation does not consume another operation's allowance.
+failure history. TOTP verification and enrolment use separate keys, so a
+failure in one operation does not consume another operation's allowance.
+Password re-authentication for disabling TOTP and regenerating recovery codes
+uses one shared account-level key, preventing attempts from being split across
+those two sensitive operations.
 
 Email request throttles are consumed before account lookup. This limits
 repeated requests while preserving generic responses that do not reveal
@@ -47,7 +51,8 @@ rate-limit namespace; existing lockout history will not carry over.
 For multiple application workers or replicas, configure them to use the
 same PostgreSQL database through `DATABASE_URL`. PostgreSQL's atomic upsert
 operations provide shared rate-limit state across workers for password
-login, email verification, password reset, and TOTP.
+login, email verification, password reset, TOTP, and sensitive security-change
+password confirmations.
 
 SQLite is suitable for local development and automated tests, but it is not
 a distributed coordination service across separate machines or containers.
