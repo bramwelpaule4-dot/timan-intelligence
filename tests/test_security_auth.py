@@ -676,6 +676,9 @@ def test_logout_clears_full_and_pending_authentication(mock_session):
             "pending_session_version": 0,
             "pending_authenticated_at": time.monotonic(),
             "pending_expires_at": time.monotonic() + 300,
+            auth.LOGIN_IDENTIFIER_KEY: "private@example.com",
+            auth.LOGIN_STEP_KEY: "password",
+            "timanstat_show_login_password": True,
             "unrelated_setting": "preserve",
         }
     )
@@ -697,6 +700,9 @@ def test_logout_clears_full_and_pending_authentication(mock_session):
         "pending_session_version",
         "pending_authenticated_at",
         "pending_expires_at",
+        auth.LOGIN_IDENTIFIER_KEY,
+        auth.LOGIN_STEP_KEY,
+        "timanstat_show_login_password",
     ):
         assert key not in mock_session
 
