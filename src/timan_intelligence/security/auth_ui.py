@@ -166,14 +166,22 @@ def render_registration() -> None:
             max_chars=254,
         )
 
+        show_password = st.checkbox(
+            "Show passwords",
+            key="timanstat_show_registration_passwords",
+        )
+        password_input_type = "default" if show_password else "password"
+
         password = st.text_input(
             "Password",
-            type="password",
+            type=password_input_type,
+            autocomplete="new-password",
         )
 
         confirm_password = st.text_input(
             "Confirm password",
-            type="password",
+            type=password_input_type,
+            autocomplete="new-password",
         )
 
         submitted = st.form_submit_button(
