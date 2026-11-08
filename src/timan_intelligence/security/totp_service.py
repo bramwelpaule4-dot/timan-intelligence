@@ -24,10 +24,20 @@ from timan_intelligence.security.totp_encryption import (
 from timan_intelligence.security.totp_rate_limit import (
     totp_attempt_limiter,
 )
+from timan_intelligence.security.distributed_rate_limit import DatabaseRateLimiter
 
 
 # An unconfirmed authenticator enrolment remains valid for 15 minutes.
 PENDING_ENROLMENT_TTL_MINUTES = 15
+
+# Password re-authentication for sensitive security changes is shared by
+# authenticator disablement and recovery-code regeneration.
+SECURITY_REAUTHENTICATION_LIMITER = DatabaseRateLimiter(
+    scope="security-reauthentication",
+    max_failed_attempts=5,
+    window_seconds=900,
+    lockout_seconds=900,
+)
 
 
 class TOTPServiceError(Exception):
@@ -62,6 +72,36 @@ def _rate_limit_record_success(user_id: str, operation: str) -> None:
         raise TOTPServiceError(
             "The TOTP rate-limit service is unavailable."
         ) from exc
+
+
+def is_security_reauthentication_locked(user_id: str) -> bool:
+    """Return whether sensitive account-security re-authentication is locked."""
+    try:
+        return SECURITY_REAUTHENTICATION_LIMITER.is_locked(user_id)
+    except Exception as exc:
+        raise TOTPServiceError(
+            "The account security rate-limit service is unavailable."
+        ) from exc
+
+
+def _record_security_reauthentication_failure(user_id: str) -> None:
+    """Record an incorrect password used for a sensitive security change."""
+    try:
+        SECURITY_REAUTHENTICATION_LIMITER.record_failure(user_id)
+    except Exception as exc:
+        raise TOTPServiceError(
+            "The account security rate-limit service is unavailable."
+        ) from exc
+
+
+def _clear_security_reauthentication_failures(user_id: str) -> None:
+    """Clear password re-authentication failures after a successful change."""
+    try:
+        SECURITY_REAUTHENTICATION_LIMITER.record_success(user_id)
+    except Exception as exc:
+        # A committed security change must not be reported as failed solely
+        # because stale rate-limit history could not be cleared.
+        pass
 
 
 def _placeholder() -> str:
@@ -521,6 +561,9 @@ def disable_totp_for_user(
     if not isinstance(code, str) or not code.strip():
         return False
 
+    if is_security_reauthentication_locked(user_id):
+        return False
+
     p = _placeholder()
 
     with database_connection() as connection:
@@ -538,6 +581,7 @@ def disable_totp_for_user(
             return False
 
         if not _verify_password(current_password, user["password_hash"]):
+            _record_security_reauthentication_failure(user_id)
             return False
 
     # This validates and consumes a fresh, non-replayed authenticator
@@ -565,4 +609,9 @@ def disable_totp_for_user(
             (user_id,),
         )
 
-        return updated.rowcount == 1
+        changed = updated.rowcount == 1
+
+    if changed:
+        _clear_security_reauthentication_failures(user_id)
+
+    return changed
