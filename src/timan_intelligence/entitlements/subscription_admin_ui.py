@@ -15,6 +15,8 @@ from timan_intelligence.entitlements.subscriptions import (
     get_subscription,
     get_subscription_history,
     change_subscription_status,
+    list_plan_change_requests,
+    review_plan_change_request,
 )
 
 
@@ -248,6 +250,93 @@ def render_subscription_administration(
                 st.rerun()
             except Exception as exc:
                 st.error(f"Subscription assignment failed: {exc}")
+
+    st.subheader("Plan-change requests")
+    try:
+        change_requests = list_plan_change_requests(
+            **owner_kwargs,
+            status="pending",
+            limit=100,
+        )
+    except Exception:
+        change_requests = []
+        st.error("Plan-change requests could not be loaded.")
+
+    if not change_requests:
+        st.caption("There are no pending plan-change requests for this owner.")
+    for request in change_requests:
+        requested_plan = PLAN_CATALOG[request["requested_plan_code"]].name
+        current_plan = PLAN_CATALOG[request["current_plan_code"]].name
+        st.write(
+            f"**{request['change_type'].title()}:** {current_plan} → {requested_plan}  
+"
+            f"**Requested by:** {request.get('requester_name') or request.get('requester_email')}  
+"
+            f"**Submitted:** {request.get('created_at')}  
+"
+            f"**Proposed effective date:** {request.get('effective_at') or 'Requires billing-period review'}"
+        )
+        with st.form(f"review_plan_change_{request['id']}"):
+            decision = st.radio(
+                "Decision",
+                ["approve", "reject"],
+                horizontal=True,
+                key=f"decision_{request['id']}",
+            )
+            decision_notes = st.text_input(
+                "Decision reason",
+                max_chars=500,
+                key=f"notes_{request['id']}",
+            )
+            review_confirmed = st.checkbox(
+                "I confirm this decision is authorised.",
+                key=f"confirm_{request['id']}",
+            )
+            review_submitted = st.form_submit_button("Save decision")
+        if review_submitted:
+            if not review_confirmed:
+                st.error("Confirm that this decision is authorised.")
+            elif not decision_notes.strip():
+                st.error("A decision reason is required.")
+            else:
+                try:
+                    new_status = review_plan_change_request(
+                        request["id"],
+                        reviewer_id=actor_user_id,
+                        decision=decision,
+                        notes=decision_notes.strip(),
+                    )
+                    record_audit_event(
+                        action="subscription.plan_change_reviewed",
+                        user_id=actor_user_id,
+                        organisation_id=(
+                            owner["id"] if scope == "Organisation" else None
+                        ),
+                        resource_type="subscription_change_request",
+                        resource_id=request["id"],
+                        details={
+                            "owner_scope": scope.lower(),
+                            "owner_id": owner["id"],
+                            "current_plan": request["current_plan_code"],
+                            "requested_plan": request["requested_plan_code"],
+                            "decision": decision,
+                            "resulting_status": new_status,
+                            "reason": decision_notes.strip(),
+                        },
+                    )
+                    st.success(
+                        "Request reviewed. "
+                        + (
+                            "Upgrade is awaiting confirmed payment."
+                            if new_status == "approved_pending_payment"
+                            else "Downgrade is recorded for billing-period processing."
+                            if new_status == "scheduled"
+                            else "Request rejected."
+                        )
+                    )
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Request review failed: {exc}")
 
     st.subheader("Subscription history")
     if history:

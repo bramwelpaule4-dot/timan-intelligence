@@ -421,3 +421,231 @@ def process_due_subscriptions(
                 counts[target_status] += 1
 
     return counts
+
+
+_PLAN_LEVELS = {"free": 0, "professional": 1, "enterprise": 2}
+_PLAN_CHANGE_STATUSES = frozenset(
+    {"pending", "approved_pending_payment", "scheduled", "rejected", "canceled"}
+)
+
+
+def request_plan_change(
+    *,
+    requested_by: str,
+    requested_plan_code: str,
+    user_id: str | None = None,
+    organisation_id: str | None = None,
+) -> str:
+    """Create a customer request without changing current entitlements.
+
+    Organisation requests require the requester to be an active member.
+    Paid upgrades remain pending payment after approval; downgrades are
+    scheduled for the current period end when that date is available.
+    """
+    owner_column, owner_id = _owner(user_id, organisation_id)
+    if not isinstance(requested_by, str) or not requested_by.strip():
+        raise SubscriptionError("A valid requesting user is required.")
+    actor_id = requested_by.strip()
+    try:
+        requested_plan = get_plan(requested_plan_code).code
+    except (TypeError, ValueError) as exc:
+        raise SubscriptionError("Unrecognised requested plan.") from exc
+
+    if owner_column == "user_id":
+        if owner_id != actor_id:
+            raise SubscriptionError("Users may only request changes to their own account.")
+        current_plan = get_effective_plan_code(user_id=actor_id)
+        current_subscription = get_subscription(user_id=actor_id)
+    else:
+        current_plan = get_effective_plan_code(
+            user_id=actor_id,
+            organisation_id=owner_id,
+        )
+        current_subscription = (
+            get_subscription(organisation_id=owner_id)
+            or get_subscription(user_id=actor_id)
+        )
+
+    if requested_plan == current_plan:
+        raise SubscriptionError("The requested plan is already in effect.")
+    change_type = (
+        "upgrade"
+        if _PLAN_LEVELS[requested_plan] > _PLAN_LEVELS[current_plan]
+        else "downgrade"
+    )
+    effective_at = (
+        current_subscription.get("current_period_end")
+        if current_subscription
+        else None
+    )
+    request_id = str(uuid.uuid4())
+    p = _placeholder()
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    try:
+        with database_connection() as connection:
+            actor = connection.execute(
+                f"SELECT id FROM users WHERE id = {p}",
+                (actor_id,),
+            ).fetchone()
+            if actor is None:
+                raise SubscriptionError("The requesting account does not exist.")
+            connection.execute(
+                f"""
+                INSERT INTO subscription_change_requests (
+                    id, {owner_column}, requested_by, current_plan_code,
+                    requested_plan_code, change_type, status, effective_at,
+                    created_at, updated_at
+                )
+                VALUES ({p}, {p}, {p}, {p}, {p}, {p}, 'pending', {p}, {p}, {p})
+                """,
+                (
+                    request_id, owner_id, actor_id, current_plan,
+                    requested_plan, change_type, effective_at, now, now,
+                ),
+            )
+    except SubscriptionError:
+        raise
+    except Exception as exc:
+        # The partial unique index also protects against concurrent requests.
+        raise SubscriptionError(
+            "A pending plan-change request already exists for this workspace, "
+            "or the request could not be saved."
+        ) from exc
+    return request_id
+
+
+def list_plan_change_requests(
+    *,
+    user_id: str | None = None,
+    organisation_id: str | None = None,
+    status: str | None = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    """List plan-change requests for one owner or across the platform."""
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 1000:
+        raise SubscriptionError("limit must be between 1 and 1000.")
+    if user_id is not None or organisation_id is not None:
+        owner_column, owner_id = _owner(user_id, organisation_id)
+    else:
+        owner_column, owner_id = None, None
+    canonical_status = None
+    if status is not None:
+        if not isinstance(status, str) or status.strip().lower() not in _PLAN_CHANGE_STATUSES:
+            raise SubscriptionError("Unrecognised plan-change request status.")
+        canonical_status = status.strip().lower()
+
+    p = _placeholder()
+    clauses, params = [], []
+    if owner_column:
+        clauses.append(f"requests.{owner_column} = {p}")
+        params.append(owner_id)
+    if canonical_status:
+        clauses.append(f"requests.status = {p}")
+        params.append(canonical_status)
+    where = "WHERE " + " AND ".join(clauses) if clauses else ""
+    params.append(limit)
+    with database_connection() as connection:
+        rows = connection.execute(
+            f"""
+            SELECT requests.*, users.email AS requester_email,
+                   users.full_name AS requester_name
+            FROM subscription_change_requests AS requests
+            JOIN users ON users.id = requests.requested_by
+            {where}
+            ORDER BY requests.created_at DESC, requests.id DESC
+            LIMIT {p}
+            """,
+            tuple(params),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def review_plan_change_request(
+    request_id: str,
+    *,
+    reviewer_id: str,
+    decision: str,
+    notes: str,
+) -> str:
+    """Approve or reject a request without bypassing payment or period rules."""
+    if not isinstance(request_id, str) or not request_id.strip():
+        raise SubscriptionError("A valid request ID is required.")
+    if not isinstance(reviewer_id, str) or not reviewer_id.strip():
+        raise SubscriptionError("A valid reviewer account is required.")
+    if not isinstance(notes, str) or not notes.strip() or len(notes.strip()) > 500:
+        raise SubscriptionError("Decision notes are required (maximum 500 characters).")
+    if decision not in {"approve", "reject"}:
+        raise SubscriptionError("Decision must be approve or reject.")
+
+    p = _placeholder()
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    with database_connection() as connection:
+        record = connection.execute(
+            f"SELECT * FROM subscription_change_requests WHERE id = {p}",
+            (request_id.strip(),),
+        ).fetchone()
+        if record is None:
+            raise SubscriptionError("The plan-change request was not found.")
+        record = dict(record)
+        if record["status"] != "pending":
+            raise SubscriptionError("Only pending requests can be reviewed.")
+        reviewer = connection.execute(
+            f"SELECT id, role FROM users WHERE id = {p} AND is_active = TRUE",
+            (reviewer_id.strip(),),
+        ).fetchone()
+        if reviewer is None or reviewer["role"] not in {"admin", "super_admin"}:
+            raise SubscriptionError("Platform administrator permission is required.")
+
+        if decision == "reject":
+            new_status = "rejected"
+        elif record["change_type"] == "upgrade":
+            new_status = "approved_pending_payment"
+        else:
+            new_status = "scheduled"
+
+        effective_at = record.get("effective_at")
+        if new_status == "scheduled" and not effective_at:
+            # A Free-to-paid transition is an upgrade, so a downgrade without
+            # a recorded paid period is not expected; require manual review.
+            new_status = "scheduled"
+
+        result = connection.execute(
+            f"""
+            UPDATE subscription_change_requests
+            SET status = {p}, decision_notes = {p}, reviewed_by = {p},
+                reviewed_at = {p}, updated_at = {p}
+            WHERE id = {p} AND status = 'pending'
+            """,
+            (
+                new_status, notes.strip(), reviewer_id.strip(),
+                now, now, request_id.strip(),
+            ),
+        )
+        if result.rowcount != 1:
+            raise SubscriptionError("The request changed while it was being reviewed.")
+    return new_status
+
+
+def cancel_plan_change_request(
+    request_id: str,
+    *,
+    requested_by: str,
+) -> bool:
+    """Allow only the original requester to withdraw a pending request."""
+    if not isinstance(request_id, str) or not request_id.strip():
+        raise SubscriptionError("A valid request ID is required.")
+    if not isinstance(requested_by, str) or not requested_by.strip():
+        raise SubscriptionError("A valid requesting user is required.")
+    p = _placeholder()
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    with database_connection() as connection:
+        result = connection.execute(
+            f"""
+            UPDATE subscription_change_requests
+            SET status = 'canceled', updated_at = {p}
+            WHERE id = {p} AND requested_by = {p} AND status = 'pending'
+            """,
+            (now, request_id.strip(), requested_by.strip()),
+        )
+    return result.rowcount == 1

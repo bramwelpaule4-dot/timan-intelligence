@@ -19,6 +19,7 @@ from timan_intelligence.database.migrations.versions import (
     v0008_rate_limit_timestamp_precision,
     v0009_subscriptions,
     v0010_entitlement_usage,
+    v0011_subscription_change_requests,
 )
 
 
@@ -81,6 +82,11 @@ MIGRATIONS = (
         version=v0010_entitlement_usage.VERSION,
         name=v0010_entitlement_usage.NAME,
         upgrade=v0010_entitlement_usage.upgrade,
+    ),
+    Migration(
+        version=v0011_subscription_change_requests.VERSION,
+        name=v0011_subscription_change_requests.NAME,
+        upgrade=v0011_subscription_change_requests.upgrade,
     ),
 )
 

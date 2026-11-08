@@ -15,6 +15,9 @@ from timan_intelligence.entitlements.service import (
 from timan_intelligence.entitlements.subscriptions import (
     get_subscription,
     get_subscription_history,
+    request_plan_change,
+    list_plan_change_requests,
+    cancel_plan_change_request,
 )
 
 
@@ -114,6 +117,75 @@ def render_subscription_page(
             "This workspace is currently using the Free plan. "
             "No paid subscription is recorded."
         )
+
+    st.subheader("Change your plan")
+    st.caption(
+        "Submit an upgrade or downgrade request for administrator review. "
+        "Approvals do not activate a paid plan until payment is confirmed."
+    )
+    available_plans = [
+        code for code in PLAN_CATALOG
+        if code != plan_code
+    ]
+    with st.form("customer_plan_change_form"):
+        requested_plan = st.selectbox(
+            "Requested plan",
+            options=available_plans,
+            format_func=lambda code: PLAN_CATALOG[code].name,
+        )
+        request_confirmed = st.checkbox(
+            "I understand this is a request and my current access will not change immediately."
+        )
+        request_submitted = st.form_submit_button("Submit plan-change request")
+    if request_submitted:
+        if not request_confirmed:
+            st.error("Confirm that you understand the plan-change process.")
+        else:
+            try:
+                request_plan_change(
+                    requested_by=user_id,
+                    requested_plan_code=requested_plan,
+                    user_id=user_id if not organisation_id else None,
+                    organisation_id=organisation_id,
+                )
+                st.success("Your plan-change request has been submitted for review.")
+                st.rerun()
+            except Exception as exc:
+                st.error(str(exc))
+
+    try:
+        change_requests = list_plan_change_requests(
+            user_id=user_id if not organisation_id else None,
+            organisation_id=organisation_id,
+            limit=50,
+        )
+    except Exception:
+        change_requests = []
+        st.warning("Plan-change requests could not be loaded.")
+    if change_requests:
+        st.subheader("Plan-change requests")
+        request_rows = [
+            {
+                "Requested plan": PLAN_CATALOG[item["requested_plan_code"]].name,
+                "Change": item["change_type"].title(),
+                "Status": item["status"].replace("_", " ").title(),
+                "Submitted": item.get("created_at"),
+                "Effective date": item.get("effective_at") or "To be determined",
+            }
+            for item in change_requests
+        ]
+        st.dataframe(pd.DataFrame(request_rows), hide_index=True, use_container_width=True)
+        for item in change_requests:
+            if item["status"] == "pending" and item["requested_by"] == user_id:
+                if st.button(
+                    "Withdraw pending request",
+                    key=f"withdraw_plan_change_{item['id']}",
+                ):
+                    if cancel_plan_change_request(item["id"], requested_by=user_id):
+                        st.success("The pending request was withdrawn.")
+                        st.rerun()
+                    else:
+                        st.error("The request could not be withdrawn.")
 
     st.subheader("Current plan allowances")
     allowance_rows = [

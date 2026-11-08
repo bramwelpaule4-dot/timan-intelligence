@@ -16,6 +16,10 @@ from timan_intelligence.entitlements.subscriptions import (
     get_subscription,
     get_subscription_history,
     process_due_subscriptions,
+    request_plan_change,
+    list_plan_change_requests,
+    review_plan_change_request,
+    cancel_plan_change_request,
 )
 
 
@@ -283,3 +287,136 @@ def test_lifecycle_processing_is_idempotent_and_leaves_future_periods_unchanged(
 def test_lifecycle_rejects_invalid_batch_size(subscription_database, batch_size):
     with pytest.raises(SubscriptionError):
         process_due_subscriptions(batch_size=batch_size)
+
+
+def test_customer_upgrade_request_does_not_change_entitlements(subscription_database):
+    request_id = request_plan_change(
+        requested_by="user-1",
+        requested_plan_code="professional",
+        user_id="user-1",
+    )
+    request = list_plan_change_requests(user_id="user-1")[0]
+    assert request["id"] == request_id
+    assert request["change_type"] == "upgrade"
+    assert request["status"] == "pending"
+    assert get_effective_plan_code(user_id="user-1") == "free"
+
+
+def test_only_one_pending_plan_change_per_owner(subscription_database):
+    request_plan_change(
+        requested_by="user-1",
+        requested_plan_code="professional",
+        user_id="user-1",
+    )
+    with pytest.raises(SubscriptionError, match="pending plan-change"):
+        request_plan_change(
+            requested_by="user-1",
+            requested_plan_code="enterprise",
+            user_id="user-1",
+        )
+
+
+def test_approved_upgrade_waits_for_payment_and_preserves_free_access(
+    subscription_database,
+):
+    request_id = request_plan_change(
+        requested_by="user-1",
+        requested_plan_code="professional",
+        user_id="user-1",
+    )
+    with database_connection() as connection:
+        connection.execute(
+            """
+            UPDATE users SET role = 'admin' WHERE id = ?
+            """,
+            ("user-1",),
+        )
+    status = review_plan_change_request(
+        request_id,
+        reviewer_id="user-1",
+        decision="approve",
+        notes="Approved subject to successful payment.",
+    )
+    assert status == "approved_pending_payment"
+    assert get_effective_plan_code(user_id="user-1") == "free"
+    assert list_plan_change_requests(user_id="user-1")[0]["status"] == status
+
+
+def test_approved_downgrade_is_scheduled_at_current_period_end(
+    subscription_database,
+):
+    now = datetime.now(timezone.utc)
+    period_end = (now + timedelta(days=10)).replace(microsecond=0)
+    assign_subscription(
+        user_id="user-1",
+        plan_code="professional",
+        status="active",
+        current_period_start=(now - timedelta(days=20)).isoformat(),
+        current_period_end=period_end.isoformat(),
+    )
+    request_id = request_plan_change(
+        requested_by="user-1",
+        requested_plan_code="free",
+        user_id="user-1",
+    )
+    with database_connection() as connection:
+        connection.execute(
+            "UPDATE users SET role = 'admin' WHERE id = ?",
+            ("user-1",),
+        )
+    status = review_plan_change_request(
+        request_id,
+        reviewer_id="user-1",
+        decision="approve",
+        notes="Downgrade approved for period end.",
+    )
+    assert status == "scheduled"
+    request = list_plan_change_requests(user_id="user-1")[0]
+    assert request["effective_at"] == period_end.isoformat()
+    assert get_effective_plan_code(user_id="user-1") == "professional"
+
+
+def test_rejected_and_withdrawn_requests_are_retained(subscription_database):
+    rejected_id = request_plan_change(
+        requested_by="user-1",
+        requested_plan_code="professional",
+        user_id="user-1",
+    )
+    with database_connection() as connection:
+        connection.execute(
+            "UPDATE users SET role = 'admin' WHERE id = ?",
+            ("user-1",),
+        )
+    assert review_plan_change_request(
+        rejected_id,
+        reviewer_id="user-1",
+        decision="reject",
+        notes="Request requires further information.",
+    ) == "rejected"
+    next_id = request_plan_change(
+        requested_by="user-1",
+        requested_plan_code="enterprise",
+        user_id="user-1",
+    )
+    assert cancel_plan_change_request(next_id, requested_by="user-1") is True
+    assert cancel_plan_change_request(next_id, requested_by="user-1") is False
+    assert {row["status"] for row in list_plan_change_requests(user_id="user-1")} == {
+        "rejected", "canceled"
+    }
+
+
+def test_organisation_plan_change_requires_active_membership(subscription_database):
+    with pytest.raises(SubscriptionError, match="active organisation membership"):
+        request_plan_change(
+            requested_by="user-1",
+            requested_plan_code="professional",
+            organisation_id="org-1",
+        )
+    request_id = request_plan_change(
+        requested_by="user-1",
+        requested_plan_code="professional",
+        organisation_id="org-1",
+    )
+    request = list_plan_change_requests(organisation_id="org-1")[0]
+    assert request["id"] == request_id
+    assert request["change_type"] == "upgrade"
