@@ -8,6 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from timan_intelligence.entitlements.plans import PLAN_CATALOG
+from timan_intelligence.billing.records import BillingError, get_invoice, list_invoices
 from timan_intelligence.entitlements.service import (
     get_effective_entitlements,
     get_monthly_usage,
@@ -280,7 +281,141 @@ def render_subscription_page(
     else:
         st.caption("No subscription history is recorded for this account or workspace.")
 
+    st.subheader("Invoices & payment history")
     st.caption(
-        "Plan upgrades, renewals and payments are not yet processed in the application. "
-        "Contact the TimanStat platform administrator to discuss a plan change."
+        "Review invoices issued to this account or workspace, outstanding balances, "
+        "and recorded payment attempts. Payment confirmation is handled by trusted "
+        "billing services; this page cannot mark an invoice as paid."
+    )
+    try:
+        invoices = list_invoices(
+            user_id=user_id if not organisation_id else None,
+            organisation_id=organisation_id,
+            limit=100,
+        )
+    except BillingError:
+        invoices = []
+        st.error("Billing records could not be loaded for this workspace.")
+    except Exception:
+        invoices = []
+        st.error("Billing information is temporarily unavailable.")
+
+    if invoices:
+        outstanding_minor = sum(
+            max(0, int(item["total_minor"]) - int(item["amount_paid_minor"]))
+            for item in invoices
+            if item["status"] in {"open", "overdue"}
+        )
+        unpaid_count = sum(
+            item["status"] in {"open", "overdue"} for item in invoices
+        )
+        invoice_metrics = st.columns(3)
+        invoice_metrics[0].metric("Invoices", f"{len(invoices):,}")
+        invoice_metrics[1].metric("Outstanding invoices", f"{unpaid_count:,}")
+        invoice_metrics[2].metric(
+            "Outstanding balance",
+            f"{outstanding_minor / 100:,.2f} (minor-unit conversion)",
+        )
+        invoice_rows = [
+            {
+                "Invoice": item["invoice_number"],
+                "Issued": _format_timestamp(item.get("issued_at")),
+                "Due": _format_timestamp(item.get("due_at")),
+                "Currency": item["currency"],
+                "Total (minor units)": int(item["total_minor"]),
+                "Paid (minor units)": int(item["amount_paid_minor"]),
+                "Balance (minor units)": max(
+                    0, int(item["total_minor"]) - int(item["amount_paid_minor"])
+                ),
+                "Status": str(item["status"]).replace("_", " ").title(),
+            }
+            for item in invoices
+        ]
+        st.dataframe(
+            pd.DataFrame(invoice_rows),
+            hide_index=True,
+            use_container_width=True,
+        )
+
+        st.caption(
+            "Amounts are shown in the invoice currency's minor units "
+            "(for example, cents). No currency conversion is performed."
+        )
+        for summary in invoices:
+            with st.expander(
+                f"{summary['invoice_number']} · {summary['currency']} "
+                f"{int(summary['total_minor']):,} · {str(summary['status']).title()}"
+            ):
+                try:
+                    detail = get_invoice(summary["id"])
+                except Exception:
+                    detail = None
+                if detail is None:
+                    st.warning("Invoice details are temporarily unavailable.")
+                    continue
+
+                st.markdown("**Invoice items**")
+                item_rows = [
+                    {
+                        "Description": line["description"],
+                        "Quantity": int(line["quantity"]),
+                        "Unit amount (minor units)": int(line["unit_amount_minor"]),
+                        "Line total (minor units)": int(line["line_total_minor"]),
+                        "Service period start": _format_timestamp(line.get("period_start")),
+                        "Service period end": _format_timestamp(line.get("period_end")),
+                    }
+                    for line in detail["items"]
+                ]
+                st.dataframe(
+                    pd.DataFrame(item_rows),
+                    hide_index=True,
+                    use_container_width=True,
+                )
+
+                st.markdown("**Payment attempts**")
+                if detail["payments"]:
+                    payment_rows = [
+                        {
+                            "Date": _format_timestamp(payment.get("created_at")),
+                            "Provider": payment["provider_code"],
+                            "Method": payment.get("payment_method") or "Not specified",
+                            "Amount (minor units)": int(payment["amount_minor"]),
+                            "Currency": payment["currency"],
+                            "Status": str(payment["status"]).title(),
+                            "Reference": payment.get("provider_reference") or "Not available",
+                        }
+                        for payment in detail["payments"]
+                    ]
+                    st.dataframe(
+                        pd.DataFrame(payment_rows),
+                        hide_index=True,
+                        use_container_width=True,
+                    )
+                else:
+                    st.caption("No payment attempts have been recorded.")
+
+                st.markdown("**Billing activity**")
+                if detail["events"]:
+                    event_rows = [
+                        {
+                            "Date": _format_timestamp(event.get("created_at")),
+                            "Event": str(event["event_type"]).replace(".", " ").replace("_", " ").title(),
+                            "Previous status": event.get("previous_status") or "—",
+                            "New status": event.get("new_status") or "—",
+                        }
+                        for event in detail["events"]
+                    ]
+                    st.dataframe(
+                        pd.DataFrame(event_rows),
+                        hide_index=True,
+                        use_container_width=True,
+                    )
+                else:
+                    st.caption("No additional billing activity is recorded.")
+    else:
+        st.info("No invoices or payment attempts are recorded for this account or workspace.")
+
+    st.caption(
+        "Plan upgrades are activated only after full payment is confirmed by a trusted "
+        "backend payment process. This page is read-only and does not accept or verify payments."
     )
