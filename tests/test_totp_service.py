@@ -17,6 +17,7 @@ from timan_intelligence.security.totp_service import (
     SECURITY_REAUTHENTICATION_LIMITER,
     TOTPServiceError,
     disable_totp_for_user,
+    get_totp_status,
     begin_totp_enrolment,
     confirm_totp_enrolment,
     verify_totp_for_user,
