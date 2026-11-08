@@ -34,6 +34,12 @@ class FakeStreamlit:
         self.captions = []
         self.subheaders = []
         self.writes = []
+        self.checkbox_value = False
+        self.checkboxes = []
+
+    def checkbox(self, label, *args, **kwargs):
+        self.checkboxes.append((label, kwargs.copy()))
+        return self.checkbox_value
 
     def subheader(self, value):
         self.subheaders.append(value)
