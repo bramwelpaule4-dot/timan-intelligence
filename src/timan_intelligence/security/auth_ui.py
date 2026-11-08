@@ -503,6 +503,26 @@ def _open_email_verification() -> None:
     _set_authentication_view("email_verification")
 
 
+def _back_to_sign_in_from_password_recovery() -> None:
+    """Return to sign-in and remove any reset token from the browser URL."""
+
+    query_params = getattr(st, "query_params", None)
+
+    if query_params is not None:
+        try:
+            if "reset_password" in query_params:
+                del query_params["reset_password"]
+        except Exception as exc:
+            # Never log the reset token or the complete browser URL.
+            logger.warning(
+                "Could not clear password-reset query parameter. "
+                "error_type=%s",
+                type(exc).__name__,
+            )
+
+    _set_authentication_view("sign_in")
+
+
 def render_authentication() -> None:
     """Render a focused, ChatGPT-inspired sign-in and registration interface."""
 
@@ -583,8 +603,7 @@ def render_authentication() -> None:
             st.button(
                 "Back to sign in",
                 key="timanstat_back_from_password_recovery",
-                on_click=_set_authentication_view,
-                args=("sign_in",),
+                on_click=_back_to_sign_in_from_password_recovery,
             )
 
         elif current_view == "email_verification":
