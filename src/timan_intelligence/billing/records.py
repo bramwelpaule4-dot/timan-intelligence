@@ -191,6 +191,12 @@ def create_invoice(
                 raise BillingError("Invoice must reference an approved upgrade request for the same owner.")
             if not any(item[1] == request["requested_plan_code"] for item in normalized):
                 raise BillingError("Invoice items must include the requested subscription plan.")
+            existing_upgrade_invoice = connection.execute(
+                f"SELECT id FROM billing_invoices WHERE subscription_change_request_id = {p} LIMIT 1",
+                (subscription_change_request_id.strip(),),
+            ).fetchone()
+            if existing_upgrade_invoice is not None:
+                raise BillingError("This subscription upgrade request already has an invoice.")
         connection.execute(
             f"""
             INSERT INTO billing_invoices (
