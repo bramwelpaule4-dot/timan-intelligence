@@ -5,6 +5,12 @@ import json
 import pytest
 
 from timan_intelligence.billing.daraja import DarajaAdapter, DarajaError
+from timan_intelligence.billing.mpesa_reconciliation import (
+    ReconciliationError, attach_originator, create_attempt, verify_result,
+)
+from timan_intelligence.billing.records import create_invoice, issue_invoice, record_payment_transaction
+from timan_intelligence.database.connection import database_connection
+from timan_intelligence.database.initialise import initialise_database
 
 
 def test_normalize_kenyan_phone_numbers():
@@ -54,3 +60,79 @@ def test_callback_rejects_malformed_json_without_network_call():
     adapter = DarajaAdapter(environ={})
     with pytest.raises(DarajaError, match="Malformed"):
         adapter.verify_webhook(b"not-json", {})
+
+
+
+@pytest.fixture
+def reconciliation_database(tmp_path, monkeypatch):
+    path = tmp_path / "mpesa-reconciliation.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{path.as_posix()}")
+    initialise_database()
+    with database_connection() as connection:
+        connection.execute(
+            "INSERT INTO users (id, username, email, full_name, password_hash) VALUES (?, ?, ?, ?, ?)",
+            ("mpesa-user", "mpesauser", "mpesa@example.com", "M-Pesa User", "hash"),
+        )
+    invoice_id = create_invoice(
+        user_id="mpesa-user",
+        currency="KES",
+        items=[{"description": "Professional plan", "unit_amount_minor": 150000}],
+    )
+    issue_invoice(invoice_id)
+    payment_id = record_payment_transaction(
+        invoice_id, amount_minor=150000, currency="KES", provider_code="mpesa",
+        status="pending", idempotency_key="mpesa-reconcile-test-001",
+    )
+    create_attempt(payment_id, "ws_CO_test_001", "QHT7ABC123", 150000)
+    attach_originator("ws_CO_test_001", "1234-567890-1")
+    return payment_id
+
+
+def _transaction_status_result(*, amount=1500, receipt="QHT7ABC123", status="Completed"):
+    return {
+        "Result": {
+            "ResultType": 0,
+            "ResultCode": 0,
+            "ResultDesc": "The service request is processed successfully.",
+            "OriginatorConversationID": "1234-567890-1",
+            "ConversationID": "AG_20261108_123456",
+            "TransactionID": receipt,
+            "ResultParameters": {
+                "ResultParameter": [
+                    {"Key": "ReceiptNo", "Value": receipt},
+                    {"Key": "Amount", "Value": amount},
+                    {"Key": "TransactionStatus", "Value": status},
+                ]
+            },
+        }
+    }
+
+
+def test_transaction_status_reconciliation_requires_matching_receipt_amount_and_completed_status(reconciliation_database):
+    verified = verify_result(json.dumps(_transaction_status_result()).encode())
+    assert verified == {
+        "payment_transaction_id": reconciliation_database,
+        "checkout_request_id": "ws_CO_test_001",
+        "receipt": "QHT7ABC123",
+        "amount_minor": 150000,
+    }
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        _transaction_status_result(amount=1499),
+        _transaction_status_result(receipt="OTHER12345"),
+        _transaction_status_result(status="Cancelled"),
+    ],
+)
+def test_transaction_status_mismatch_is_rejected(reconciliation_database, result):
+    with pytest.raises(ReconciliationError, match="does not match"):
+        verify_result(json.dumps(result).encode())
+
+
+def test_transaction_status_rejects_unknown_originator(reconciliation_database):
+    payload = _transaction_status_result()
+    payload["Result"]["OriginatorConversationID"] = "unknown-originator"
+    with pytest.raises(ReconciliationError, match="Unknown"):
+        verify_result(json.dumps(payload).encode())
