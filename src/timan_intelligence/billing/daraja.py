@@ -343,8 +343,14 @@ class DarajaAdapter:
         p = _p()
         with database_connection() as connection:
             payment = connection.execute(
-                f"SELECT id, amount_minor, currency FROM payment_transactions WHERE provider_code = 'mpesa' AND provider_reference = {p}",
-                (checkout_id,),
+                f"""SELECT DISTINCT p.id, p.amount_minor, p.currency
+                FROM payment_transactions AS p
+                LEFT JOIN mpesa_transaction_reconciliations AS r
+                  ON r.payment_transaction_id = p.id
+                 AND r.checkout_request_id = {p}
+                WHERE p.provider_code = 'mpesa'
+                  AND (p.provider_reference = {p} OR r.checkout_request_id = {p})""",
+                (checkout_id, checkout_id, checkout_id),
             ).fetchone()
         if payment is None:
             raise DarajaError("Unknown Daraja CheckoutRequestID.")
