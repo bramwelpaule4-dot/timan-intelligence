@@ -333,3 +333,91 @@ def get_effective_plan_code(
                 "Stored individual subscription plan is invalid."
             ) from exc
     return "free"
+
+
+def process_due_subscriptions(
+    *,
+    as_of: datetime | str | None = None,
+    batch_size: int = 500,
+) -> dict[str, int]:
+    """Finalize due trials and subscriptions without extending paid periods.
+
+    Trial periods become expired. Paid subscriptions become canceled when
+    cancellation was scheduled for period end; otherwise they become expired.
+    A renewal must only be applied after a payment provider confirms payment.
+    This operation is idempotent and safe to run on every application startup.
+    """
+    if isinstance(batch_size, bool) or not isinstance(batch_size, int):
+        raise SubscriptionError("batch_size must be a positive integer.")
+    if not 1 <= batch_size <= 5000:
+        raise SubscriptionError("batch_size must be between 1 and 5000.")
+
+    if as_of is None:
+        effective_now = datetime.now(timezone.utc)
+    elif isinstance(as_of, datetime):
+        effective_now = as_of
+        if effective_now.tzinfo is None:
+            effective_now = effective_now.replace(tzinfo=timezone.utc)
+        effective_now = effective_now.astimezone(timezone.utc)
+    elif isinstance(as_of, str):
+        effective_now = _utc_datetime(as_of)
+    else:
+        raise SubscriptionError("as_of must be an ISO timestamp or datetime.")
+
+    now_text = effective_now.isoformat(timespec="seconds")
+    p = _placeholder()
+    counts = {"canceled": 0, "expired": 0}
+
+    with database_connection() as connection:
+        rows = connection.execute(
+            f"""
+            SELECT id, status, current_period_end, cancel_at_period_end
+            FROM subscriptions
+            WHERE status IN ('trialing', 'active', 'past_due')
+              AND current_period_end IS NOT NULL
+            ORDER BY current_period_end, id
+            LIMIT {p}
+            """,
+            (batch_size,),
+        ).fetchall()
+
+        for row in rows:
+            record = dict(row)
+            try:
+                due = _utc_datetime(str(record["current_period_end"])) <= effective_now
+            except SubscriptionError:
+                # A malformed persisted period must not grant entitlement.
+                due = True
+            if not due:
+                continue
+
+            target_status = (
+                "canceled"
+                if bool(record.get("cancel_at_period_end"))
+                else "expired"
+            )
+            canceled_at = now_text if target_status == "canceled" else None
+            result = connection.execute(
+                f"""
+                UPDATE subscriptions
+                SET status = {p},
+                    canceled_at = CASE
+                        WHEN {p} = 'canceled' THEN {p}
+                        ELSE canceled_at
+                    END,
+                    updated_at = {p}
+                WHERE id = {p}
+                  AND status IN ('trialing', 'active', 'past_due')
+                """,
+                (
+                    target_status,
+                    target_status,
+                    canceled_at,
+                    now_text,
+                    record["id"],
+                ),
+            )
+            if result.rowcount == 1:
+                counts[target_status] += 1
+
+    return counts

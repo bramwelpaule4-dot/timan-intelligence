@@ -15,6 +15,7 @@ from timan_intelligence.entitlements.subscriptions import (
     get_effective_plan_code,
     get_subscription,
     get_subscription_history,
+    process_due_subscriptions,
 )
 
 
@@ -205,3 +206,80 @@ def test_subscription_owner_and_period_constraints_are_enforced(
             current_period_start="2026-12-01T00:00:00",
             current_period_end="2026-11-01T00:00:00",
         )
+
+
+
+def test_due_trial_is_expired_and_history_is_preserved(subscription_database):
+    now = datetime.now(timezone.utc)
+    trial_id = assign_subscription(
+        user_id="user-1",
+        plan_code="professional",
+        status="trialing",
+        current_period_start=(now - timedelta(days=8)).isoformat(),
+        current_period_end=(now - timedelta(days=1)).isoformat(),
+    )
+    assert process_due_subscriptions(as_of=now) == {"canceled": 0, "expired": 1}
+    history = get_subscription_history(user_id="user-1")
+    assert history[0]["id"] == trial_id
+    assert history[0]["status"] == "expired"
+    assert get_effective_plan_code(user_id="user-1") == "free"
+
+
+def test_due_paid_subscription_obeys_period_end_cancellation(subscription_database):
+    now = datetime.now(timezone.utc)
+    assign_subscription(
+        user_id="user-1",
+        plan_code="professional",
+        status="active",
+        current_period_start=(now - timedelta(days=31)).isoformat(),
+        current_period_end=(now - timedelta(seconds=1)).isoformat(),
+        cancel_at_period_end=True,
+    )
+    assert process_due_subscriptions(as_of=now) == {"canceled": 1, "expired": 0}
+    record = get_subscription_history(user_id="user-1")[0]
+    assert record["status"] == "canceled"
+    assert record["canceled_at"] is not None
+    assert record["cancel_at_period_end"] is True
+
+
+def test_due_paid_subscription_without_renewal_becomes_expired(subscription_database):
+    now = datetime.now(timezone.utc)
+    assign_subscription(
+        user_id="user-1",
+        plan_code="professional",
+        status="active",
+        current_period_start=(now - timedelta(days=31)).isoformat(),
+        current_period_end=(now - timedelta(seconds=1)).isoformat(),
+    )
+    assert process_due_subscriptions(as_of=now) == {"canceled": 0, "expired": 1}
+    record = get_subscription_history(user_id="user-1")[0]
+    assert record["status"] == "expired"
+    assert record["canceled_at"] is None
+
+
+def test_lifecycle_processing_is_idempotent_and_leaves_future_periods_unchanged(
+    subscription_database,
+):
+    now = datetime.now(timezone.utc)
+    due_id = assign_subscription(
+        user_id="user-1",
+        plan_code="professional",
+        current_period_end=(now - timedelta(seconds=1)).isoformat(),
+    )
+    future_id = assign_subscription(
+        organisation_id="org-1",
+        plan_code="enterprise",
+        current_period_end=(now + timedelta(days=5)).isoformat(),
+    )
+    assert process_due_subscriptions(as_of=now) == {"canceled": 0, "expired": 1}
+    assert process_due_subscriptions(as_of=now) == {"canceled": 0, "expired": 0}
+    due_record = get_subscription_history(user_id="user-1")[0]
+    assert due_record["id"] == due_id
+    assert due_record["status"] == "expired"
+    assert get_subscription(organisation_id="org-1")["id"] == future_id
+
+
+@pytest.mark.parametrize("batch_size", [0, -1, 5001, True, 1.5])
+def test_lifecycle_rejects_invalid_batch_size(subscription_database, batch_size):
+    with pytest.raises(SubscriptionError):
+        process_due_subscriptions(batch_size=batch_size)

@@ -25,6 +25,7 @@ from timan_intelligence.security.totp_management_ui import render_totp_managemen
 from timan_intelligence.organisations.service import list_user_organisations
 from timan_intelligence.entitlements.subscription_ui import render_subscription_page
 from timan_intelligence.entitlements.subscription_admin_ui import render_subscription_administration
+from timan_intelligence.entitlements.subscriptions import process_due_subscriptions
 from timan_intelligence.entitlements.service import (
     DatasetLimitExceeded,
     UsageLimitExceeded,
@@ -78,6 +79,7 @@ st.markdown(
 
 try:
     initialise_database()
+    process_due_subscriptions()
 except Exception:
     st.error(
         "TimanStat could not connect to its database. "
