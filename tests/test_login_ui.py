@@ -324,3 +324,22 @@ def test_mfa_code_field_supports_one_time_code_autofill(
         if options.get("max_chars") == 40
     )
     assert mfa_options["autocomplete"] == "one-time-code"
+
+def test_login_explains_expired_mfa_challenge_once(login_ui, monkeypatch):
+    """An expired second-factor challenge receives a clear recovery message."""
+
+    login_ui.session_state[auth.PENDING_AUTHENTICATION_EXPIRED_KEY] = True
+    login_ui.submitted = False
+
+    auth.render_login()
+
+    assert login_ui.infos == [
+        "Your verification session has expired. Please sign in again "
+        "to receive a new authenticator challenge."
+    ]
+    assert auth.PENDING_AUTHENTICATION_EXPIRED_KEY not in login_ui.session_state
+
+    login_ui.infos.clear()
+    auth.render_login()
+    assert login_ui.infos == []
+
