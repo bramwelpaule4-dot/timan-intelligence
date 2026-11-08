@@ -600,6 +600,12 @@ def render_login() -> None:
                     "or sign in again if the verification request has expired."
                 )
 
+        if mfa_locked and st.button(
+            "Check verification again",
+            key="timanstat_retry_mfa_lockout",
+        ):
+            st.rerun()
+
         if st.button("Cancel sign in", key="timanstat_cancel_mfa_sign_in"):
             logout()
             st.session_state.pop(LOGIN_IDENTIFIER_KEY, None)
@@ -714,6 +720,12 @@ def render_login() -> None:
                     "password, verify your email address if you have not already, "
                     "or try again later if sign-in attempts are temporarily limited."
                 )
+
+    if login_locked and st.button(
+        "Check sign-in again",
+        key="timanstat_retry_login_lockout",
+    ):
+        st.rerun()
 
     if st.button(
         "Use a different account",
