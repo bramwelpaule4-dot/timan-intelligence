@@ -9,6 +9,7 @@ import streamlit as st
 
 from timan_intelligence.entitlements.plans import PLAN_CATALOG
 from timan_intelligence.billing.records import BillingError, get_invoice, list_invoices
+from timan_intelligence.billing.daraja import DarajaError, initiate_mpesa_payment
 from timan_intelligence.billing.invoice_pdf import build_invoice_pdf
 from timan_intelligence.entitlements.service import (
     get_effective_entitlements,
@@ -370,6 +371,61 @@ def render_subscription_page(
                     )
                 except Exception:
                     st.warning("The invoice PDF could not be generated. Please try again later.")
+
+                # Kenyan M-Pesa checkout is available only for open KES invoices.
+                outstanding_minor = max(
+                    0, int(detail["total_minor"]) - int(detail["amount_paid_minor"])
+                )
+                if detail["status"] in {"open", "overdue"} and detail["currency"] == "KES" and outstanding_minor > 0:
+                    st.markdown("**Pay this invoice with M-Pesa**")
+                    st.caption(
+                        "Enter the Kenyan mobile number that should receive the "
+                        "STK Push prompt. The outstanding balance is requested in KES."
+                    )
+                    with st.form(f"mpesa_checkout_form_{detail['id']}"):
+                        mpesa_phone = st.text_input(
+                            "M-Pesa phone number",
+                            placeholder="0712345678 or 254712345678",
+                            key=f"mpesa_phone_{detail['id']}",
+                            max_chars=20,
+                        )
+                        mpesa_submitted = st.form_submit_button(
+                            f"Pay KES {outstanding_minor // 100:,} with M-Pesa",
+                            type="primary",
+                            use_container_width=True,
+                        )
+                    if mpesa_submitted:
+                        if not mpesa_phone.strip():
+                            st.error("Enter the phone number to receive the M-Pesa prompt.")
+                        else:
+                            try:
+                                with st.spinner("Sending the M-Pesa payment prompt..."):
+                                    checkout = initiate_mpesa_payment(
+                                        detail["id"],
+                                        mpesa_phone.strip(),
+                                        user_id=user_id if not organisation_id else None,
+                                        organisation_id=organisation_id,
+                                    )
+                                st.success(
+                                    "M-Pesa prompt accepted. Check the phone and enter "
+                                    "your M-Pesa PIN to authorise payment."
+                                )
+                                st.info(
+                                    "Payment status: Pending. The invoice will update "
+                                    "only after the payment is confirmed by the billing service."
+                                )
+                                st.caption(
+                                    f"Checkout reference: {checkout['checkout_request_id']}"
+                                )
+                            except DarajaError as exc:
+                                st.error(str(exc))
+                            except BillingError as exc:
+                                st.error(str(exc))
+                            except Exception:
+                                st.error(
+                                    "The M-Pesa request could not be completed. "
+                                    "Check the billing service configuration and try again."
+                                )
 
                 st.markdown("**Invoice items**")
                 item_rows = [
