@@ -21,7 +21,10 @@ from zoneinfo import ZoneInfo
 from timan_intelligence.billing.gateway import (
     PaymentNotification, get_gateway, process_webhook, register_gateway,
 )
-from timan_intelligence.billing.mpesa_reconciliation import (\n    ReconciliationError, attach_originator, create_attempt, mark_timeout, verify_result,\n)\nfrom timan_intelligence.billing.records import (
+from timan_intelligence.billing.mpesa_reconciliation import (
+    ReconciliationError, attach_originator, create_attempt, mark_timeout, verify_result,
+)
+from timan_intelligence.billing.records import (
     BillingError, _p, get_invoice, record_payment_transaction,
 )
 from timan_intelligence.database.connection import database_connection
@@ -193,7 +196,8 @@ class DarajaAdapter:
             if parsed.scheme != "https" or not parsed.netloc:
                 raise DarajaError("Transaction-status callback URLs must use public HTTPS.")
         if create_record:
-            create_attempt(payment["id"], checkout_id, receipt, amount_minor)\n        response = self._request(
+            create_attempt(payment["id"], checkout_id, receipt, amount_minor)
+        response = self._request(
             base + "/mpesa/transactionstatus/v1/query",
             method="POST",
             headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"},
@@ -290,7 +294,8 @@ class DarajaAdapter:
             raise DarajaError("Unable to create Safaricom reconciliation attempt.") from exc
 
     def handle_transaction_status_result(self, raw_body: bytes):
-        configure_daraja(self)\n        try:
+        configure_daraja(self)
+        try:
             verified = verify_result(raw_body)
         except ReconciliationError as exc:
             raise DarajaError(str(exc)) from exc
