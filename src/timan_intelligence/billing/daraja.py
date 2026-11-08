@@ -47,8 +47,8 @@ class DarajaAdapter:
             raise DarajaError("DARAJA_ENVIRONMENT must be sandbox or production.")
         if mode == "production":
             raise DarajaError(
-                "Production M-Pesa payments are disabled until independent Safaricom "
-                "transaction-status reconciliation verifies the amount and receipt."
+                "Production M-Pesa payments remain disabled pending sandbox end-to-end "
+                "validation, callback hardening and operational reconciliation controls."
             )
         prefix = "https://sandbox.safaricom.co.ke" if mode == "sandbox" else "https://api.safaricom.co.ke"
         values = {
