@@ -118,6 +118,7 @@ def render_password_reset_request() -> None:
         email = st.text_input(
             "Registered email address",
             max_chars=254,
+            autocomplete="email",
         )
 
         submitted = st.form_submit_button(
