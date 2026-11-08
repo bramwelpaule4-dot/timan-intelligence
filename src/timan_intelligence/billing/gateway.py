@@ -6,7 +6,6 @@ redirects are never accepted as proof of payment.
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 import uuid
 from dataclasses import dataclass
@@ -55,9 +54,7 @@ class PaymentGatewayAdapter(Protocol):
     def create_checkout(self, request: CheckoutRequest) -> CheckoutResponse:
         """Create a hosted checkout session using provider APIs."""
 
-    def verify_webhook(
-        self, raw_body: bytes, headers: Mapping[str, str]
-    ) -> PaymentNotification:
+    def verify_webhook(self, raw_body: bytes, headers: Mapping[str, str]) -> PaymentNotification:
         """Verify authenticity and return a normalized payment notification."""
 
 
@@ -68,9 +65,7 @@ def register_gateway(adapter: PaymentGatewayAdapter) -> None:
     code = getattr(adapter, "provider_code", None)
     if not isinstance(code, str) or not re.fullmatch(r"[a-z0-9_-]{2,40}", code):
         raise BillingError("Gateway provider_code must be a lowercase identifier.")
-    if not callable(getattr(adapter, "create_checkout", None)) or not callable(
-        getattr(adapter, "verify_webhook", None)
-    ):
+    if not callable(getattr(adapter, "create_checkout", None)) or not callable(getattr(adapter, "verify_webhook", None)):
         raise BillingError("Gateway adapter must implement checkout and webhook verification.")
     _ADAPTERS[code] = adapter
 
@@ -82,22 +77,15 @@ def get_gateway(provider_code: str) -> PaymentGatewayAdapter:
     return adapter
 
 
-def initiate_checkout(
-    invoice_id: str,
-    *,
-    user_id: str | None = None,
-    organisation_id: str | None = None,
-    provider_code: str,
-    return_url: str,
-) -> dict[str, str | None]:
+def initiate_checkout(invoice_id: str, *, user_id: str | None = None,
+                      organisation_id: str | None = None, provider_code: str,
+                      return_url: str) -> dict[str, str | None]:
     """Create a pending ledger attempt and a hosted checkout session."""
     if not isinstance(return_url, str) or urlparse(return_url).scheme != "https":
         raise BillingError("Checkout return_url must use HTTPS.")
     provider = provider_code.strip().lower()
     adapter = get_gateway(provider)
-    invoice = get_invoice(
-        invoice_id, user_id=user_id, organisation_id=organisation_id
-    )
+    invoice = get_invoice(invoice_id, user_id=user_id, organisation_id=organisation_id)
     if invoice is None:
         raise BillingError("Invoice was not found for this account.")
     if invoice["status"] != "open":
@@ -107,79 +95,48 @@ def initiate_checkout(
         raise BillingError("Invoice has no outstanding balance.")
     payment_idempotency = f"checkout-{uuid.uuid4().hex}"
     payment_id = record_payment_transaction(
-        invoice_id,
-        amount_minor=balance,
-        currency=invoice["currency"],
-        provider_code=provider,
-        status="pending",
-        idempotency_key=payment_idempotency,
+        invoice_id, amount_minor=balance, currency=invoice["currency"],
+        provider_code=provider, status="pending", idempotency_key=payment_idempotency,
         payment_method="hosted_checkout",
     )
     request = CheckoutRequest(
-        payment_transaction_id=payment_id,
-        invoice_number=invoice["invoice_number"],
-        amount_minor=balance,
-        currency=invoice["currency"],
-        idempotency_key=payment_idempotency,
-        return_url=return_url,
-        metadata={"payment_transaction_id": payment_id, "invoice_id": invoice_id},
+        payment_transaction_id=payment_id, invoice_number=invoice["invoice_number"],
+        amount_minor=balance, currency=invoice["currency"], idempotency_key=payment_idempotency,
+        return_url=return_url, metadata={"payment_transaction_id": payment_id, "invoice_id": invoice_id},
     )
-    try:
-        response = adapter.create_checkout(request)
-        if (
-            not isinstance(response, CheckoutResponse)
-            or not response.provider_checkout_id
-            or len(response.provider_checkout_id) > 200
-            or not isinstance(response.checkout_url, str)
-            or urlparse(response.checkout_url).scheme != "https"
-            or not urlparse(response.checkout_url).netloc
-        ):
-            raise BillingError("Gateway returned an invalid hosted checkout response.")
-        p = _p()
-        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        with database_connection() as connection:
-            connection.execute(
-                f"""INSERT INTO payment_checkout_sessions
-                (payment_transaction_id, provider_code, provider_checkout_id,
-                 checkout_url, expires_at, status, created_at, updated_at)
-                VALUES ({p}, {p}, {p}, {p}, {p}, 'created', {p}, {p})""",
-                (payment_id, provider, response.provider_checkout_id,
-                 response.checkout_url, response.expires_at, now, now),
-            )
-        return {
-            "payment_transaction_id": payment_id,
-            "checkout_url": response.checkout_url,
-            "expires_at": response.expires_at,
-        }
-    except Exception:
-        # Keep the attempt in the ledger; reconciliation can identify a
-        # provider-side checkout that was created before a local failure.
-        raise
+    response = adapter.create_checkout(request)
+    if (not isinstance(response, CheckoutResponse) or not response.provider_checkout_id
+            or len(response.provider_checkout_id) > 200 or not isinstance(response.checkout_url, str)
+            or urlparse(response.checkout_url).scheme != "https" or not urlparse(response.checkout_url).netloc):
+        raise BillingError("Gateway returned an invalid hosted checkout response.")
+    p = _p()
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    with database_connection() as connection:
+        connection.execute(
+            f"""INSERT INTO payment_checkout_sessions
+            (payment_transaction_id, provider_code, provider_checkout_id, checkout_url,
+             expires_at, status, created_at, updated_at)
+            VALUES ({p}, {p}, {p}, {p}, {p}, 'created', {p}, {p})""",
+            (payment_id, provider, response.provider_checkout_id, response.checkout_url,
+             response.expires_at, now, now),
+        )
+    return {"payment_transaction_id": payment_id, "checkout_url": response.checkout_url,
+            "expires_at": response.expires_at}
 
 
-def process_webhook(
-    provider_code: str,
-    *,
-    raw_body: bytes,
-    headers: Mapping[str, str],
-) -> dict[str, object]:
-    """Verify, deduplicate, reconcile and settle one provider notification."""
+def process_verified_notification(provider_code: str, *, notification: PaymentNotification,
+                                  raw_body: bytes) -> dict[str, object]:
+    """Persist and settle a notification already authenticated by a trusted provider flow."""
     provider = provider_code.strip().lower()
-    adapter = get_gateway(provider)
     if not isinstance(raw_body, bytes) or not raw_body:
         raise BillingError("Webhook body must be non-empty bytes.")
-    notification = adapter.verify_webhook(raw_body, headers)
     if not isinstance(notification, PaymentNotification):
         raise BillingError("Gateway returned an invalid payment notification.")
-    if (
-        not notification.provider_event_id
-        or not notification.payment_transaction_id
-        or notification.status not in {"succeeded", "failed", "canceled"}
-        or isinstance(notification.amount_minor, bool)
-        or not isinstance(notification.amount_minor, int)
-        or notification.amount_minor <= 0
-        or not re.fullmatch(r"[A-Za-z]{3}", notification.currency or "")
-    ):
+    if (not notification.provider_event_id or not notification.payment_transaction_id
+            or notification.status not in {"succeeded", "failed", "canceled"}
+            or isinstance(notification.amount_minor, bool)
+            or not isinstance(notification.amount_minor, int) or notification.amount_minor <= 0
+            or not re.fullmatch(r"[A-Za-z]{3}", notification.currency or "")):
         raise BillingError("Gateway notification failed normalized field validation.")
 
     digest = hashlib.sha256(raw_body).hexdigest()
@@ -188,21 +145,17 @@ def process_webhook(
     event_row_id = str(uuid.uuid4())
     with database_connection() as connection:
         payment = connection.execute(
-            f"""SELECT * FROM payment_transactions
-                WHERE id = {p} AND provider_code = {p}""",
+            f"SELECT * FROM payment_transactions WHERE id = {p} AND provider_code = {p}",
             (notification.payment_transaction_id, provider),
         ).fetchone()
         if payment is None:
             raise BillingError("Webhook payment transaction was not found for this provider.")
         payment = dict(payment)
-        if (
-            int(payment["amount_minor"]) != notification.amount_minor
-            or payment["currency"] != notification.currency.upper()
-        ):
+        if (int(payment["amount_minor"]) != notification.amount_minor
+                or payment["currency"] != notification.currency.upper()):
             raise BillingError("Webhook amount or currency does not match the payment attempt.")
         existing = connection.execute(
-            f"""SELECT processing_status FROM payment_webhook_events
-                WHERE provider_code = {p} AND provider_event_id = {p}""",
+            f"SELECT processing_status FROM payment_webhook_events WHERE provider_code = {p} AND provider_event_id = {p}",
             (provider, notification.provider_event_id),
         ).fetchone()
         if existing is not None and existing["processing_status"] == "processed":
@@ -218,11 +171,9 @@ def process_webhook(
             )
     try:
         finalize_payment_transaction(
-            notification.payment_transaction_id,
-            status=notification.status,
+            notification.payment_transaction_id, status=notification.status,
             provider_reference=notification.provider_reference,
-            failure_code=notification.failure_code,
-            failure_message=notification.failure_message,
+            failure_code=notification.failure_code, failure_message=notification.failure_message,
         )
     except Exception:
         with database_connection() as connection:
@@ -241,8 +192,18 @@ def process_webhook(
             (now, provider, notification.provider_event_id),
         )
         connection.execute(
-            f"""UPDATE payment_checkout_sessions SET status = 'completed',
-                updated_at = {p} WHERE payment_transaction_id = {p}""",
+            f"UPDATE payment_checkout_sessions SET status = 'completed', updated_at = {p} WHERE payment_transaction_id = {p}",
             (now, notification.payment_transaction_id),
         )
     return {"processed": True, "duplicate": False}
+
+
+def process_webhook(provider_code: str, *, raw_body: bytes,
+                    headers: Mapping[str, str]) -> dict[str, object]:
+    """Verify, deduplicate, reconcile and settle one provider webhook."""
+    provider = provider_code.strip().lower()
+    adapter = get_gateway(provider)
+    if not isinstance(raw_body, bytes) or not raw_body:
+        raise BillingError("Webhook body must be non-empty bytes.")
+    notification = adapter.verify_webhook(raw_body, headers)
+    return process_verified_notification(provider, notification=notification, raw_body=raw_body)
