@@ -1,7 +1,31 @@
 """Tests for invoice PDF rendering and owner-scoped retrieval."""
 
+import pytest
+
 from timan_intelligence.billing.invoice_pdf import build_invoice_pdf
 from timan_intelligence.billing.records import create_invoice, get_invoice
+from timan_intelligence.database.connection import database_connection
+from timan_intelligence.database.initialise import initialise_database
+
+
+@pytest.fixture
+def billing_database(tmp_path, monkeypatch):
+    path = tmp_path / "invoice-pdf.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{path.as_posix()}")
+    initialise_database()
+    with database_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO users (id, username, email, full_name, password_hash)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            ("bill-user", "billuser", "bill@example.com", "Billing User", "hash"),
+        )
+        connection.execute(
+            "INSERT INTO organisations (id, name) VALUES (?, ?)",
+            ("bill-org", "Billing Organisation"),
+        )
+    return path
 
 
 def test_invoice_pdf_contains_valid_pdf_header_and_invoice_data(billing_database):
