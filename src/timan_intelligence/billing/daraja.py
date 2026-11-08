@@ -247,9 +247,14 @@ class DarajaAdapter:
         p = _p()
         with database_connection() as connection:
             payment = connection.execute(
-                f"""SELECT id, amount_minor, currency FROM payment_transactions
-                WHERE provider_code = 'mpesa' AND provider_reference = {p}""",
-                (checkout_id,),
+                f"""SELECT DISTINCT p.id, p.amount_minor, p.currency
+                FROM payment_transactions AS p
+                LEFT JOIN mpesa_transaction_reconciliations AS r
+                  ON r.payment_transaction_id = p.id
+                 AND r.checkout_request_id = {p}
+                WHERE p.provider_code = 'mpesa'
+                  AND (p.provider_reference = {p} OR r.checkout_request_id = {p})""",
+                (checkout_id, checkout_id, checkout_id),
             ).fetchone()
             existing = connection.execute(
                 f"""SELECT status, originator_conversation_id
@@ -261,8 +266,10 @@ class DarajaAdapter:
         payment = dict(payment)
         if payment["currency"] != "KES":
             raise DarajaError("M-Pesa payment ledger currency is invalid.")
+        if existing is not None and existing["status"] == "verified":
+            return {"status": "already_reconciled"}
         if existing is not None and existing["status"] != "pending":
-            raise DarajaError("This M-Pesa payment already has a completed reconciliation attempt.")
+            raise DarajaError("This M-Pesa payment reconciliation requires manual review.")
         if existing is not None and existing["originator_conversation_id"]:
             return {
                 "status": "reconciliation_pending",
