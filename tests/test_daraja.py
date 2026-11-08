@@ -83,6 +83,11 @@ def reconciliation_database(tmp_path, monkeypatch):
         invoice_id, amount_minor=150000, currency="KES", provider_code="mpesa",
         status="pending", idempotency_key="mpesa-reconcile-test-001",
     )
+    with database_connection() as connection:
+        connection.execute(
+            "UPDATE payment_transactions SET provider_reference = ? WHERE id = ?",
+            ("ws_CO_test_001", payment_id),
+        )
     create_attempt(payment_id, "ws_CO_test_001", "QHT7ABC123", 150000)
     attach_originator("ws_CO_test_001", "1234-567890-1")
     return payment_id
