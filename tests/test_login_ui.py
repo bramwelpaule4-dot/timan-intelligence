@@ -64,6 +64,11 @@ def login_ui(monkeypatch):
     monkeypatch.setattr(auth, "st", fake)
     monkeypatch.setattr(auth, "is_authenticated", lambda: False)
     monkeypatch.setattr(auth, "is_totp_pending", lambda: False)
+    monkeypatch.setattr(
+        auth,
+        "is_login_temporarily_locked",
+        lambda identifier: False,
+    )
     return fake
 
 
@@ -206,3 +211,38 @@ def test_password_step_allows_user_to_change_account(
     auth.render_login()
 
     assert "Use a different account" in login_ui.buttons
+
+
+def test_password_step_explains_temporary_lockout(
+    login_ui,
+    monkeypatch,
+):
+    """A locked identifier receives a clear cooldown message."""
+
+    login_ui.session_state.update(
+        {
+            auth.LOGIN_IDENTIFIER_KEY: "analyst@example.com",
+            auth.LOGIN_STEP_KEY: "password",
+        }
+    )
+    login_ui.inputs = ["WrongPassword123!"]
+
+    monkeypatch.setattr(
+        auth,
+        "authenticate_user",
+        lambda identifier, password: False,
+    )
+    monkeypatch.setattr(
+        auth,
+        "is_login_temporarily_locked",
+        lambda identifier: identifier == "analyst@example.com",
+    )
+
+    auth.render_login()
+
+    assert login_ui.errors == [
+        "Too many unsuccessful sign-in attempts. For your "
+        "security, sign-in is temporarily paused for this "
+        "identifier. Please wait 15 minutes before trying again."
+    ]
+    assert login_ui.rerun_count == 0
