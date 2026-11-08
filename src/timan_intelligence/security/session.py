@@ -17,6 +17,7 @@ from timan_intelligence.database.connection import (
 
 SESSION_IDLE_TIMEOUT_SECONDS = 30 * 60
 SESSION_ABSOLUTE_TIMEOUT_SECONDS = 12 * 60 * 60
+SESSION_EXPIRED_KEY = "timanstat_session_expired"
 
 SESSION_AUTHENTICATION_KEYS = (
     "authenticated",
@@ -298,10 +299,12 @@ class SessionManager:
             return False
 
         if now - authenticated_at >= self.absolute_timeout_seconds:
+            session_state[SESSION_EXPIRED_KEY] = "absolute"
             self.clear_session(session_state)
             return False
 
         if now - last_activity_at >= self.idle_timeout_seconds:
+            session_state[SESSION_EXPIRED_KEY] = "idle"
             self.clear_session(session_state)
             return False
 
