@@ -23,6 +23,7 @@ from timan_intelligence.security.auth_ui import (
     _application_base_url,
     _development_email_sender,
     _log_email_delivery_failure,
+    PASSWORD_RESET_EMAIL_PREFILL_KEY,
 )
 
 
@@ -117,6 +118,7 @@ def render_password_reset_request() -> None:
     with st.form("timanstat_password_reset_request_form"):
         email = st.text_input(
             "Registered email address",
+            value=st.session_state.get(PASSWORD_RESET_EMAIL_PREFILL_KEY, ""),
             max_chars=254,
             autocomplete="email",
         )
