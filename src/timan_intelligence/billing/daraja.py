@@ -19,7 +19,7 @@ from typing import Mapping
 from zoneinfo import ZoneInfo
 
 from timan_intelligence.billing.gateway import (
-    PaymentNotification, get_gateway, process_webhook, register_gateway,
+    PaymentNotification, get_gateway, process_webhook, process_verified_notification, register_gateway,
 )
 from timan_intelligence.billing.mpesa_reconciliation import (
     ReconciliationError, attach_originator, create_attempt, mark_timeout, verify_result,
@@ -312,25 +312,20 @@ class DarajaAdapter:
             verified = verify_result(raw_body)
         except ReconciliationError as exc:
             raise DarajaError(str(exc)) from exc
-        # Re-run the STK status query and pass only the independently
-        # reconciled amount and receipt into the existing idempotent ledger.
-        synthetic = {
-            "Body": {
-                "stkCallback": {
-                    "CheckoutRequestID": verified["checkout_request_id"],
-                    "ResultCode": 0,
-                    "ResultDesc": "Independently reconciled by Safaricom Transaction Status API",
-                    "CallbackMetadata": {
-                        "Item": [
-                            {"Name": "Amount", "Value": verified["amount_minor"] // 100},
-                            {"Name": "MpesaReceiptNumber", "Value": verified["receipt"]},
-                        ]
-                    },
-                }
-            }
-        }
-        return process_webhook(
-            "mpesa", raw_body=json.dumps(synthetic).encode("utf-8"), headers={}
+        # Safaricom's transaction-status result has already been independently
+        # validated and correlated to the original ledger attempt. Pass that
+        # trusted notification directly to the shared idempotent settlement path;
+        # do not re-interpret a synthetic STK callback as an external webhook.
+        notification = PaymentNotification(
+            provider_event_id=verified["checkout_request_id"],
+            payment_transaction_id=verified["payment_transaction_id"],
+            status="succeeded",
+            amount_minor=verified["amount_minor"],
+            currency="KES",
+            provider_reference=verified["receipt"],
+        )
+        return process_verified_notification(
+            "mpesa", notification=notification, raw_body=raw_body
         )
 
     def create_checkout(self, request):
