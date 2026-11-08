@@ -45,6 +45,7 @@ PENDING_AUTHENTICATION_REVOKED_KEY = "timanstat_pending_authentication_revoked"
 
 LOGIN_IDENTIFIER_KEY = "timanstat_login_identifier"
 LOGIN_STEP_KEY = "timanstat_login_step"
+LOGIN_UNAVAILABLE_KEY = "timanstat_login_unavailable"
 
 PENDING_AUTHENTICATION_KEYS = (
     "pending_authentication",
@@ -279,6 +280,7 @@ def authenticate_user(username: str, password: str) -> bool:
     # password-login attempt.
     st.session_state.pop(PENDING_AUTHENTICATION_EXPIRED_KEY, None)
     st.session_state.pop(PENDING_AUTHENTICATION_REVOKED_KEY, None)
+    st.session_state.pop(LOGIN_UNAVAILABLE_KEY, None)
     SESSION_MANAGER.clear_session(st.session_state)
     _clear_pending_authentication(st.session_state)
 
@@ -286,13 +288,19 @@ def authenticate_user(username: str, password: str) -> bool:
         if LOGIN_RATE_LIMITER.is_locked(identifier):
             return False
     except Exception:
-        # Fail closed if shared rate-limit state cannot be read.
+        # Fail closed, but distinguish a broken security dependency from
+        # an incorrect password so users receive an actionable message.
+        st.session_state[LOGIN_UNAVAILABLE_KEY] = True
         return False
 
     try:
         user = authenticate_identity_user(identifier, password)
     except (TypeError, ValueError):
         return _reject_login(identifier)
+    except Exception:
+        # Database or identity-service failures are not bad credentials.
+        st.session_state[LOGIN_UNAVAILABLE_KEY] = True
+        return False
 
     if user is None:
         return _reject_login(identifier)
@@ -320,27 +328,38 @@ def authenticate_user(username: str, password: str) -> bool:
         LOGIN_RATE_LIMITER.record_success(identifier)
     except Exception:
         # Do not establish a session if rate-limit state cannot be cleared.
+        st.session_state[LOGIN_UNAVAILABLE_KEY] = True
         return False
 
     # Password authentication succeeded. TOTP-enabled accounts must
     # complete the second factor before receiving a full session.
     if bool(user.get("totp_enabled")):
-        _create_pending_authentication(
-            st.session_state,
-            {
-                "id": user_id,
-                "username": actual_username,
-                "role": role,
-            },
-        )
+        try:
+            _create_pending_authentication(
+                st.session_state,
+                {
+                    "id": user_id,
+                    "username": actual_username,
+                    "role": role,
+                },
+            )
+        except Exception:
+            _clear_pending_authentication(st.session_state)
+            st.session_state[LOGIN_UNAVAILABLE_KEY] = True
+            return False
         return False
 
-    SESSION_MANAGER.create_session(
-        st.session_state,
-        actual_username,
-        role,
-        user_id=user_id,
-    )
+    try:
+        SESSION_MANAGER.create_session(
+            st.session_state,
+            actual_username,
+            role,
+            user_id=user_id,
+        )
+    except Exception:
+        SESSION_MANAGER.clear_session(st.session_state)
+        st.session_state[LOGIN_UNAVAILABLE_KEY] = True
+        return False
 
     return True
 
@@ -736,6 +755,12 @@ def render_login() -> None:
             st.session_state.pop(LOGIN_STEP_KEY, None)
             st.success("Authentication successful.")
             st.rerun()
+        elif st.session_state.pop(LOGIN_UNAVAILABLE_KEY, False):
+            st.error(
+                "Sign-in is temporarily unavailable because a required "
+                "security or account service could not be verified. "
+                "Please try again later or contact the platform administrator."
+            )
         elif is_totp_pending():
             st.session_state.pop("timanstat_show_login_password", None)
             st.rerun()
