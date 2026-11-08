@@ -178,7 +178,7 @@ class DarajaAdapter:
             },
         )
 
-    def _request_transaction_status(self, payment, checkout_id, receipt, amount_minor):
+    def _request_transaction_status(self, payment, checkout_id, receipt, amount_minor, *, create_record=True):
         base, cfg, token = self._token()
         initiator = self.environ.get("DARAJA_INITIATOR_NAME", "").strip()
         credential = self.environ.get("DARAJA_SECURITY_CREDENTIAL", "").strip()
@@ -192,8 +192,7 @@ class DarajaAdapter:
             parsed = urllib.parse.urlparse(callback_url)
             if parsed.scheme != "https" or not parsed.netloc:
                 raise DarajaError("Transaction-status callback URLs must use public HTTPS.")
-        create_attempt(payment["id"], checkout_id, receipt, amount_minor)
-        response = self._request(
+        if create_record:\n            create_attempt(payment["id"], checkout_id, receipt, amount_minor)\n        response = self._request(
             base + "/mpesa/transactionstatus/v1/query",
             method="POST",
             headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"},
@@ -228,8 +227,7 @@ class DarajaAdapter:
             raise DarajaError("Malformed Daraja STK callback.") from exc
         if not isinstance(checkout_id, str) or not checkout_id:
             raise DarajaError("Daraja callback is missing CheckoutRequestID.")
-        query = self._query(checkout_id)
-        try:
+        configure_daraja(self)\n        query = self._query(checkout_id)\n        try:
             confirmed_code = int(query["ResultCode"])
         except (KeyError, TypeError, ValueError) as exc:
             raise DarajaError("Safaricom status query did not return a transaction result.") from exc
@@ -256,13 +254,13 @@ class DarajaAdapter:
         payment = dict(payment)
         if payment["currency"] != "KES":
             raise DarajaError("M-Pesa payment ledger currency is invalid.")
-        if existing is not None:
-            if existing["status"] == "pending":
-                return {
-                    "status": "reconciliation_pending",
-                    "originator_conversation_id": existing["originator_conversation_id"],
-                }
-            raise DarajaError("This M-Pesa payment already has a reconciliation attempt.")
+        if existing is not None and existing["status"] != "pending":
+            raise DarajaError("This M-Pesa payment already has a completed reconciliation attempt.")
+        if existing is not None and existing["originator_conversation_id"]:
+            return {
+                "status": "reconciliation_pending",
+                "originator_conversation_id": existing["originator_conversation_id"],
+            }
         metadata = callback.get("CallbackMetadata", {}).get("Item", [])
         if not isinstance(metadata, list):
             raise DarajaError("Successful callback metadata is malformed.")
@@ -282,13 +280,12 @@ class DarajaAdapter:
             raise DarajaError("Callback amount or receipt does not match the expected payment.")
         try:
             return self._request_transaction_status(
-                payment, checkout_id, receipt, callback_amount * 100
-            )
+                payment, checkout_id, receipt, callback_amount * 100,\n                create_record=existing is None,\n            )
         except ReconciliationError as exc:
             raise DarajaError("Unable to create Safaricom reconciliation attempt.") from exc
 
     def handle_transaction_status_result(self, raw_body: bytes):
-        try:
+        configure_daraja(self)\n        try:
             verified = verify_result(raw_body)
         except ReconciliationError as exc:
             raise DarajaError(str(exc)) from exc
