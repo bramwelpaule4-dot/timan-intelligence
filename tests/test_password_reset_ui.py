@@ -29,6 +29,9 @@ class FakeStreamlit:
         self.writes = []
         self.markdown_messages = []
         self.captions = []
+        self.checkbox_value = False
+        self.checkboxes = []
+        self.text_input_options = []
 
     def subheader(self, value):
         self.subheaders.append(value)
@@ -40,9 +43,14 @@ class FakeStreamlit:
         return nullcontext()
 
     def text_input(self, *args, **kwargs):
+        self.text_input_options.append(kwargs.copy())
         if self.inputs:
             return self.inputs.pop(0)
         return ""
+
+    def checkbox(self, label, *args, **kwargs):
+        self.checkboxes.append((label, kwargs.copy()))
+        return self.checkbox_value
 
     def form_submit_button(self, *args, **kwargs):
         return self.submitted
@@ -326,6 +334,54 @@ def test_extract_password_reset_url_returns_none_when_missing():
     assert password_reset_ui._extract_password_reset_url(
         body
     ) is None
+
+
+def test_password_reset_password_fields_are_masked_by_default(
+    fake_streamlit,
+    monkeypatch,
+):
+    fake_streamlit.submitted = False
+    monkeypatch.setattr(
+        password_reset_ui,
+        "reset_password_with_token",
+        Mock(),
+    )
+
+    password_reset_ui.render_password_reset_form("test-token")
+
+    password_options = [
+        options
+        for options in fake_streamlit.text_input_options
+        if options.get("autocomplete") == "new-password"
+    ]
+
+    assert len(password_options) == 2
+    assert all(options["type"] == "password" for options in password_options)
+    assert fake_streamlit.checkboxes[0][0] == "Show passwords"
+
+
+def test_password_reset_password_fields_can_be_shown(
+    fake_streamlit,
+    monkeypatch,
+):
+    fake_streamlit.submitted = False
+    fake_streamlit.checkbox_value = True
+    monkeypatch.setattr(
+        password_reset_ui,
+        "reset_password_with_token",
+        Mock(),
+    )
+
+    password_reset_ui.render_password_reset_form("test-token")
+
+    password_options = [
+        options
+        for options in fake_streamlit.text_input_options
+        if options.get("autocomplete") == "new-password"
+    ]
+
+    assert len(password_options) == 2
+    assert all(options["type"] == "default" for options in password_options)
 
 
 def test_password_reset_rejects_empty_password_fields(
