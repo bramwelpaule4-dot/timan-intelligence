@@ -374,6 +374,7 @@ def get_invoice(
     """Fetch invoice details, optionally enforcing the invoice owner scope."""
     if not isinstance(invoice_id, str) or not invoice_id.strip():
         raise BillingError("A valid invoice ID is required.")
+    p = _p()
     scoped = user_id is not None or organisation_id is not None
     if scoped:
         owner_column, owner_id = _owner(user_id, organisation_id)
@@ -382,7 +383,6 @@ def get_invoice(
     else:
         where = f"id = {p}"
         params = (invoice_id.strip(),)
-    p = _p()
     with database_connection() as connection:
         invoice = connection.execute(
             f"SELECT * FROM billing_invoices WHERE {where}", params
@@ -408,21 +408,21 @@ def get_invoice(
             """,
             (invoice_id.strip(), invoice_id.strip()),
         ).fetchall()
-    result = dict(invoice)
-    if result.get("user_id"):
-        owner = connection.execute(
-            f"SELECT full_name, email FROM users WHERE id = {p}",
-            (result["user_id"],),
-        ).fetchone()
-        result["owner_name"] = owner["full_name"] if owner else None
-        result["owner_email"] = owner["email"] if owner else None
-    elif result.get("organisation_id"):
-        owner = connection.execute(
-            f"SELECT name FROM organisations WHERE id = {p}",
-            (result["organisation_id"],),
-        ).fetchone()
-        result["owner_name"] = owner["name"] if owner else None
-        result["owner_email"] = None
+        result = dict(invoice)
+        if result.get("user_id"):
+            owner = connection.execute(
+                f"SELECT full_name, email FROM users WHERE id = {p}",
+                (result["user_id"],),
+            ).fetchone()
+            result["owner_name"] = owner["full_name"] if owner else None
+            result["owner_email"] = owner["email"] if owner else None
+        elif result.get("organisation_id"):
+            owner = connection.execute(
+                f"SELECT name FROM organisations WHERE id = {p}",
+                (result["organisation_id"],),
+            ).fetchone()
+            result["owner_name"] = owner["name"] if owner else None
+            result["owner_email"] = None
     result["items"] = [dict(row) for row in items]
     result["payments"] = [dict(row) for row in payments]
     result["events"] = [dict(row) for row in events]
