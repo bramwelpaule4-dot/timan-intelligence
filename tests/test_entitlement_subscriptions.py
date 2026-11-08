@@ -406,11 +406,21 @@ def test_rejected_and_withdrawn_requests_are_retained(subscription_database):
 
 
 def test_organisation_plan_change_requires_active_membership(subscription_database):
+    with database_connection() as connection:
+        connection.execute(
+            "UPDATE organisation_memberships SET status = 'suspended' WHERE id = ?",
+            ("membership-1",),
+        )
     with pytest.raises(SubscriptionError, match="active organisation membership"):
         request_plan_change(
             requested_by="user-1",
             requested_plan_code="professional",
             organisation_id="org-1",
+        )
+    with database_connection() as connection:
+        connection.execute(
+            "UPDATE organisation_memberships SET status = 'active' WHERE id = ?",
+            ("membership-1",),
         )
     request_id = request_plan_change(
         requested_by="user-1",

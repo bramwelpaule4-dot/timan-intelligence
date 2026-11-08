@@ -63,13 +63,13 @@ def upgrade(connection) -> None:
         """
         CREATE UNIQUE INDEX uq_subscription_change_pending_user
         ON subscription_change_requests(user_id)
-        WHERE user_id IS NOT NULL AND status = 'pending'
+        WHERE user_id IS NOT NULL AND status IN ('pending', 'approved_pending_payment', 'scheduled')
         """
     )
     connection.execute(
         """
         CREATE UNIQUE INDEX uq_subscription_change_pending_org
         ON subscription_change_requests(organisation_id)
-        WHERE organisation_id IS NOT NULL AND status = 'pending'
+        WHERE organisation_id IS NOT NULL AND status IN ('pending', 'approved_pending_payment', 'scheduled')
         """
     )
