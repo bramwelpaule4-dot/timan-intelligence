@@ -127,7 +127,7 @@ def test_password_step_establishes_session_and_clears_login_state(
             auth.LOGIN_STEP_KEY: "password",
         }
     )
-    login_ui.inputs = ["StrongPassword123!"]
+    login_ui.inputs = ["analyst@example.com", "StrongPassword123!"]
 
     monkeypatch.setattr(
         auth,
@@ -156,7 +156,7 @@ def test_password_step_shows_controlled_error_for_failed_login(
             auth.LOGIN_STEP_KEY: "password",
         }
     )
-    login_ui.inputs = ["WrongPassword123!"]
+    login_ui.inputs = ["analyst@example.com", "WrongPassword123!"]
 
     monkeypatch.setattr(
         auth,
@@ -181,7 +181,7 @@ def test_password_step_hands_off_to_mfa_without_creating_full_session(
             auth.LOGIN_STEP_KEY: "password",
         }
     )
-    login_ui.inputs = ["StrongPassword123!"]
+    login_ui.inputs = ["analyst@example.com", "StrongPassword123!"]
 
     monkeypatch.setattr(
         auth,
@@ -233,7 +233,7 @@ def test_password_step_explains_temporary_lockout(
             auth.LOGIN_STEP_KEY: "password",
         }
     )
-    login_ui.inputs = ["WrongPassword123!"]
+    login_ui.inputs = ["analyst@example.com", "WrongPassword123!"]
 
     monkeypatch.setattr(
         auth,
