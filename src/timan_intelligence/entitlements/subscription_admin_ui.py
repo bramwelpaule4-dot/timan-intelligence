@@ -14,6 +14,7 @@ from timan_intelligence.entitlements.subscriptions import (
     assign_subscription,
     get_subscription,
     get_subscription_history,
+    change_subscription_status,
 )
 
 
@@ -121,6 +122,63 @@ def render_subscription_administration(
         )
         if current.get("cancel_at_period_end"):
             st.warning("This subscription is scheduled to cancel at period end.")
+
+        st.subheader("Update subscription status")
+        with st.form("subscription_status_form"):
+            new_status = st.selectbox(
+                "New status",
+                options=sorted(SUBSCRIPTION_STATUSES),
+                index=sorted(SUBSCRIPTION_STATUSES).index(current["status"]),
+            )
+            status_reason = st.text_input(
+                "Reason for status change",
+                max_chars=500,
+                help="Record the administrative reason for this change.",
+            )
+            status_confirmed = st.checkbox(
+                "I confirm that this status change is authorised."
+            )
+            status_submitted = st.form_submit_button("Update status")
+
+        if status_submitted:
+            if not status_confirmed:
+                st.error("Confirm that this status change is authorised.")
+            elif new_status == current["status"]:
+                st.info("The selected status is already in effect.")
+            elif not status_reason.strip():
+                st.error("Enter a reason for the status change.")
+            else:
+                try:
+                    changed = change_subscription_status(
+                        current["id"],
+                        new_status,
+                    )
+                    if not changed:
+                        st.error("The subscription record could not be updated.")
+                    else:
+                        record_audit_event(
+                            action="subscription.status_changed",
+                            user_id=actor_user_id,
+                            organisation_id=(
+                                owner["id"] if scope == "Organisation" else None
+                            ),
+                            resource_type="subscription",
+                            resource_id=current["id"],
+                            details={
+                                "owner_scope": scope.lower(),
+                                "owner_id": owner["id"],
+                                "previous_status": current["status"],
+                                "new_status": new_status,
+                                "reason": status_reason.strip(),
+                            },
+                        )
+                        st.success("Subscription status updated.")
+                        st.rerun()
+                except Exception:
+                    st.error(
+                        "The subscription status could not be updated. "
+                        "Check the values and try again."
+                    )
     else:
         st.info("No current paid subscription. The owner receives the Free plan unless an inherited plan applies.")
 
