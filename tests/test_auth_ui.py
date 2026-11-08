@@ -758,3 +758,58 @@ def test_open_password_recovery_does_not_prefill_username(monkeypatch):
     auth_ui._open_password_recovery()
 
     assert auth_ui.PASSWORD_RESET_EMAIL_PREFILL_KEY not in fake.session_state
+
+
+def test_open_email_verification_prefills_login_email(monkeypatch):
+    """Verification resend reuses an email entered during sign-in."""
+
+    from timan_intelligence.security import auth
+
+    fake = FakeStreamlit()
+    fake.session_state[auth.LOGIN_IDENTIFIER_KEY] = "person@example.com"
+    monkeypatch.setattr(auth_ui, "st", fake)
+
+    auth_ui._open_email_verification()
+
+    assert fake.session_state[auth_ui.VERIFICATION_EMAIL_PREFILL_KEY] == (
+        "person@example.com"
+    )
+    assert fake.session_state[auth_ui.AUTHENTICATION_VIEW_KEY] == (
+        "email_verification"
+    )
+
+
+def test_open_email_verification_does_not_prefill_username(monkeypatch):
+    """A username is not copied into the email verification form."""
+
+    from timan_intelligence.security import auth
+
+    fake = FakeStreamlit()
+    fake.session_state[auth.LOGIN_IDENTIFIER_KEY] = "analyst"
+    fake.session_state[auth_ui.VERIFICATION_EMAIL_PREFILL_KEY] = (
+        "old@example.com"
+    )
+    monkeypatch.setattr(auth_ui, "st", fake)
+
+    auth_ui._open_email_verification()
+
+    assert auth_ui.VERIFICATION_EMAIL_PREFILL_KEY not in fake.session_state
+
+
+def test_resend_verification_form_prefills_login_email(monkeypatch):
+    """The resend form displays the email carried from sign-in."""
+
+    fake = FakeStreamlit(submitted=False)
+    fake.session_state[auth_ui.VERIFICATION_EMAIL_PREFILL_KEY] = (
+        "person@example.com"
+    )
+    monkeypatch.setattr(auth_ui, "st", fake)
+
+    auth_ui.render_resend_verification()
+
+    email_options = next(
+        kwargs
+        for args, kwargs in fake.text_input_options
+        if args and args[0] == "Registered email address"
+    )
+    assert email_options["value"] == "person@example.com"
