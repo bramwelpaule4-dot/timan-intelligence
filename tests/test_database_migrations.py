@@ -29,6 +29,7 @@ EXPECTED_MIGRATION_HISTORY = [
     (15, "billing_subscription_change_requests"),
     (16, "unique_subscription_upgrade_invoice"),
     (17, "payment_gateway_sessions"),
+    (18, "mpesa_transaction_reconciliation"),
 ]
 
 
@@ -403,6 +404,7 @@ def test_fresh_database_applies_all_migrations(migration_database):
         "billing_events",
         "payment_checkout_sessions",
         "payment_webhook_events",
+        "mpesa_transaction_reconciliations",
     }
 
     assert expected_tables.issubset(tables)
