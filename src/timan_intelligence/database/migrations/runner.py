@@ -26,6 +26,7 @@ from timan_intelligence.database.migrations.versions import (
     v0015_billing_subscription_change_requests,
     v0016_unique_subscription_upgrade_invoice,
     v0017_payment_gateway_sessions,
+    v0018_mpesa_transaction_reconciliation,
 )
 
 
@@ -123,6 +124,11 @@ MIGRATIONS = (
         version=v0017_payment_gateway_sessions.VERSION,
         name=v0017_payment_gateway_sessions.NAME,
         upgrade=v0017_payment_gateway_sessions.upgrade,
+    ),
+    Migration(
+        version=v0018_mpesa_transaction_reconciliation.VERSION,
+        name=v0018_mpesa_transaction_reconciliation.NAME,
+        upgrade=v0018_mpesa_transaction_reconciliation.upgrade,
     ),
 )
 
