@@ -32,6 +32,10 @@ def enrolled_user(tmp_path, monkeypatch):
         "TIMANSTAT_TOTP_ENCRYPTION_KEY",
         generate_totp_encryption_key(),
     )
+    monkeypatch.setenv(
+        "TIMANSTAT_RATE_LIMIT_HMAC_KEY",
+        "test-rate-limit-hmac-key-with-at-least-32-bytes",
+    )
     initialise_database()
 
     user_id = register_user(
