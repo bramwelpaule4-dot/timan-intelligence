@@ -667,3 +667,19 @@ def test_failed_password_reset_preserves_token_in_url(
 
     assert fake_streamlit.successes == []
     assert len(fake_streamlit.errors) == 1
+
+def test_password_reset_request_email_supports_browser_autofill(
+    fake_streamlit,
+):
+    """The password-reset request exposes the email autofill hint."""
+
+    fake_streamlit.submitted = False
+
+    password_reset_ui.render_password_reset_request()
+
+    options_by_label = {
+        options.get("label"): options
+        for options in fake_streamlit.text_input_options
+    }
+    assert options_by_label["Registered email address"]["autocomplete"] == "email"
+
