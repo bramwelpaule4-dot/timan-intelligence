@@ -882,3 +882,30 @@ def test_authentication_page_explains_revoked_session_once(
         "changed. Please sign in again."
     ]
     assert SESSION_REVOKED_KEY not in fake_streamlit.session_state
+
+
+def test_login_explains_revoked_mfa_challenge_once(
+    fake_streamlit,
+    monkeypatch,
+):
+    """A revoked pending MFA challenge receives a one-time explanation."""
+
+    from timan_intelligence.security import auth
+
+    fake_streamlit.session_state[
+        auth.PENDING_AUTHENTICATION_REVOKED_KEY
+    ] = True
+    monkeypatch.setattr(auth, "st", fake_streamlit)
+    monkeypatch.setattr(auth, "is_authenticated", lambda: False)
+    monkeypatch.setattr(auth, "is_totp_pending", lambda: False)
+
+    auth.render_login()
+
+    assert fake_streamlit.infos == [
+        "Your verification challenge ended because your account "
+        "security settings changed. Please sign in again."
+    ]
+    assert (
+        auth.PENDING_AUTHENTICATION_REVOKED_KEY
+        not in fake_streamlit.session_state
+    )
