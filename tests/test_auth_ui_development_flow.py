@@ -170,6 +170,12 @@ def test_production_registration_does_not_display_simulator_link(
     monkeypatch.setattr(auth_ui, "register_user", register)
 
     send_verification = Mock()
+    email_sender = object()
+    monkeypatch.setattr(
+        auth_ui,
+        "_configured_email_sender",
+        lambda base_url: email_sender,
+    )
     monkeypatch.setattr(
         auth_ui,
         "send_email_verification",
@@ -181,6 +187,7 @@ def test_production_registration_does_not_display_simulator_link(
     send_verification.assert_called_once_with(
         user_id="production-user-123",
         base_url="https://timanstat-dev.streamlit.app",
+        sender=email_sender,
     )
 
     assert fake_streamlit.markdown_messages == []
