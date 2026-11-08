@@ -1,6 +1,7 @@
 """Tests for the TimanStat authenticated password-change interface."""
 
 from contextlib import nullcontext
+from types import SimpleNamespace
 
 import pytest
 
@@ -16,6 +17,8 @@ class FakeStreamlit:
         self.checkboxes = []
         self.checkbox_value = checkbox_value
         self.submitted = False
+        self.errors = []
+        self.infos = []
 
     def subheader(self, value):
         pass
@@ -25,6 +28,12 @@ class FakeStreamlit:
 
     def caption(self, value):
         pass
+
+    def error(self, value):
+        self.errors.append(value)
+
+    def info(self, value):
+        self.infos.append(value)
 
     def form(self, *args, **kwargs):
         return nullcontext()
@@ -48,6 +57,11 @@ def _render_password_change(monkeypatch, checkbox_value=False):
         password_change_ui,
         "is_authenticated",
         lambda: True,
+    )
+    monkeypatch.setattr(
+        password_change_ui,
+        "PASSWORD_CHANGE_RATE_LIMITER",
+        SimpleNamespace(is_locked=lambda user_id: False),
     )
 
     password_change_ui.render_password_change()
@@ -108,3 +122,32 @@ def test_password_change_visibility_control(
         options["type"] == expected_type
         for _, options in fake_streamlit.text_input_options
     )
+
+
+
+def test_password_change_ui_explains_temporary_lockout(monkeypatch):
+    """A locked account sees a clear wait message and no password form."""
+
+    fake_streamlit = FakeStreamlit()
+    monkeypatch.setattr(password_change_ui, "st", fake_streamlit)
+    monkeypatch.setattr(
+        password_change_ui,
+        "is_authenticated",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        password_change_ui,
+        "PASSWORD_CHANGE_RATE_LIMITER",
+        SimpleNamespace(is_locked=lambda user_id: True),
+    )
+
+    password_change_ui.render_password_change()
+
+    assert fake_streamlit.errors == [
+        "Too many unsuccessful password-change attempts. "
+        "For your security, this action is temporarily paused."
+    ]
+    assert fake_streamlit.infos == [
+        "Please wait 15 minutes before trying again."
+    ]
+    assert fake_streamlit.text_input_options == []
