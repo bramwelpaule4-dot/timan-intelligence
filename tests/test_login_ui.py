@@ -24,6 +24,7 @@ class FakeStreamlit:
         self.checkbox_value = False
         self.checkboxes = []
         self.text_input_options = []
+        self.submit_button_options = []
         self.rerun_count = 0
 
     def form(self, *args, **kwargs):
@@ -41,6 +42,7 @@ class FakeStreamlit:
         return self.checkbox_value
 
     def form_submit_button(self, *args, **kwargs):
+        self.submit_button_options.append(kwargs.copy())
         return self.submitted
 
     def subheader(self, value):
@@ -408,3 +410,41 @@ def test_mfa_login_keeps_generic_error_when_not_locked(
         "or sign in again if the verification request has expired."
     ]
     assert login_ui.rerun_count == 0
+
+
+def test_locked_mfa_form_disables_code_entry_and_submission(
+    login_ui,
+    monkeypatch,
+):
+    """A locked challenge cannot submit another verification attempt."""
+
+    login_ui.inputs = ["123456"]
+    monkeypatch.setattr(auth, "is_totp_pending", lambda: True)
+    monkeypatch.setattr(
+        auth,
+        "is_pending_second_factor_temporarily_locked",
+        lambda: True,
+    )
+    verification_calls = []
+    monkeypatch.setattr(
+        auth,
+        "verify_pending_second_factor",
+        lambda code: verification_calls.append(code) or False,
+    )
+
+    auth.render_login()
+
+    mfa_options = next(
+        options
+        for options in login_ui.text_input_options
+        if options.get("max_chars") == 40
+    )
+    assert mfa_options["disabled"] is True
+    assert login_ui.submit_button_options[-1]["disabled"] is True
+    assert verification_calls == []
+    assert login_ui.errors == [
+        "Too many unsuccessful verification attempts. For your "
+        "security, verification is temporarily paused for this "
+        "account. Please wait 15 minutes before trying again."
+    ]
+    assert "Cancel sign in" in login_ui.buttons
