@@ -41,6 +41,7 @@ SESSION_MANAGER = SessionManager(require_versioned_sessions=True)
 # A pending second-factor challenge expires after five minutes.
 PENDING_TOTP_TIMEOUT_SECONDS = 5 * 60
 PENDING_AUTHENTICATION_EXPIRED_KEY = "timanstat_pending_authentication_expired"
+PENDING_AUTHENTICATION_REVOKED_KEY = "timanstat_pending_authentication_revoked"
 
 LOGIN_IDENTIFIER_KEY = "timanstat_login_identifier"
 LOGIN_STEP_KEY = "timanstat_login_step"
@@ -217,8 +218,13 @@ def is_totp_pending() -> bool:
     if (
         isinstance(current_version, bool)
         or not isinstance(current_version, int)
-        or current_version != pending_session_version
+        or current_version < 0
     ):
+        _clear_pending_authentication(session_state)
+        return False
+
+    if current_version != pending_session_version:
+        session_state[PENDING_AUTHENTICATION_REVOKED_KEY] = True
         _clear_pending_authentication(session_state)
         return False
 
@@ -272,6 +278,7 @@ def authenticate_user(username: str, password: str) -> bool:
     # Never allow an existing authenticated session to survive a new
     # password-login attempt.
     st.session_state.pop(PENDING_AUTHENTICATION_EXPIRED_KEY, None)
+    st.session_state.pop(PENDING_AUTHENTICATION_REVOKED_KEY, None)
     SESSION_MANAGER.clear_session(st.session_state)
     _clear_pending_authentication(st.session_state)
 
@@ -545,6 +552,7 @@ def logout() -> None:
     SESSION_MANAGER.clear_session(st.session_state)
     _clear_pending_authentication(st.session_state)
     st.session_state.pop(PENDING_AUTHENTICATION_EXPIRED_KEY, None)
+    st.session_state.pop(PENDING_AUTHENTICATION_REVOKED_KEY, None)
     st.session_state.pop(SESSION_EXPIRED_KEY, None)
     st.session_state.pop(SESSION_REVOKED_KEY, None)
 
@@ -569,6 +577,12 @@ def render_login() -> None:
         st.info(
             "Your verification session has expired. Please sign in again "
             "to receive a new authenticator challenge."
+        )
+
+    if st.session_state.pop(PENDING_AUTHENTICATION_REVOKED_KEY, False):
+        st.info(
+            "Your verification challenge ended because your account "
+            "security settings changed. Please sign in again."
         )
 
     if is_totp_pending():
