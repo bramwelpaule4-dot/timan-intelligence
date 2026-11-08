@@ -82,6 +82,11 @@ def fake_st(monkeypatch):
     monkeypatch.setattr(ui, "st", fake)
     monkeypatch.setattr(ui, "is_authenticated", lambda: True)
     monkeypatch.setattr(ui, "logout", lambda: None)
+    monkeypatch.setattr(
+        ui,
+        "is_security_reauthentication_locked",
+        lambda user_id: False,
+    )
     return fake
 
 
@@ -324,3 +329,27 @@ def test_totp_management_regenerates_and_displays_recovery_codes(
     assert "NEW-CODE-ONE\nNEW-CODE-TWO" in fake_st.codes
     assert logout_calls == [True]
     assert fake_st.stop_called
+
+
+
+def test_totp_management_pauses_sensitive_actions_during_reauthentication_lockout(
+    fake_st,
+    monkeypatch,
+):
+    """A password re-authentication lockout hides security-change forms."""
+
+    monkeypatch.setattr(ui, "get_totp_status", lambda user_id: True)
+    monkeypatch.setattr(
+        ui,
+        "is_security_reauthentication_locked",
+        lambda user_id: True,
+    )
+
+    ui.render_totp_management()
+
+    assert _message_contains(
+        fake_st,
+        "Too many unsuccessful password confirmations for account security changes.",
+    )
+    assert _message_contains(fake_st, "Please wait 15 minutes")
+    assert fake_st.form_buttons == {}
