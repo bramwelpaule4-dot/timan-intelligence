@@ -608,6 +608,7 @@ def render_login() -> None:
 
         if st.button("Cancel sign in", key="timanstat_cancel_mfa_sign_in"):
             logout()
+            st.session_state.pop("timanstat_show_login_password", None)
             st.session_state.pop(LOGIN_IDENTIFIER_KEY, None)
             st.session_state.pop(LOGIN_STEP_KEY, None)
             st.rerun()
@@ -701,11 +702,13 @@ def render_login() -> None:
             return
 
         if authenticate_user(identifier, password):
+            st.session_state.pop("timanstat_show_login_password", None)
             st.session_state.pop(LOGIN_IDENTIFIER_KEY, None)
             st.session_state.pop(LOGIN_STEP_KEY, None)
             st.success("Authentication successful.")
             st.rerun()
         elif is_totp_pending():
+            st.session_state.pop("timanstat_show_login_password", None)
             st.rerun()
         else:
             if is_login_temporarily_locked(identifier):
@@ -731,6 +734,7 @@ def render_login() -> None:
         "Use a different account",
         key="timanstat_change_login_identifier",
     ):
+        st.session_state.pop("timanstat_show_login_password", None)
         st.session_state.pop(LOGIN_IDENTIFIER_KEY, None)
         st.session_state.pop(LOGIN_STEP_KEY, None)
         st.rerun()
