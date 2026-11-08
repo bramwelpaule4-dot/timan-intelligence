@@ -33,6 +33,7 @@ SESSION_MANAGER = SessionManager(require_versioned_sessions=True)
 
 # A pending second-factor challenge expires after five minutes.
 PENDING_TOTP_TIMEOUT_SECONDS = 5 * 60
+PENDING_AUTHENTICATION_EXPIRED_KEY = "timanstat_pending_authentication_expired"
 
 LOGIN_IDENTIFIER_KEY = "timanstat_login_identifier"
 LOGIN_STEP_KEY = "timanstat_login_step"
@@ -137,6 +138,7 @@ def _create_pending_authentication(
 
     now = time.monotonic()
 
+    session_state.pop(PENDING_AUTHENTICATION_EXPIRED_KEY, None)
     session_state["pending_authentication"] = True
     session_state["pending_user_id"] = user_id.strip()
     session_state["pending_username"] = username.strip().casefold()
@@ -187,11 +189,12 @@ def is_totp_pending() -> bool:
 
     now = time.monotonic()
 
-    if (
-        authenticated_at > now
-        or expires_at <= now
-        or expires_at <= authenticated_at
-    ):
+    if authenticated_at > now or expires_at <= authenticated_at:
+        _clear_pending_authentication(session_state)
+        return False
+
+    if expires_at <= now:
+        session_state[PENDING_AUTHENTICATION_EXPIRED_KEY] = True
         _clear_pending_authentication(session_state)
         return False
 
@@ -261,6 +264,7 @@ def authenticate_user(username: str, password: str) -> bool:
 
     # Never allow an existing authenticated session to survive a new
     # password-login attempt.
+    st.session_state.pop(PENDING_AUTHENTICATION_EXPIRED_KEY, None)
     SESSION_MANAGER.clear_session(st.session_state)
     _clear_pending_authentication(st.session_state)
 
@@ -509,6 +513,7 @@ def logout() -> None:
 
     SESSION_MANAGER.clear_session(st.session_state)
     _clear_pending_authentication(st.session_state)
+    st.session_state.pop(PENDING_AUTHENTICATION_EXPIRED_KEY, None)
 
 
 def render_login() -> None:
@@ -517,6 +522,12 @@ def render_login() -> None:
     if is_authenticated():
         st.success("You are already signed in.")
         return
+
+    if st.session_state.pop(PENDING_AUTHENTICATION_EXPIRED_KEY, False):
+        st.info(
+            "Your verification session has expired. Please sign in again "
+            "to receive a new authenticator challenge."
+        )
 
     if is_totp_pending():
         st.subheader("Verify it's you")
