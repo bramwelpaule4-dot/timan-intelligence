@@ -197,6 +197,16 @@ class DarajaAdapter:
         payment = dict(payment)
         if payment["currency"] != "KES":
             raise DarajaError("M-Pesa payment ledger currency is invalid.")
+
+        # Daraja callbacks are unsigned. Query Safaricom for every outcome,
+        # including failures, so a forged callback cannot cancel a live attempt.
+        query = self._query(checkout_id)
+        try:
+            confirmed_code = int(query["ResultCode"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise DarajaError("Safaricom status query did not return a transaction result.") from exc
+        if confirmed_code != result_code:
+            raise DarajaError("Callback result does not match Safaricom's transaction status.")
         if result_code != 0:
             return PaymentNotification(
                 provider_event_id=checkout_id, payment_transaction_id=payment["id"],
@@ -205,9 +215,7 @@ class DarajaAdapter:
                 failure_code=str(result_code),
                 failure_message=str(callback.get("ResultDesc", "M-Pesa payment failed"))[:500],
             )
-        # A callback is not signed. Never settle a success based on it alone.
-        query = self._query(checkout_id)
-        if str(query.get("ResponseCode", "")) != "0" or str(query.get("ResultCode", "")) != "0":
+        if str(query.get("ResponseCode", "")) != "0":
             raise DarajaError("Safaricom status query has not confirmed successful payment.")
         metadata = callback.get("CallbackMetadata", {}).get("Item", [])
         fields = {item.get("Name"): item.get("Value") for item in metadata if isinstance(item, dict)}
@@ -223,7 +231,6 @@ class DarajaAdapter:
             status="succeeded", amount_minor=int(payment["amount_minor"]),
             currency="KES", provider_reference=receipt,
         )
-
 
 def configure_daraja(adapter=None):
     """Register the configured Daraja adapter for webhook processing."""
