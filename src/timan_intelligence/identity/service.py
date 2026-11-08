@@ -14,6 +14,7 @@ from timan_intelligence.database.connection import (
     database_connection,
     get_database_type,
 )
+from timan_intelligence.security.distributed_rate_limit import DatabaseRateLimiter
 
 
 PASSWORD_SCRYPT_N = 2**14
@@ -23,6 +24,9 @@ PASSWORD_SALT_BYTES = 16
 PASSWORD_KEY_BYTES = 64
 
 PASSWORD_MAX_BYTES = 1024
+
+# Five incorrect current-password attempts trigger a 15-minute lockout.
+PASSWORD_CHANGE_RATE_LIMITER = DatabaseRateLimiter(scope="password_change")
 
 
 def _new_id() -> str:
@@ -355,6 +359,15 @@ def change_password(
         raise ValueError("A valid new password is required.")
 
     user_id = user_id.strip()
+
+    try:
+        if PASSWORD_CHANGE_RATE_LIMITER.is_locked(user_id):
+            return False
+    except Exception as exc:
+        raise RuntimeError(
+            "Password-change security checks are unavailable."
+        ) from exc
+
     p = _placeholder()
 
     with database_connection() as connection:
@@ -374,6 +387,12 @@ def change_password(
         current_hash = user["password_hash"]
 
         if not _verify_password(current_password, current_hash):
+            try:
+                PASSWORD_CHANGE_RATE_LIMITER.record_failure(user_id)
+            except Exception as exc:
+                raise RuntimeError(
+                    "Password-change security checks are unavailable."
+                ) from exc
             return False
 
         if _verify_password(new_password, current_hash):
@@ -404,6 +423,13 @@ def change_password(
 
         if updated.rowcount != 1:
             return False
+
+    try:
+        PASSWORD_CHANGE_RATE_LIMITER.record_success(user_id)
+    except Exception:
+        # The password update is already committed. A limiter cleanup
+        # failure must not report a successful password change as failed.
+        pass
 
     return True
 
