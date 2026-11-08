@@ -26,6 +26,9 @@ class FakeStreamlit:
         self.writes = []
         self.buttons = []
         self.query_params = {}
+        self.checkbox_value = False
+        self.checkboxes = []
+        self.text_input_options = []
 
     def button(self, label, *args, **kwargs):
         self.buttons.append(label)
@@ -41,9 +44,14 @@ class FakeStreamlit:
         return nullcontext()
 
     def text_input(self, *args, **kwargs):
+        self.text_input_options.append((args, kwargs.copy()))
         if self.inputs:
             return self.inputs.pop(0)
         return ""
+
+    def checkbox(self, label, *args, **kwargs):
+        self.checkboxes.append((label, kwargs.copy()))
+        return self.checkbox_value
 
     def form_submit_button(self, *args, **kwargs):
         return self.submitted
@@ -550,3 +558,49 @@ def test_password_reset_link_opens_recovery_form_directly(
     assert fake_streamlit.session_state[
         auth_ui.AUTHENTICATION_VIEW_KEY
     ] == "password_recovery"
+
+@pytest.mark.parametrize(
+    ("show_password", "expected_type"),
+    [
+        (False, "password"),
+        (True, "default"),
+    ],
+)
+def test_registration_password_visibility_control(
+    fake_streamlit,
+    show_password,
+    expected_type,
+):
+    """Both registration password fields follow the visibility toggle."""
+
+    fake_streamlit.submitted = False
+    fake_streamlit.checkbox_value = show_password
+
+    auth_ui.render_registration()
+
+    assert fake_streamlit.checkboxes == [
+        (
+            "Show passwords",
+            {"key": "timanstat_show_registration_passwords"},
+        )
+    ]
+
+    password_fields = [
+        (args[0], kwargs)
+        for args, kwargs in fake_streamlit.text_input_options
+        if args and args[0] in {"Password", "Confirm password"}
+    ]
+
+    assert [label for label, _ in password_fields] == [
+        "Password",
+        "Confirm password",
+    ]
+    assert all(
+        kwargs["type"] == expected_type
+        for _, kwargs in password_fields
+    )
+    assert all(
+        kwargs["autocomplete"] == "new-password"
+        for _, kwargs in password_fields
+    )
+
