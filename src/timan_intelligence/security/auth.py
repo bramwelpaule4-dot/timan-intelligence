@@ -15,7 +15,10 @@ from timan_intelligence.identity.service import (
 )
 from timan_intelligence.security.distributed_rate_limit import DatabaseRateLimiter
 from timan_intelligence.security.recovery_codes import consume_recovery_code
-from timan_intelligence.security.session import SessionManager
+from timan_intelligence.security.session import (
+    SESSION_EXPIRED_KEY,
+    SessionManager,
+)
 from timan_intelligence.security.totp_service import (
     TOTPServiceError,
     verify_totp_for_user,
@@ -541,6 +544,7 @@ def logout() -> None:
     SESSION_MANAGER.clear_session(st.session_state)
     _clear_pending_authentication(st.session_state)
     st.session_state.pop(PENDING_AUTHENTICATION_EXPIRED_KEY, None)
+    st.session_state.pop(SESSION_EXPIRED_KEY, None)
 
 
 def render_login() -> None:
