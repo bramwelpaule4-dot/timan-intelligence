@@ -121,6 +121,14 @@ def consume_recovery_code(user_id: str, code: str) -> bool:
         totp_attempt_limiter.record_failure(user_id, "recovery")
         return False
 
+    try:
+        if is_security_reauthentication_locked(user_id):
+            return None
+    except TOTPServiceError as exc:
+        raise RecoveryCodeError(
+            "Account security checks are temporarily unavailable."
+        ) from exc
+
     p = _placeholder()
     with database_connection() as connection:
         result = connection.execute(
@@ -187,7 +195,13 @@ def regenerate_recovery_codes(
     """Regenerate codes after verifying the password and a fresh TOTP code."""
 
     from timan_intelligence.identity.service import _verify_password
-    from timan_intelligence.security.totp_service import verify_totp_for_user
+    from timan_intelligence.security.totp_service import (
+        TOTPServiceError,
+        _clear_security_reauthentication_failures,
+        _record_security_reauthentication_failure,
+        is_security_reauthentication_locked,
+        verify_totp_for_user,
+    )
 
     user_id = _validate_user_id(user_id)
 
@@ -212,7 +226,16 @@ def regenerate_recovery_codes(
             (user_id,),
         ).fetchone()
 
-    if user is None or not _verify_password(current_password, user["password_hash"]):
+    if user is None:
+        return None
+
+    if not _verify_password(current_password, user["password_hash"]):
+        try:
+            _record_security_reauthentication_failure(user_id)
+        except TOTPServiceError as exc:
+            raise RecoveryCodeError(
+                "Account security checks are temporarily unavailable."
+            ) from exc
         return None
 
     compact_code = _normalise_code(authenticator_code)
@@ -228,4 +251,6 @@ def regenerate_recovery_codes(
     if not verified:
         return None
 
-    return generate_recovery_codes(user_id)
+    new_codes = generate_recovery_codes(user_id)
+    _clear_security_reauthentication_failures(user_id)
+    return new_codes
