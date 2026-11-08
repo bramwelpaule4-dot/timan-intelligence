@@ -32,6 +32,7 @@ EXPECTED_MIGRATION_HISTORY = [
     (15, "billing_subscription_change_requests"),
     (16, "unique_subscription_upgrade_invoice"),
     (17, "payment_gateway_sessions"),
+    (18, "mpesa_transaction_reconciliation"),
 ]
 
 
