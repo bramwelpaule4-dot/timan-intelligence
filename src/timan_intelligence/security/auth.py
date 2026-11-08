@@ -29,7 +29,7 @@ from timan_intelligence.security.totp_rate_limit import (
 )
 
 
-VALID_ROLES = {"developer", "admin", "user"}
+VALID_ROLES = {"super_admin", "developer", "admin", "user"}
 
 # Five failed password attempts within 15 minutes trigger a 15-minute lockout.
 LOGIN_RATE_LIMITER = DatabaseRateLimiter(scope="login")
