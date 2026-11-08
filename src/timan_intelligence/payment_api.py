@@ -22,6 +22,8 @@ app = FastAPI(
 async def mpesa_callback(request: Request):
     """Receive Safaricom's callback; settlement requires a successful status query."""
     raw_body = await request.body()
+    if len(raw_body) > 65536:
+        return JSONResponse({"ResultCode": 1, "ResultDesc": "Callback too large"}, status_code=413)
     try:
         handle_mpesa_callback(raw_body)
     except DarajaError:
@@ -37,6 +39,8 @@ async def mpesa_callback(request: Request):
 async def mpesa_transaction_status_result(request: Request):
     """Receive Safaricom's asynchronous transaction-status result."""
     raw_body = await request.body()
+    if len(raw_body) > 65536:
+        return JSONResponse({"ResultCode": 1, "ResultDesc": "Result too large"}, status_code=413)
     try:
         handle_mpesa_transaction_status_callback(raw_body)
     except DarajaError:
@@ -50,6 +54,8 @@ async def mpesa_transaction_status_result(request: Request):
 async def mpesa_transaction_status_timeout(request: Request):
     """Receive a Safaricom transaction-status queue timeout."""
     raw_body = await request.body()
+    if len(raw_body) > 65536:
+        return JSONResponse({"ResultCode": 1, "ResultDesc": "Timeout too large"}, status_code=413)
     try:
         handle_mpesa_transaction_status_timeout(raw_body)
     except DarajaError:
