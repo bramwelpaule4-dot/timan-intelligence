@@ -591,9 +591,13 @@ def render_login() -> None:
     st.caption(f"Signing in as {identifier}")
 
     with st.form("timanstat_login_password_form"):
+        show_password = st.checkbox(
+            "Show password",
+            key="timanstat_show_login_password",
+        )
         password = st.text_input(
             "Password",
-            type="password",
+            type="default" if show_password else "password",
             autocomplete="current-password",
         )
         submitted = st.form_submit_button(
