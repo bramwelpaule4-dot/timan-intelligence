@@ -49,18 +49,21 @@ def render_password_change() -> None:
             "Current password",
             type="password",
             max_chars=1024,
+            autocomplete="current-password",
         )
 
         new_password = st.text_input(
             "New password",
             type="password",
             max_chars=1024,
+            autocomplete="new-password",
         )
 
         confirm_password = st.text_input(
             "Confirm new password",
             type="password",
             max_chars=1024,
+            autocomplete="new-password",
         )
 
         submitted = st.form_submit_button(
