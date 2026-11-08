@@ -340,12 +340,12 @@ def process_due_subscriptions(
     as_of: datetime | str | None = None,
     batch_size: int = 500,
 ) -> dict[str, int]:
-    """Finalize due trials and subscriptions without extending paid periods.
+    """Apply due approved downgrades, then finalize other expired periods.
 
-    Trial periods become expired. Paid subscriptions become canceled when
-    cancellation was scheduled for period end; otherwise they become expired.
-    A renewal must only be applied after a payment provider confirms payment.
-    This operation is idempotent and safe to run on every application startup.
+    Approved downgrades are applied atomically: the existing paid subscription
+    is expired, the requested plan becomes effective, and the request is marked
+    completed in the same transaction. Repeated or concurrent runs cannot
+    apply the same request twice. Renewals still require confirmed payment.
     """
     if isinstance(batch_size, bool) or not isinstance(batch_size, int):
         raise SubscriptionError("batch_size must be a positive integer.")
@@ -366,8 +366,103 @@ def process_due_subscriptions(
 
     now_text = effective_now.isoformat(timespec="seconds")
     p = _placeholder()
-    counts = {"canceled": 0, "expired": 0}
+    counts = {"canceled": 0, "expired": 0, "downgraded": 0}
 
+    # Apply scheduled downgrades before expiring due subscriptions below.
+    with database_connection() as connection:
+        due_requests = connection.execute(
+            f"""
+            SELECT id
+            FROM subscription_change_requests
+            WHERE status = 'scheduled'
+              AND effective_at IS NOT NULL
+              AND effective_at <= {p}
+            ORDER BY effective_at, id
+            LIMIT {p}
+            """,
+            (now_text, batch_size),
+        ).fetchall()
+
+    for due_request in due_requests:
+        with database_connection() as connection:
+            request = connection.execute(
+                f"""
+                SELECT *
+                FROM subscription_change_requests
+                WHERE id = {p} AND status = 'scheduled'
+                """,
+                (due_request["id"],),
+            ).fetchone()
+            if request is None:
+                continue
+            request = dict(request)
+            if request.get("user_id"):
+                owner_column, owner_id = "user_id", request["user_id"]
+            else:
+                owner_column, owner_id = "organisation_id", request["organisation_id"]
+
+            current = connection.execute(
+                f"""
+                SELECT id
+                FROM subscriptions
+                WHERE {owner_column} = {p}
+                  AND plan_code = {p}
+                  AND status IN ('trialing', 'active', 'past_due')
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+                """,
+                (owner_id, request["current_plan_code"]),
+            ).fetchone()
+            if current is None:
+                # An administrator may have reassigned the subscription since
+                # approval. Leave the request scheduled for explicit review.
+                continue
+
+            changed = connection.execute(
+                f"""
+                UPDATE subscriptions
+                SET status = 'expired', updated_at = {p}
+                WHERE {owner_column} = {p}
+                  AND plan_code = {p}
+                  AND status IN ('trialing', 'active', 'past_due')
+                """,
+                (now_text, owner_id, request["current_plan_code"]),
+            )
+            if changed.rowcount < 1:
+                continue
+
+            completed = connection.execute(
+                f"""
+                UPDATE subscription_change_requests
+                SET status = 'completed', updated_at = {p}
+                WHERE id = {p} AND status = 'scheduled'
+                """,
+                (now_text, request["id"]),
+            )
+            if completed.rowcount != 1:
+                raise SubscriptionError(
+                    "A scheduled plan change was modified during processing."
+                )
+
+            replacement_id = str(uuid.uuid4())
+            connection.execute(
+                f"""
+                INSERT INTO subscriptions (
+                    id, {owner_column}, plan_code, status, started_at,
+                    current_period_start, current_period_end,
+                    cancel_at_period_end
+                )
+                VALUES ({p}, {p}, {p}, 'active', {p}, {p}, NULL, FALSE)
+                """,
+                (
+                    replacement_id, owner_id, request["requested_plan_code"],
+                    now_text, now_text,
+                ),
+            )
+            counts["downgraded"] += 1
+
+    # Finalize any other due trial/paid periods. Completed downgrade requests
+    # have already replaced their old subscription and are no longer current.
     with database_connection() as connection:
         rows = connection.execute(
             f"""
@@ -386,7 +481,6 @@ def process_due_subscriptions(
             try:
                 due = _utc_datetime(str(record["current_period_end"])) <= effective_now
             except SubscriptionError:
-                # A malformed persisted period must not grant entitlement.
                 due = True
             if not due:
                 continue
@@ -410,11 +504,8 @@ def process_due_subscriptions(
                   AND status IN ('trialing', 'active', 'past_due')
                 """,
                 (
-                    target_status,
-                    target_status,
-                    canceled_at,
-                    now_text,
-                    record["id"],
+                    target_status, target_status, canceled_at,
+                    now_text, record["id"],
                 ),
             )
             if result.rowcount == 1:
@@ -625,9 +716,10 @@ def review_plan_change_request(
 
         effective_at = record.get("effective_at")
         if new_status == "scheduled" and not effective_at:
-            # A Free-to-paid transition is an upgrade, so a downgrade without
-            # a recorded paid period is not expected; require manual review.
-            new_status = "scheduled"
+            raise SubscriptionError(
+                "A downgrade can only be approved when the current subscription "
+                "has a recorded billing-period end."
+            )
 
         result = connection.execute(
             f"""

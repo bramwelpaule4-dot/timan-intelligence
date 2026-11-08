@@ -222,7 +222,7 @@ def test_due_trial_is_expired_and_history_is_preserved(subscription_database):
         current_period_start=(now - timedelta(days=8)).isoformat(),
         current_period_end=(now - timedelta(days=1)).isoformat(),
     )
-    assert process_due_subscriptions(as_of=now) == {"canceled": 0, "expired": 1}
+    assert process_due_subscriptions(as_of=now) == {"canceled": 0, "expired": 1, "downgraded": 0}
     history = get_subscription_history(user_id="user-1")
     assert history[0]["id"] == trial_id
     assert history[0]["status"] == "expired"
@@ -239,7 +239,7 @@ def test_due_paid_subscription_obeys_period_end_cancellation(subscription_databa
         current_period_end=(now - timedelta(seconds=1)).isoformat(),
         cancel_at_period_end=True,
     )
-    assert process_due_subscriptions(as_of=now) == {"canceled": 1, "expired": 0}
+    assert process_due_subscriptions(as_of=now) == {"canceled": 1, "expired": 0, "downgraded": 0}
     record = get_subscription_history(user_id="user-1")[0]
     assert record["status"] == "canceled"
     assert record["canceled_at"] is not None
@@ -255,7 +255,7 @@ def test_due_paid_subscription_without_renewal_becomes_expired(subscription_data
         current_period_start=(now - timedelta(days=31)).isoformat(),
         current_period_end=(now - timedelta(seconds=1)).isoformat(),
     )
-    assert process_due_subscriptions(as_of=now) == {"canceled": 0, "expired": 1}
+    assert process_due_subscriptions(as_of=now) == {"canceled": 0, "expired": 1, "downgraded": 0}
     record = get_subscription_history(user_id="user-1")[0]
     assert record["status"] == "expired"
     assert record["canceled_at"] is None
@@ -275,8 +275,8 @@ def test_lifecycle_processing_is_idempotent_and_leaves_future_periods_unchanged(
         plan_code="enterprise",
         current_period_end=(now + timedelta(days=5)).isoformat(),
     )
-    assert process_due_subscriptions(as_of=now) == {"canceled": 0, "expired": 1}
-    assert process_due_subscriptions(as_of=now) == {"canceled": 0, "expired": 0}
+    assert process_due_subscriptions(as_of=now) == {"canceled": 0, "expired": 1, "downgraded": 0}
+    assert process_due_subscriptions(as_of=now) == {"canceled": 0, "expired": 0, "downgraded": 0}
     due_record = get_subscription_history(user_id="user-1")[0]
     assert due_record["id"] == due_id
     assert due_record["status"] == "expired"
@@ -430,3 +430,83 @@ def test_organisation_plan_change_requires_active_membership(subscription_databa
     request = list_plan_change_requests(organisation_id="org-1")[0]
     assert request["id"] == request_id
     assert request["change_type"] == "upgrade"
+
+
+def test_scheduled_downgrade_applies_only_at_period_end(subscription_database):
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    period_end = now + timedelta(days=2)
+    assign_subscription(
+        user_id="user-1",
+        plan_code="professional",
+        status="active",
+        current_period_start=(now - timedelta(days=28)).isoformat(),
+        current_period_end=period_end.isoformat(),
+    )
+    request_id = request_plan_change(
+        requested_by="user-1",
+        requested_plan_code="free",
+        user_id="user-1",
+    )
+    with database_connection() as connection:
+        connection.execute("UPDATE users SET role = 'admin' WHERE id = ?", ("user-1",))
+    assert review_plan_change_request(
+        request_id,
+        reviewer_id="user-1",
+        decision="approve",
+        notes="Approved at the end of the paid period.",
+    ) == "scheduled"
+
+    before_end = period_end - timedelta(seconds=1)
+    assert process_due_subscriptions(as_of=before_end) == {
+        "canceled": 0, "expired": 0, "downgraded": 0
+    }
+    assert get_effective_plan_code(user_id="user-1") == "professional"
+    assert list_plan_change_requests(user_id="user-1")[0]["status"] == "scheduled"
+
+    after_end = period_end + timedelta(seconds=1)
+    assert process_due_subscriptions(as_of=after_end) == {
+        "canceled": 0, "expired": 0, "downgraded": 1
+    }
+    assert get_effective_plan_code(user_id="user-1") == "free"
+    request = list_plan_change_requests(user_id="user-1")[0]
+    assert request["status"] == "completed"
+    history = get_subscription_history(user_id="user-1")
+    assert len(history) == 2
+    assert {item["status"] for item in history} == {"expired", "active"}
+    assert next(item for item in history if item["status"] == "active")["plan_code"] == "free"
+
+
+def test_completed_downgrade_is_not_applied_twice_and_allows_new_request(
+    subscription_database,
+):
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    period_end = now + timedelta(days=1)
+    assign_subscription(
+        user_id="user-1",
+        plan_code="professional",
+        status="active",
+        current_period_start=(now - timedelta(days=29)).isoformat(),
+        current_period_end=period_end.isoformat(),
+    )
+    request_id = request_plan_change(
+        requested_by="user-1",
+        requested_plan_code="free",
+        user_id="user-1",
+    )
+    with database_connection() as connection:
+        connection.execute("UPDATE users SET role = 'admin' WHERE id = ?", ("user-1",))
+    review_plan_change_request(
+        request_id,
+        reviewer_id="user-1",
+        decision="approve",
+        notes="Approved.",
+    )
+    as_of = period_end + timedelta(seconds=1)
+    assert process_due_subscriptions(as_of=as_of)["downgraded"] == 1
+    assert process_due_subscriptions(as_of=as_of)["downgraded"] == 0
+    next_request = request_plan_change(
+        requested_by="user-1",
+        requested_plan_code="professional",
+        user_id="user-1",
+    )
+    assert next_request
