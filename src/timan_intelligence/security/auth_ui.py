@@ -19,6 +19,7 @@ from timan_intelligence.identity.email_notifications import (
 )
 from timan_intelligence.identity.service import register_user
 from timan_intelligence.security.auth import render_login
+from timan_intelligence.security.session import SESSION_EXPIRED_KEY
 
 
 logger = logging.getLogger(__name__)
@@ -532,6 +533,13 @@ def render_authentication() -> None:
         "Secure access to statistical analysis, research "
         "and data intelligence."
     )
+
+    expired_reason = st.session_state.pop(SESSION_EXPIRED_KEY, None)
+    if expired_reason in {"idle", "absolute"}:
+        st.info(
+            "Your TimanStat session expired for security. "
+            "Please sign in again to continue."
+        )
 
     if "authenticated" in st.session_state:
         from timan_intelligence.security.auth import is_authenticated
