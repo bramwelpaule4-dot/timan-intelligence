@@ -20,7 +20,8 @@ from timan_intelligence.database.migrations.versions import (
     v0009_subscriptions,
     v0010_entitlement_usage,
     v0011_subscription_change_requests,
-    v0012_completed_subscription_changes,\n    v0013_billing_records,
+    v0012_completed_subscription_changes,
+    v0013_billing_records,
 )
 
 
