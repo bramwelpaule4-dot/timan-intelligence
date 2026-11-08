@@ -657,6 +657,39 @@ def test_expired_pending_authentication_is_rejected(
     assert mock_session == {}
 
 
+
+def test_pending_totp_challenge_is_revoked_when_account_version_changes(
+    monkeypatch,
+    mock_session,
+    valid_account,
+):
+    """A changed account security version invalidates the pending MFA challenge."""
+
+    account = dict(valid_account)
+    account["totp_enabled"] = True
+    versions = [0]
+    manager = SessionManager(
+        session_version_loader=lambda user_id: versions[0],
+        require_versioned_sessions=True,
+    )
+    monkeypatch.setattr(auth, "SESSION_MANAGER", manager)
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        lambda identifier, password: account,
+    )
+
+    assert auth.authenticate_user("testuser", VALID_PASSWORD) is False
+    assert auth.is_totp_pending() is True
+
+    versions[0] = 1
+
+    assert auth.is_totp_pending() is False
+    assert mock_session[auth.PENDING_AUTHENTICATION_REVOKED_KEY] is True
+    assert "pending_authentication" not in mock_session
+    assert "authenticated" not in mock_session
+
+
 def test_logout_clears_full_and_pending_authentication(mock_session):
     """Logout must clear authentication while preserving unrelated state."""
 
@@ -676,6 +709,7 @@ def test_logout_clears_full_and_pending_authentication(mock_session):
             "pending_session_version": 0,
             "pending_authenticated_at": time.monotonic(),
             "pending_expires_at": time.monotonic() + 300,
+            auth.PENDING_AUTHENTICATION_REVOKED_KEY: True,
             auth.LOGIN_IDENTIFIER_KEY: "private@example.com",
             auth.LOGIN_STEP_KEY: "password",
             "timanstat_show_login_password": True,
@@ -700,6 +734,7 @@ def test_logout_clears_full_and_pending_authentication(mock_session):
         "pending_session_version",
         "pending_authenticated_at",
         "pending_expires_at",
+        auth.PENDING_AUTHENTICATION_REVOKED_KEY,
         auth.LOGIN_IDENTIFIER_KEY,
         auth.LOGIN_STEP_KEY,
         "timanstat_show_login_password",
