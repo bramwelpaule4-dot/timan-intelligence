@@ -508,7 +508,9 @@ def test_pending_challenge_is_invalidated_when_account_version_changes(
     assert auth.is_totp_pending() is False
     assert auth.verify_pending_totp("123456") is False
     assert verification_calls == []
-    assert mock_session == {}
+    assert mock_session == {
+        auth.PENDING_AUTHENTICATION_REVOKED_KEY: True
+    }
 
 
 def test_mfa_promotion_rejects_version_change_during_session_creation(
