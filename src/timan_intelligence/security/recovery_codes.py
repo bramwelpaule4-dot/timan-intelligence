@@ -121,14 +121,6 @@ def consume_recovery_code(user_id: str, code: str) -> bool:
         totp_attempt_limiter.record_failure(user_id, "recovery")
         return False
 
-    try:
-        if is_security_reauthentication_locked(user_id):
-            return None
-    except TOTPServiceError as exc:
-        raise RecoveryCodeError(
-            "Account security checks are temporarily unavailable."
-        ) from exc
-
     p = _placeholder()
     with database_connection() as connection:
         result = connection.execute(
@@ -212,6 +204,14 @@ def regenerate_recovery_codes(
         or not authenticator_code.strip()
     ):
         return None
+
+    try:
+        if is_security_reauthentication_locked(user_id):
+            return None
+    except TOTPServiceError as exc:
+        raise RecoveryCodeError(
+            "Account security checks are temporarily unavailable."
+        ) from exc
 
     p = _placeholder()
     with database_connection() as connection:
