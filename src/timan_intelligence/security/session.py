@@ -18,6 +18,7 @@ from timan_intelligence.database.connection import (
 SESSION_IDLE_TIMEOUT_SECONDS = 30 * 60
 SESSION_ABSOLUTE_TIMEOUT_SECONDS = 12 * 60 * 60
 SESSION_EXPIRED_KEY = "timanstat_session_expired"
+SESSION_REVOKED_KEY = "timanstat_session_revoked"
 
 SESSION_AUTHENTICATION_KEYS = (
     "authenticated",
@@ -207,6 +208,7 @@ class SessionManager:
 
         now = self._clock()
 
+        session_state.pop(SESSION_REVOKED_KEY, None)
         session_state["authenticated"] = True
         session_state["username"] = username.strip().casefold()
         session_state["role"] = role
@@ -254,7 +256,11 @@ class SessionManager:
         ):
             return False
 
-        return current_version == session_version
+        if current_version != session_version:
+            session_state[SESSION_REVOKED_KEY] = True
+            return False
+
+        return True
 
     def is_valid(self, session_state: MutableMapping) -> bool:
         """Validate a session and refresh its activity timestamp."""
