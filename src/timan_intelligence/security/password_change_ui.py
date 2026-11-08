@@ -6,7 +6,10 @@ import logging
 
 import streamlit as st
 
-from timan_intelligence.identity.service import change_password
+from timan_intelligence.identity.service import (
+    PASSWORD_CHANGE_RATE_LIMITER,
+    change_password,
+)
 from timan_intelligence.security.auth import (
     is_authenticated,
     logout,
@@ -33,6 +36,27 @@ def render_password_change() -> None:
             "Your account session is invalid. "
             "Please sign in again."
         )
+        return
+
+    try:
+        password_change_locked = PASSWORD_CHANGE_RATE_LIMITER.is_locked(user_id)
+    except Exception as exc:
+        logger.error(
+            "TimanStat password-change rate-limit check failed. error_type=%s",
+            type(exc).__name__,
+        )
+        st.error(
+            "Password changes are temporarily unavailable. "
+            "Please try again later."
+        )
+        return
+
+    if password_change_locked:
+        st.error(
+            "Too many unsuccessful password-change attempts. "
+            "For your security, this action is temporarily paused."
+        )
+        st.info("Please wait 15 minutes before trying again.")
         return
 
     st.write(
@@ -117,11 +141,25 @@ def render_password_change() -> None:
         return
 
     if not successful:
-        st.error(
-            "The current password is incorrect, or the account "
-            "could not be updated. Check your current password "
-            "and try again."
-        )
+        try:
+            password_change_locked = PASSWORD_CHANGE_RATE_LIMITER.is_locked(
+                user_id
+            )
+        except Exception:
+            password_change_locked = False
+
+        if password_change_locked:
+            st.error(
+                "Too many unsuccessful password-change attempts. "
+                "For your security, this action is temporarily paused."
+            )
+            st.info("Please wait 15 minutes before trying again.")
+        else:
+            st.error(
+                "The current password is incorrect, or the account "
+                "could not be updated. Check your current password "
+                "and try again."
+            )
         return
 
     # The backend has incremented session_version. Explicitly clear
