@@ -1,7 +1,7 @@
 # M-Pesa Daraja integration
 
 TimanStat supports Kenya M-Pesa Express (STK Push) for KES invoices. The
-integration uses Safaricom's Daraja OAuth, STK Push and STK Push Query APIs.
+integration uses Safaricom's Daraja OAuth, STK Push, STK Push Query and Transaction Status APIs.
 The synchronous STK acknowledgement means only that Safaricom accepted the
 request; it is not evidence of payment.
 
