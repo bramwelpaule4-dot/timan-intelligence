@@ -687,7 +687,7 @@ def test_password_reset_request_email_supports_browser_autofill(
 
 
 
-def test_password_reset_request_prefills_email_from_sign_in():
+def test_password_reset_request_prefills_email_from_sign_in(monkeypatch):
     """The recovery form displays the email carried from sign-in."""
 
     from timan_intelligence.security.auth_ui import (
@@ -698,7 +698,7 @@ def test_password_reset_request_prefills_email_from_sign_in():
     fake.session_state[PASSWORD_RESET_EMAIL_PREFILL_KEY] = (
         "person@example.com"
     )
-    password_reset_ui.st = fake
+    monkeypatch.setattr(password_reset_ui, "st", fake)
 
     password_reset_ui.render_password_reset_request()
 
