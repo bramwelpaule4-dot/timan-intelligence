@@ -188,16 +188,24 @@ def render_password_reset_form(token: str) -> None:
     )
 
     with st.form("timanstat_password_reset_completion_form"):
+        show_passwords = st.checkbox(
+            "Show passwords",
+            key="timanstat_show_password_reset_passwords",
+        )
+        password_input_type = "default" if show_passwords else "password"
+
         new_password = st.text_input(
             "New password",
-            type="password",
+            type=password_input_type,
             max_chars=1024,
+            autocomplete="new-password",
         )
 
         confirm_password = st.text_input(
             "Confirm new password",
-            type="password",
+            type=password_input_type,
             max_chars=1024,
+            autocomplete="new-password",
         )
 
         submitted = st.form_submit_button(
