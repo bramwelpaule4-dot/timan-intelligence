@@ -31,6 +31,7 @@ SESSION_AUTHENTICATION_KEYS = (
 )
 
 VALID_SESSION_ROLES = {
+    "super_admin",
     "developer",
     "admin",
     "user",
