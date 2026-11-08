@@ -448,3 +448,56 @@ def test_locked_mfa_form_disables_code_entry_and_submission(
         "account. Please wait 15 minutes before trying again."
     ]
     assert "Cancel sign in" in login_ui.buttons
+
+
+def test_locked_password_step_disables_credentials_and_sign_in(
+    login_ui,
+    monkeypatch,
+):
+    """A locked identifier cannot submit another password attempt."""
+
+    login_ui.session_state.update(
+        {
+            auth.LOGIN_IDENTIFIER_KEY: "analyst@example.com",
+            auth.LOGIN_STEP_KEY: "password",
+        }
+    )
+    login_ui.submitted = True
+    login_ui.inputs = ["analyst@example.com", "WrongPassword123!"]
+    monkeypatch.setattr(
+        auth,
+        "is_login_temporarily_locked",
+        lambda identifier: identifier == "analyst@example.com",
+    )
+    authentication_calls = []
+    monkeypatch.setattr(
+        auth,
+        "authenticate_user",
+        lambda identifier, password: authentication_calls.append(
+            (identifier, password)
+        ) or False,
+    )
+
+    auth.render_login()
+
+    username_options = next(
+        options
+        for options in login_ui.text_input_options
+        if options.get("autocomplete") == "username"
+    )
+    password_options = next(
+        options
+        for options in login_ui.text_input_options
+        if options.get("autocomplete") == "current-password"
+    )
+    assert username_options["disabled"] is True
+    assert password_options["disabled"] is True
+    assert login_ui.checkboxes[0][1]["disabled"] is True
+    assert login_ui.submit_button_options[-1]["disabled"] is True
+    assert authentication_calls == []
+    assert login_ui.errors == [
+        "Too many unsuccessful sign-in attempts. For your "
+        "security, sign-in is temporarily paused for this "
+        "identifier. Please wait 15 minutes before trying again."
+    ]
+    assert "Use a different account" in login_ui.buttons
