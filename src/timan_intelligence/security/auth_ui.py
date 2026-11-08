@@ -150,11 +150,13 @@ def render_registration() -> None:
         full_name = st.text_input(
             "Full name",
             max_chars=150,
+            autocomplete="name",
         )
 
         username = st.text_input(
             "Username",
             max_chars=30,
+            autocomplete="username",
             help=(
                 "Use 3–30 lowercase letters, numbers, dots, "
                 "underscores or hyphens."
@@ -164,6 +166,7 @@ def render_registration() -> None:
         email = st.text_input(
             "Email address",
             max_chars=254,
+            autocomplete="email",
         )
 
         show_password = st.checkbox(
