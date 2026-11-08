@@ -563,16 +563,28 @@ def render_login() -> None:
             "or use one of your recovery codes to finish signing in."
         )
 
+        mfa_locked = is_pending_second_factor_temporarily_locked()
+        if mfa_locked:
+            st.error(
+                "Too many unsuccessful verification attempts. For your "
+                "security, verification is temporarily paused for this "
+                "account. Please wait 15 minutes before trying again."
+            )
+
         with st.form("timanstat_totp_login_form"):
             code = st.text_input(
                 "Authenticator code or recovery code",
                 max_chars=40,
                 placeholder="Enter your verification code",
                 autocomplete="one-time-code",
+                disabled=mfa_locked,
             )
-            submitted = st.form_submit_button("Verify and sign in")
+            submitted = st.form_submit_button(
+                "Verify and sign in",
+                disabled=mfa_locked,
+            )
 
-        if submitted:
+        if submitted and not mfa_locked:
             if verify_pending_second_factor(code):
                 st.success("Authentication successful.")
                 st.rerun()
