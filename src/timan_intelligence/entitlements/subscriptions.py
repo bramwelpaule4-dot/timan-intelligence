@@ -385,6 +385,23 @@ def process_due_subscriptions(
 
     for due_request in due_requests:
         with database_connection() as connection:
+            # Claim the scheduled request inside this transaction. The
+            # conditional write serializes concurrent workers on PostgreSQL
+            # and SQLite; only one worker can proceed while it remains due.
+            claimed = connection.execute(
+                f"""
+                UPDATE subscription_change_requests
+                SET updated_at = {p}
+                WHERE id = {p}
+                  AND status = 'scheduled'
+                  AND effective_at IS NOT NULL
+                  AND effective_at <= {p}
+                """,
+                (now_text, due_request["id"], now_text),
+            )
+            if claimed.rowcount != 1:
+                continue
+
             request = connection.execute(
                 f"""
                 SELECT *
@@ -422,11 +439,10 @@ def process_due_subscriptions(
                 f"""
                 UPDATE subscriptions
                 SET status = 'expired', updated_at = {p}
-                WHERE {owner_column} = {p}
-                  AND plan_code = {p}
+                WHERE id = {p}
                   AND status IN ('trialing', 'active', 'past_due')
                 """,
-                (now_text, owner_id, request["current_plan_code"]),
+                (now_text, current["id"]),
             )
             if changed.rowcount < 1:
                 continue

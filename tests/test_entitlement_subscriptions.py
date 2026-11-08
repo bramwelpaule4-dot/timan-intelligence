@@ -476,6 +476,49 @@ def test_scheduled_downgrade_applies_only_at_period_end(subscription_database):
     assert next(item for item in history if item["status"] == "active")["plan_code"] == "free"
 
 
+def test_scheduled_downgrade_does_not_replace_reassigned_subscription(
+    subscription_database,
+):
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    period_end = now + timedelta(days=1)
+    assign_subscription(
+        user_id="user-1",
+        plan_code="professional",
+        status="active",
+        current_period_start=(now - timedelta(days=29)).isoformat(),
+        current_period_end=period_end.isoformat(),
+    )
+    request_id = request_plan_change(
+        requested_by="user-1",
+        requested_plan_code="free",
+        user_id="user-1",
+    )
+    with database_connection() as connection:
+        connection.execute(
+            "UPDATE users SET role = 'admin' WHERE id = ?",
+            ("user-1",),
+        )
+    assert review_plan_change_request(
+        request_id,
+        reviewer_id="user-1",
+        decision="approve",
+        notes="Approved.",
+    ) == "scheduled"
+
+    # An administrator reassigns the account before the scheduled date.
+    reassigned_id = assign_subscription(
+        user_id="user-1",
+        plan_code="enterprise",
+        status="active",
+    )
+    result = process_due_subscriptions(as_of=period_end + timedelta(seconds=1))
+
+    assert result["downgraded"] == 0
+    assert get_subscription(user_id="user-1")["id"] == reassigned_id
+    assert get_effective_plan_code(user_id="user-1") == "enterprise"
+    assert list_plan_change_requests(user_id="user-1")[0]["status"] == "scheduled"
+
+
 def test_completed_downgrade_is_not_applied_twice_and_allows_new_request(
     subscription_database,
 ):
