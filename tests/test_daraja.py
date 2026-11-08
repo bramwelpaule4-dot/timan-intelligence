@@ -17,6 +17,19 @@ def test_normalize_kenyan_phone_numbers():
         DarajaAdapter.normalize_phone("12345")
 
 
+def test_production_mode_is_blocked_until_independent_reconciliation_exists():
+    env = {
+        "DARAJA_ENVIRONMENT": "production",
+        "DARAJA_CONSUMER_KEY": "key",
+        "DARAJA_CONSUMER_SECRET": "secret",
+        "DARAJA_BUSINESS_SHORTCODE": "123456",
+        "DARAJA_PASSKEY": "pass",
+        "DARAJA_CALLBACK_URL": "https://example.org/api/v1/payments/mpesa/callback",
+    }
+    with pytest.raises(DarajaError, match="independent Safaricom"):
+        DarajaAdapter(environ=env)._config()
+
+
 def test_daraja_requires_complete_credentials_and_https_callback():
     with pytest.raises(DarajaError, match="must be configured"):
         DarajaAdapter(environ={})._config()
