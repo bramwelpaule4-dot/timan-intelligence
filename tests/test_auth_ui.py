@@ -622,3 +622,22 @@ def test_registration_fields_support_browser_autofill(
     assert options_by_label["Full name"]["autocomplete"] == "name"
     assert options_by_label["Username"]["autocomplete"] == "username"
     assert options_by_label["Email address"]["autocomplete"] == "email"
+
+def test_resend_verification_email_field_supports_browser_autofill(
+    fake_streamlit,
+):
+    """The resend-verification form exposes the email autofill hint."""
+
+    fake_streamlit.submitted = False
+
+    auth_ui.render_resend_verification()
+
+    options_by_label = {
+        args[0]: kwargs
+        for args, kwargs in fake_streamlit.text_input_options
+    }
+    assert (
+        options_by_label["Registered email address"]["autocomplete"]
+        == "email"
+    )
+
