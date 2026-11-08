@@ -44,17 +44,26 @@ def render_subscription_page(
     if organisation_id:
         workspace_label = "Organisation workspace"
         usage_owner = {"organisation_id": organisation_id}
-        current_record = get_subscription(organisation_id=organisation_id)
-        history = get_subscription_history(organisation_id=organisation_id)
-        if current_record is None and not history:
-            # An organisation without its own subscription inherits the
-            # signed-in user's individual plan, while usage remains shared
-            # within the selected organisation billing context.
-            current_record = get_subscription(user_id=user_id)
-            history = get_subscription_history(user_id=user_id)
-            subscription_owner_label = "Personal subscription applied to this workspace"
-        else:
-            subscription_owner_label = "Organisation subscription"
+        organisation_record = get_subscription(organisation_id=organisation_id)
+        organisation_history = get_subscription_history(organisation_id=organisation_id)
+        personal_record = get_subscription(user_id=user_id)
+        personal_history = get_subscription_history(user_id=user_id)
+
+        # Effective entitlements use the organisation plan when active,
+        # otherwise they fall back to the signed-in user's personal plan.
+        current_record = organisation_record or personal_record
+        history = sorted(
+            organisation_history + personal_history,
+            key=lambda item: str(item.get("created_at") or ""),
+            reverse=True,
+        )
+        subscription_owner_label = (
+            "Organisation subscription"
+            if organisation_record
+            else "Personal subscription applied to this workspace"
+            if personal_record
+            else "No active paid subscription"
+        )
     else:
         workspace_label = "Personal account"
         usage_owner = {"user_id": user_id}
@@ -177,6 +186,11 @@ def render_subscription_page(
     if history:
         history_rows = [
             {
+                "Scope": (
+                    "Organisation"
+                    if item.get("organisation_id")
+                    else "Personal"
+                ),
                 "Plan": str(item["plan_code"]).title(),
                 "Status": str(item["status"]).replace("_", " ").title(),
                 "Started": _format_timestamp(item.get("started_at")),
