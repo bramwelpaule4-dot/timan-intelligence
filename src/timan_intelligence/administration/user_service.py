@@ -50,7 +50,9 @@ def _require_user_admin(actor_role: str) -> None:
 
 def _record_user_admin_audit(connection, actor_user_id, action, target_user_id, details):
     """Write an administrative audit event in the account-change transaction."""
-    placeholder = _placeholder()
+    placeholder = (
+        "%s" if connection.__class__.__module__.startswith("psycopg") else "?"
+    )
     connection.execute(
         f"""
         INSERT INTO audit_logs (
