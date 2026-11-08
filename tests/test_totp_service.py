@@ -14,7 +14,9 @@ from timan_intelligence.security.totp_encryption import (
     generate_totp_encryption_key,
 )
 from timan_intelligence.security.totp_service import (
+    SECURITY_REAUTHENTICATION_LIMITER,
     TOTPServiceError,
+    disable_totp_for_user,
     begin_totp_enrolment,
     confirm_totp_enrolment,
     verify_totp_for_user,
@@ -40,6 +42,10 @@ def totp_user(tmp_path, monkeypatch):
     monkeypatch.setenv(
         "TIMANSTAT_TOTP_ENCRYPTION_KEY",
         encryption_key,
+    )
+    monkeypatch.setenv(
+        "TIMANSTAT_RATE_LIMIT_HMAC_KEY",
+        "test-rate-limit-hmac-key-with-at-least-32-bytes",
     )
 
     initialise_database()
@@ -629,3 +635,81 @@ def test_totp_verification_fails_closed_when_rate_limiter_is_unavailable(
     state = _get_user_totp_state(totp_user["user_id"])
     assert state[0] in (True, 1)
     assert state[3] is not None
+
+
+
+def test_totp_disable_password_reauthentication_is_rate_limited(totp_user):
+    """Five incorrect passwords pause both sensitive security operations."""
+
+    user_id = totp_user["user_id"]
+    enrolment = begin_totp_enrolment(user_id)
+    enrolment_code = generate_totp_code(
+        enrolment["secret"],
+        at_time=TEST_TIMESTAMP,
+    )
+    assert confirm_totp_enrolment(
+        user_id,
+        enrolment_code,
+        at_time=TEST_TIMESTAMP,
+    ) is True
+
+    fresh_code = generate_totp_code(
+        enrolment["secret"],
+        at_time=TEST_TIMESTAMP + 30,
+    )
+    for _ in range(5):
+        assert disable_totp_for_user(
+            user_id,
+            "WrongPassword123!",
+            fresh_code,
+            at_time=TEST_TIMESTAMP + 30,
+        ) is False
+
+    assert SECURITY_REAUTHENTICATION_LIMITER.is_locked(user_id) is True
+    assert disable_totp_for_user(
+        user_id,
+        "SecureTestPassword123!",
+        fresh_code,
+        at_time=TEST_TIMESTAMP + 30,
+    ) is False
+    assert get_totp_status(user_id) is True
+
+
+def test_successful_totp_disable_clears_password_reauthentication_failures(
+    totp_user,
+):
+    """A correct password and fresh TOTP code clear earlier password failures."""
+
+    user_id = totp_user["user_id"]
+    enrolment = begin_totp_enrolment(user_id)
+    enrolment_code = generate_totp_code(
+        enrolment["secret"],
+        at_time=TEST_TIMESTAMP,
+    )
+    assert confirm_totp_enrolment(
+        user_id,
+        enrolment_code,
+        at_time=TEST_TIMESTAMP,
+    ) is True
+
+    for _ in range(4):
+        assert disable_totp_for_user(
+            user_id,
+            "WrongPassword123!",
+            "123456",
+            at_time=TEST_TIMESTAMP + 30,
+        ) is False
+
+    fresh_code = generate_totp_code(
+        enrolment["secret"],
+        at_time=TEST_TIMESTAMP + 30,
+    )
+    assert disable_totp_for_user(
+        user_id,
+        "SecureTestPassword123!",
+        fresh_code,
+        at_time=TEST_TIMESTAMP + 30,
+    ) is True
+
+    assert SECURITY_REAUTHENTICATION_LIMITER.is_locked(user_id) is False
+    assert get_totp_status(user_id) is False
