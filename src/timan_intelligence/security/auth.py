@@ -546,6 +546,15 @@ def logout() -> None:
     st.session_state.pop(PENDING_AUTHENTICATION_EXPIRED_KEY, None)
     st.session_state.pop(SESSION_EXPIRED_KEY, None)
 
+    # Remove transient sign-in state so account identifiers and UI
+    # preferences do not remain in the browser session after logout.
+    for key in (
+        LOGIN_IDENTIFIER_KEY,
+        LOGIN_STEP_KEY,
+        "timanstat_show_login_password",
+    ):
+        st.session_state.pop(key, None)
+
 
 def render_login() -> None:
     """Render a simple two-step, email-first TimanStat sign-in flow."""
