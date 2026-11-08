@@ -25,6 +25,7 @@ class FakeStreamlit:
         self.subheaders = []
         self.writes = []
         self.buttons = []
+        self.query_params = {}
 
     def button(self, label, *args, **kwargs):
         self.buttons.append(label)
@@ -520,3 +521,32 @@ def test_extract_verification_url_returns_none_when_missing():
     )
 
     assert auth_ui._extract_verification_url(body) is None
+
+
+def test_password_reset_link_opens_recovery_form_directly(
+    fake_streamlit,
+    monkeypatch,
+):
+    """A reset URL should show the new-password form immediately."""
+
+    from timan_intelligence.security import password_reset_ui
+
+    fake_streamlit.query_params = {
+        "reset_password": "one-time-reset-token"
+    }
+    render_login = Mock()
+    render_recovery = Mock()
+    monkeypatch.setattr(auth_ui, "render_login", render_login)
+    monkeypatch.setattr(
+        password_reset_ui,
+        "render_password_recovery",
+        render_recovery,
+    )
+
+    auth_ui.render_authentication()
+
+    render_login.assert_not_called()
+    render_recovery.assert_called_once()
+    assert fake_streamlit.session_state[
+        auth_ui.AUTHENTICATION_VIEW_KEY
+    ] == "password_recovery"
