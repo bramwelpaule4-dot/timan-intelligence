@@ -604,3 +604,21 @@ def test_registration_password_visibility_control(
         for _, kwargs in password_fields
     )
 
+
+
+def test_registration_fields_support_browser_autofill(
+    fake_streamlit,
+):
+    """Registration fields expose standard browser autofill hints."""
+
+    fake_streamlit.submitted = False
+
+    auth_ui.render_registration()
+
+    options_by_label = {
+        args[0]: kwargs
+        for args, kwargs in fake_streamlit.text_input_options
+    }
+    assert options_by_label["Full name"]["autocomplete"] == "name"
+    assert options_by_label["Username"]["autocomplete"] == "username"
+    assert options_by_label["Email address"]["autocomplete"] == "email"
