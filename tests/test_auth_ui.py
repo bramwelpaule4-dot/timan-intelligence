@@ -641,3 +641,84 @@ def test_resend_verification_email_field_supports_browser_autofill(
         == "email"
     )
 
+
+
+# Two-step login and password-manager autofill tests
+
+
+def test_login_password_step_pairs_identifier_with_password_autofill(
+    fake_streamlit,
+    monkeypatch,
+):
+    """The password form includes its username field for password managers."""
+
+    from timan_intelligence.security import auth
+
+    fake_streamlit.session_state.update(
+        {
+            auth.LOGIN_IDENTIFIER_KEY: "saved@example.com",
+            auth.LOGIN_STEP_KEY: "password",
+        }
+    )
+    fake_streamlit.inputs = ["saved@example.com", ""]
+    fake_streamlit.submitted = False
+
+    monkeypatch.setattr(auth, "st", fake_streamlit)
+    monkeypatch.setattr(auth, "is_authenticated", lambda: False)
+    monkeypatch.setattr(auth, "is_totp_pending", lambda: False)
+
+    auth.render_login()
+
+    fields = {
+        args[0]: kwargs
+        for args, kwargs in fake_streamlit.text_input_options
+    }
+    assert fields["Email address or username"]["value"] == "saved@example.com"
+    assert fields["Email address or username"]["autocomplete"] == "username"
+    assert fields["Password"]["autocomplete"] == "current-password"
+    assert fields["Password"]["type"] == "password"
+
+
+def test_login_uses_edited_identifier_after_password_step(
+    fake_streamlit,
+    monkeypatch,
+):
+    """A corrected identifier is used and retained after failed sign-in."""
+
+    from unittest.mock import Mock
+
+    from timan_intelligence.security import auth
+
+    fake_streamlit.session_state.update(
+        {
+            auth.LOGIN_IDENTIFIER_KEY: "saved@example.com",
+            auth.LOGIN_STEP_KEY: "password",
+        }
+    )
+    fake_streamlit.inputs = [
+        "corrected@example.com",
+        "incorrect-password",
+    ]
+    fake_streamlit.submitted = True
+
+    monkeypatch.setattr(auth, "st", fake_streamlit)
+    monkeypatch.setattr(auth, "is_authenticated", lambda: False)
+    monkeypatch.setattr(auth, "is_totp_pending", lambda: False)
+    monkeypatch.setattr(
+        auth,
+        "is_login_temporarily_locked",
+        lambda identifier: False,
+    )
+    authenticate = Mock(return_value=False)
+    monkeypatch.setattr(auth, "authenticate_user", authenticate)
+
+    auth.render_login()
+
+    authenticate.assert_called_once_with(
+        "corrected@example.com",
+        "incorrect-password",
+    )
+    assert fake_streamlit.session_state[auth.LOGIN_IDENTIFIER_KEY] == (
+        "corrected@example.com"
+    )
+    assert len(fake_streamlit.errors) == 1
