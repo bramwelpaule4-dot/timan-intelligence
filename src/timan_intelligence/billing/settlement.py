@@ -98,4 +98,7 @@ def finalize_payment_transaction(
                 """,
                 (paid_after, invoice_status, invoice_status, invoice_status, now, payment["invoice_id"]),
             )
+            if invoice_status == "paid":
+                from timan_intelligence.billing.upgrades import fulfil_paid_upgrade
+                fulfil_paid_upgrade(connection, payment["invoice_id"], now)
     return True
