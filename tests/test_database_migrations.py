@@ -25,6 +25,7 @@ EXPECTED_MIGRATION_HISTORY = [
     (11, "subscription_change_requests"),
     (12, "completed_subscription_changes"),
     (13, "billing_records"),
+    (14, "billing_invoice_item_order"),
 ]
 
 
