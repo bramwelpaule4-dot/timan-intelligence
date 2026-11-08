@@ -80,7 +80,7 @@ def verify_result(raw_body: bytes):
         result = payload["Result"]
         originator = result["OriginatorConversationID"]
         result_code = str(result["ResultCode"])
-        result_type = int(result.get("ResultType", 0))
+        result_type = int(result["ResultType"])
     except (UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
         raise ReconciliationError("Malformed Safaricom transaction-status result.") from exc
     if not isinstance(originator, str) or not originator:
