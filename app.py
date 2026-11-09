@@ -647,6 +647,9 @@ page = st.sidebar.radio(
 
 if st.sidebar.button("Sign out", use_container_width=True):
     logout()
+    oidc_user = getattr(st, "user", None)
+    if oidc_user is not None and getattr(oidc_user, "is_logged_in", False):
+        st.logout()
     st.rerun()
 
 st.sidebar.divider()
