@@ -1042,3 +1042,76 @@ def test_expired_pending_authentication_sets_one_time_ui_notice(
     assert mock_session[auth.PENDING_AUTHENTICATION_EXPIRED_KEY] is True
     assert "pending_authentication" not in mock_session
 
+
+
+def test_federated_login_establishes_standard_user_session(
+    mock_session,
+    monkeypatch,
+):
+    """A federated identity receives only its database-assigned role."""
+
+    monkeypatch.setattr(
+        auth.LOGIN_RATE_LIMITER,
+        "record_success",
+        lambda identifier: None,
+    )
+    user = {
+        "id": "federated-user-id",
+        "username": "federated.user",
+        "email": "federated@example.com",
+        "role": "user",
+        "is_active": True,
+        "email_verified": True,
+        "totp_enabled": False,
+    }
+
+    assert auth.establish_federated_session(user) is True
+    assert mock_session["authenticated"] is True
+    assert mock_session["user_id"] == "federated-user-id"
+    assert mock_session["role"] == "user"
+    assert auth.has_permission("use_application") is True
+    assert auth.has_permission("manage_users") is False
+
+
+def test_federated_login_requires_verified_active_account(mock_session):
+    """Federated session creation rejects inactive or unverified accounts."""
+
+    user = {
+        "id": "federated-user-id",
+        "username": "federated.user",
+        "email": "federated@example.com",
+        "role": "user",
+        "is_active": False,
+        "email_verified": True,
+        "totp_enabled": False,
+    }
+
+    assert auth.establish_federated_session(user) is False
+    assert mock_session == {}
+
+
+def test_federated_login_preserves_timanstat_totp_requirement(
+    mock_session,
+    monkeypatch,
+):
+    """Federated sign-in must still complete TimanStat TOTP when enabled."""
+
+    monkeypatch.setattr(
+        auth.LOGIN_RATE_LIMITER,
+        "record_success",
+        lambda identifier: None,
+    )
+    user = {
+        "id": "federated-user-id",
+        "username": "federated.user",
+        "email": "federated@example.com",
+        "role": "user",
+        "is_active": True,
+        "email_verified": True,
+        "totp_enabled": True,
+    }
+
+    assert auth.establish_federated_session(user) is False
+    assert mock_session["pending_authentication"] is True
+    assert mock_session["pending_user_id"] == "federated-user-id"
+    assert "authenticated" not in mock_session
