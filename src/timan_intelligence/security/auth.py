@@ -719,6 +719,10 @@ def render_login() -> None:
 
         return
 
+    from timan_intelligence.security.federated_login import render_federated_login_buttons
+
+    render_federated_login_buttons()
+
     identifier = st.session_state.get(LOGIN_IDENTIFIER_KEY, "")
     step = st.session_state.get(LOGIN_STEP_KEY, "identifier")
 
