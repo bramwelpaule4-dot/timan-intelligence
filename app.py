@@ -20,6 +20,7 @@ from timan_intelligence.database.initialise import initialise_database
 from timan_intelligence.identity.email_verification import verify_email_token
 from timan_intelligence.security.auth import is_authenticated, logout
 from timan_intelligence.security.auth_ui import render_authentication
+from timan_intelligence.security.federated_login import process_federated_login_callback
 from timan_intelligence.security.password_change_ui import render_password_change
 from timan_intelligence.security.totp_management_ui import render_totp_management
 from timan_intelligence.organisations.service import list_user_organisations
@@ -87,6 +88,11 @@ except Exception:
         "Please try again later or contact the platform administrator."
     )
     st.stop()
+
+# Convert a completed OIDC callback into a database-backed TimanStat session.
+# A pending TimanStat TOTP challenge must not be replaced by another login.
+if st.session_state.get("pending_authentication") is not True:
+    process_federated_login_callback()
 
 # Process one-time email verification links before showing sign-in.
 verification_token = st.query_params.get("verify_email")
