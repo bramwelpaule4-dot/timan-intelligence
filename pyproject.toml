@@ -21,7 +21,7 @@ dependencies = [
 
 [project.optional-dependencies]
 web = [
-    "streamlit>=1.40,<2",
+    "streamlit[auth]>=1.42,<2",
 ]
 
 desktop = [
