@@ -30,6 +30,7 @@ EXPECTED_MIGRATION_HISTORY = [
     (16, "unique_subscription_upgrade_invoice"),
     (17, "payment_gateway_sessions"),
     (18, "mpesa_transaction_reconciliation"),
+    (19, "federated_identity_links"),
 ]
 
 
@@ -325,6 +326,38 @@ def assert_totp_recovery_codes_schema():
     )
     assert index is not None
     assert index["tbl_name"] == "totp_recovery_codes"
+
+
+def test_federated_identity_schema(migration_database):
+    """Federated identities must be uniquely linked to users and providers."""
+
+    initialise_database()
+
+    with database_connection() as connection:
+        columns = {
+            row["name"]
+            for row in connection.execute(
+                "PRAGMA table_info('federated_identities')"
+            ).fetchall()
+        }
+        indexes = connection.execute(
+            "PRAGMA index_list('federated_identities')"
+        ).fetchall()
+        foreign_keys = connection.execute(
+            "PRAGMA foreign_key_list('federated_identities')"
+        ).fetchall()
+
+    assert {
+        "id", "user_id", "provider", "subject", "email",
+        "created_at", "last_login_at",
+    } == columns
+    assert any(row["unique"] for row in indexes)
+    assert any(
+        row["from"] == "user_id"
+        and row["table"] == "users"
+        and row["on_delete"].upper() == "CASCADE"
+        for row in foreign_keys
+    )
 
 
 def test_fresh_database_applies_all_migrations(migration_database):
