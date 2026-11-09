@@ -44,7 +44,7 @@ def authenticate_federated_identity(
         return None
     if not subject or len(subject) > 255:
         return None
-    if not email_verified or not re.fullmatch(r"[^@\\s]+@[^@\\s]+\\.[^@\\s]+", email):
+    if not email_verified or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
         return None
     if not full_name:
         full_name = email.split("@", 1)[0][:150] or "TimanStat user"
