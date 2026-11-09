@@ -363,6 +363,63 @@ def authenticate_user(username: str, password: str) -> bool:
     return True
 
 
+
+def establish_federated_session(user: dict[str, Any]) -> bool:
+    """Create a TimanStat session for a resolved federated identity.
+
+    Federated authentication uses the same account status, role, session
+    version and TimanStat TOTP checks as password authentication.
+    """
+
+    if not isinstance(user, dict):
+        return False
+
+    user_id = user.get("id")
+    username = user.get("username")
+    role = user.get("role")
+    email = user.get("email")
+
+    if (
+        not isinstance(user_id, str) or not user_id.strip()
+        or not isinstance(username, str) or not username.strip()
+        or role not in VALID_ROLES
+        or not isinstance(email, str) or not email.strip()
+        or user.get("is_active") is not True
+        or user.get("email_verified") is not True
+    ):
+        return False
+
+    SESSION_MANAGER.clear_session(st.session_state)
+    _clear_pending_authentication(st.session_state)
+
+    try:
+        LOGIN_RATE_LIMITER.record_success(email.strip().casefold())
+        if bool(user.get("totp_enabled")):
+            _create_pending_authentication(
+                st.session_state,
+                {
+                    "id": user_id,
+                    "username": username,
+                    "role": role,
+                },
+            )
+            return False
+
+        SESSION_MANAGER.create_session(
+            st.session_state,
+            username,
+            role,
+            user_id=user_id,
+        )
+    except Exception:
+        SESSION_MANAGER.clear_session(st.session_state)
+        _clear_pending_authentication(st.session_state)
+        st.session_state[LOGIN_UNAVAILABLE_KEY] = True
+        return False
+
+    return True
+
+
 def verify_pending_recovery_code(code: str) -> bool:
     """Verify and consume a recovery code for a pending login challenge."""
 
