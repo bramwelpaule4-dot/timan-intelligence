@@ -33,6 +33,7 @@ EXPECTED_MIGRATION_HISTORY = [
     (16, "unique_subscription_upgrade_invoice"),
     (17, "payment_gateway_sessions"),
     (18, "mpesa_transaction_reconciliation"),
+    (19, "federated_identity_links"),
 ]
 
 
@@ -168,6 +169,35 @@ def test_postgresql_migrations_are_recorded(postgres_database):
         ).fetchone()
 
     assert recovery_table is not None
+
+
+def test_postgresql_federated_identity_schema(postgres_database):
+    """PostgreSQL must create the federated identity link table."""
+
+    with database_connection() as connection:
+        table = connection.execute(
+            """
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = current_schema()
+              AND table_name = 'federated_identities'
+              AND table_type = 'BASE TABLE'
+            """
+        ).fetchone()
+        columns = connection.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = 'federated_identities'
+            """
+        ).fetchall()
+
+    assert table is not None
+    assert {
+        "id", "user_id", "provider", "subject", "email",
+        "created_at", "last_login_at",
+    }.issubset({row["column_name"] for row in columns})
 
 
 def test_postgresql_schema_contains_required_tables(postgres_database):
