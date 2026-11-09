@@ -384,8 +384,8 @@ def establish_federated_session(user: dict[str, Any]) -> bool:
         or not isinstance(username, str) or not username.strip()
         or role not in VALID_ROLES
         or not isinstance(email, str) or not email.strip()
-        or user.get("is_active") is not True
-        or user.get("email_verified") is not True
+        or not bool(user.get("is_active"))
+        or not bool(user.get("email_verified"))
     ):
         return False
 
