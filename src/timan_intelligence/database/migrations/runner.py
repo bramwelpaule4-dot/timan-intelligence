@@ -27,6 +27,7 @@ from timan_intelligence.database.migrations.versions import (
     v0016_unique_subscription_upgrade_invoice,
     v0017_payment_gateway_sessions,
     v0018_mpesa_transaction_reconciliation,
+    v0019_federated_identity_links,
 )
 
 
@@ -129,6 +130,11 @@ MIGRATIONS = (
         version=v0018_mpesa_transaction_reconciliation.VERSION,
         name=v0018_mpesa_transaction_reconciliation.NAME,
         upgrade=v0018_mpesa_transaction_reconciliation.upgrade,
+    ),
+    Migration(
+        version=v0019_federated_identity_links.VERSION,
+        name=v0019_federated_identity_links.NAME,
+        upgrade=v0019_federated_identity_links.upgrade,
     ),
 )
 
