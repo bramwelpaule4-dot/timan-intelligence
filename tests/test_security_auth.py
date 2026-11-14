@@ -1180,10 +1180,12 @@ def test_pending_login_email_otp_requires_verified_recovery_email(
             "recovery_email_verified": False,
         },
     )
-    create = pytest.MonkeyPatch()
-    create.setattr(auth, "create_otp_challenge", lambda *args: pytest.fail(
-        "An unverified recovery email must not receive a sign-in code."
-    ))
+    monkeypatch.setattr(
+        auth, "create_otp_challenge",
+        lambda *args: pytest.fail(
+            "An unverified recovery email must not receive a sign-in code."
+        ),
+    )
     monkeypatch.setattr(
         auth, "totp_attempt_limiter",
         SimpleNamespace(is_locked=lambda *args: False),
