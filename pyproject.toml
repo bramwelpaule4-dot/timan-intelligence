@@ -22,6 +22,8 @@ dependencies = [
 [project.optional-dependencies]
 web = [
     "streamlit[auth]>=1.42,<2",
+    "google-auth>=2.35,<3",
+    "google-api-python-client>=2.150,<3",
 ]
 
 desktop = [
