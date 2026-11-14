@@ -36,6 +36,7 @@ EXPECTED_MIGRATION_HISTORY = [
     (19, "federated_identity_links"),
     (20, "user_contact_methods"),
     (21, "one_time_password_challenges"),
+    (22, "otp_contact_binding"),
 ]
 
 
