@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from timanstat.identity.email_delivery import (
+from timan_intelligence.identity.email_delivery import (
     EmailDeliveryError,
     EmailDeliverySettings,
     EmailSender,
