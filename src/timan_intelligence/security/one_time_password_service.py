@@ -434,3 +434,53 @@ def verify_otp_challenge(
                 return False
 
         return True
+
+
+
+def get_contact_method_status(user_id: str) -> dict[str, object]:
+    """Return the authenticated user's configured contact methods."""
+    if not isinstance(user_id, str) or not user_id.strip():
+        raise OTPChallengeServiceError("A valid user ID is required.")
+    p = _placeholder()
+    with database_connection() as connection:
+        user = connection.execute(
+            f"""
+            SELECT recovery_email, recovery_email_verified,
+                   phone_number_e164, phone_verified
+            FROM users
+            WHERE id = {p} AND is_active = TRUE
+            """,
+            (user_id.strip(),),
+        ).fetchone()
+    if user is None:
+        raise OTPChallengeServiceError("The active user account was not found.")
+    return {
+        "recovery_email": user["recovery_email"],
+        "recovery_email_verified": bool(user["recovery_email_verified"]),
+        "phone_number_e164": user["phone_number_e164"],
+        "phone_verified": bool(user["phone_verified"]),
+    }
+
+
+def invalidate_otp_challenge(
+    challenge_id: str, user_id: str, purpose: str
+) -> bool:
+    """Invalidate an unconsumed challenge after delivery failure or cancellation."""
+    if not isinstance(challenge_id, str) or not challenge_id.strip():
+        return False
+    if not isinstance(user_id, str) or not user_id.strip():
+        return False
+    if not isinstance(purpose, str) or not PURPOSE_PATTERN.fullmatch(purpose):
+        return False
+    p = _placeholder()
+    with database_connection() as connection:
+        result = connection.execute(
+            f"""
+            UPDATE one_time_password_challenges
+            SET invalidated_at = CURRENT_TIMESTAMP
+            WHERE id = {p} AND user_id = {p} AND purpose = {p}
+              AND consumed_at IS NULL AND invalidated_at IS NULL
+            """,
+            (challenge_id.strip(), user_id.strip(), purpose),
+        )
+    return result.rowcount == 1
