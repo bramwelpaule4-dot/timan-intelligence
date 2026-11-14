@@ -880,7 +880,7 @@ def render_login() -> None:
                         disabled=email_otp_locked,
                     )
 
-                if email_otp_submitted and not mfa_locked:
+                if email_otp_submitted and not email_otp_locked:
                     if verify_pending_email_otp(email_otp_code):
                         st.success("Authentication successful.")
                         st.rerun()
