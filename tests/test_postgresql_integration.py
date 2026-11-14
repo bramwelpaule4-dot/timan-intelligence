@@ -34,6 +34,7 @@ EXPECTED_MIGRATION_HISTORY = [
     (17, "payment_gateway_sessions"),
     (18, "mpesa_transaction_reconciliation"),
     (19, "federated_identity_links"),
+    (20, "user_contact_methods"),
 ]
 
 
