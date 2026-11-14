@@ -15,7 +15,7 @@ from timan_intelligence.identity.phone_numbers import (
         ("+254 712 345 678", "+254712345678"),
         ("+211 912 345 678", "+211912345678"),
         ("+256 772 123456", "+256772123456"),
-        ("+44 20 7946 0018", "+442079460018"),
+        ("+44 7400 123456", "+447400123456"),
     ],
 )
 def test_normalises_international_numbers(number, expected):
