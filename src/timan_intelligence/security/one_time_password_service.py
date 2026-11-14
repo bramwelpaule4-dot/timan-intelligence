@@ -220,6 +220,16 @@ def set_recovery_email_for_verification(
             """,
             (user_id,),
         )
+        # A reset link may have been delivered to the previous recovery
+        # address. Revoke all outstanding links whenever that address is
+        # changed, including while the replacement address is unverified.
+        connection.execute(
+            f"""
+            DELETE FROM password_reset_tokens
+            WHERE user_id = {p}
+            """,
+            (user_id,),
+        )
     return email
 
 
