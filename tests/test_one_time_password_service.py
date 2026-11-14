@@ -297,7 +297,7 @@ def test_recovery_email_change_and_verification(otp_user):
     assert verify_otp_challenge(
         challenge["challenge_id"],
         otp_user,
-        "verify_recovery_email",
+        "login_mfa",
         challenge["code"],
     ) is True
 
@@ -330,16 +330,16 @@ def test_otp_challenge_can_be_invalidated_after_delivery_failure(otp_user):
     )
 
     challenge = create_otp_challenge(
-        otp_user, "verify_recovery_email", "email"
+        otp_user, "login_mfa", "email"
     )
     assert invalidate_otp_challenge(
-        challenge["challenge_id"], otp_user, "verify_recovery_email"
+        challenge["challenge_id"], otp_user, "login_mfa"
     ) is True
     assert _get_challenge(challenge["challenge_id"])["invalidated_at"] is not None
     assert verify_otp_challenge(
         challenge["challenge_id"],
         otp_user,
-        "verify_recovery_email",
+        "login_mfa",
         challenge["code"],
     ) is False
 
@@ -350,13 +350,13 @@ def test_otp_invalidation_is_scoped_to_owner_and_purpose(otp_user):
     )
 
     challenge = create_otp_challenge(
-        otp_user, "verify_recovery_email", "email"
+        otp_user, "login_mfa", "email"
     )
     assert invalidate_otp_challenge(
-        challenge["challenge_id"], "another-user", "verify_recovery_email"
+        challenge["challenge_id"], "another-user", "login_mfa"
     ) is False
     assert invalidate_otp_challenge(
-        challenge["challenge_id"], otp_user, "login_mfa"
+        challenge["challenge_id"], otp_user, "verify_recovery_email"
     ) is False
     assert _get_challenge(challenge["challenge_id"])["invalidated_at"] is None
 
