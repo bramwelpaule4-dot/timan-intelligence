@@ -15,6 +15,13 @@ from timan_intelligence.identity.service import (
 )
 from timan_intelligence.security.distributed_rate_limit import DatabaseRateLimiter
 from timan_intelligence.security.recovery_codes import consume_recovery_code
+from timan_intelligence.security.one_time_password_service import (
+    create_otp_challenge,
+    get_contact_method_status,
+    invalidate_otp_challenge,
+    verify_otp_challenge,
+)
+from timan_intelligence.security.otp_delivery import send_email_otp
 from timan_intelligence.security.session import (
     SESSION_EXPIRED_KEY,
     SESSION_REVOKED_KEY,
@@ -55,6 +62,7 @@ PENDING_AUTHENTICATION_KEYS = (
     "pending_session_version",
     "pending_authenticated_at",
     "pending_expires_at",
+    "pending_email_otp_challenge_id",
 )
 
 # Permissions are deliberately explicit.
@@ -545,6 +553,101 @@ def verify_pending_totp(code: str) -> bool:
     return True
 
 
+
+def send_pending_email_otp() -> bool:
+    """Send a sign-in OTP to the pending user's verified recovery email."""
+    if not is_totp_pending():
+        return False
+
+    user_id = st.session_state.get("pending_user_id")
+    if not isinstance(user_id, str) or not user_id.strip():
+        return False
+
+    try:
+        if totp_attempt_limiter.is_locked(user_id, "email_otp"):
+            return False
+        status = get_contact_method_status(user_id)
+        destination = status.get("recovery_email")
+        if (
+            not isinstance(destination, str)
+            or not destination.strip()
+            or status.get("recovery_email_verified") is not True
+        ):
+            return False
+
+        challenge = create_otp_challenge(user_id, "login_mfa", "email")
+        try:
+            send_email_otp(destination, challenge["code"], "login_mfa")
+        except Exception:
+            invalidate_otp_challenge(
+                challenge["challenge_id"], user_id, "login_mfa"
+            )
+            return False
+
+        st.session_state["pending_email_otp_challenge_id"] = (
+            challenge["challenge_id"]
+        )
+        return True
+    except Exception:
+        return False
+
+
+def verify_pending_email_otp(code: str) -> bool:
+    """Verify a recovery-email OTP and promote pending login to a full session."""
+    if not isinstance(code, str) or not re.fullmatch(r"\d{6}", code.strip()):
+        return False
+    if not is_totp_pending():
+        return False
+
+    session_state = st.session_state
+    user_id = session_state.get("pending_user_id")
+    challenge_id = session_state.get("pending_email_otp_challenge_id")
+    username = session_state.get("pending_username")
+    role = session_state.get("pending_role")
+    expected_session_version = session_state.get("pending_session_version")
+
+    if (
+        not isinstance(user_id, str) or not user_id.strip()
+        or not isinstance(challenge_id, str) or not challenge_id.strip()
+        or not isinstance(username, str) or not username.strip()
+        or role not in VALID_ROLES
+        or isinstance(expected_session_version, bool)
+        or not isinstance(expected_session_version, int)
+        or expected_session_version < 0
+    ):
+        return False
+
+    try:
+        if totp_attempt_limiter.is_locked(user_id, "email_otp"):
+            return False
+        verified = verify_otp_challenge(
+            challenge_id, user_id, "login_mfa", code.strip()
+        )
+        if not verified:
+            totp_attempt_limiter.record_failure(user_id, "email_otp")
+            return False
+        if not is_totp_pending():
+            return False
+        totp_attempt_limiter.record_success(user_id, "email_otp")
+    except Exception:
+        return False
+
+    _clear_pending_authentication(session_state)
+    try:
+        SESSION_MANAGER.create_session(
+            session_state,
+            username,
+            role,
+            user_id=user_id,
+            expected_session_version=expected_session_version,
+        )
+    except (RuntimeError, ValueError):
+        SESSION_MANAGER.clear_session(session_state)
+        return False
+
+    return True
+
+
 def is_pending_second_factor_temporarily_locked() -> bool:
     """Return whether the pending account is locked out of MFA verification.
 
@@ -563,7 +666,7 @@ def is_pending_second_factor_temporarily_locked() -> bool:
     try:
         return any(
             totp_attempt_limiter.is_locked(user_id, operation)
-            for operation in ("verification", "recovery")
+            for operation in ("verification", "recovery", "email_otp")
         )
     except Exception:
         return True
