@@ -242,7 +242,7 @@ def test_phone_number_change_requires_password_and_resets_verification(otp_user)
             (otp_user,),
         ).fetchone()
     assert user["phone_number_e164"] == "+254722123456"
-    assert user["phone_verified"] is False
+    assert bool(user["phone_verified"]) is False
 
 
 def test_phone_contact_verification_marks_only_matching_number_verified(otp_user):
@@ -260,7 +260,7 @@ def test_phone_contact_verification_marks_only_matching_number_verified(otp_user
             "SELECT phone_verified FROM users WHERE id = ?",
             (otp_user,),
         ).fetchone()
-    assert user["phone_verified"] is True
+    assert bool(user["phone_verified"]) is True
 
 
 def test_old_phone_code_cannot_verify_a_replaced_number(otp_user):
@@ -307,7 +307,7 @@ def test_recovery_email_change_and_verification(otp_user):
             (otp_user,),
         ).fetchone()
     assert user["recovery_email"] == "new-recovery@example.com"
-    assert user["recovery_email_verified"] is True
+    assert bool(user["recovery_email_verified"]) is True
 
 
 def test_contact_verification_purpose_rejects_wrong_channel(otp_user):
