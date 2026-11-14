@@ -328,16 +328,28 @@ def send_password_reset_email(
     Only the token hash is stored in the database. The plaintext
     token is included only in the outgoing reset link.
 
-    Password recovery does not automatically verify an email address.
+    A verified recovery email is preferred as the delivery destination.
+    Otherwise, the primary account email is used. Password recovery
+    does not automatically verify either address.
     """
 
     application_url = _validate_base_url(base_url)
-    p = _placeholder()
 
+    # Create the token before selecting the delivery destination. If the
+    # recovery address changes concurrently, its setter invalidates this
+    # token; selecting the current destination afterwards avoids sending a
+    # newly-created token to a stale recovery address.
+    token = create_password_reset_token(
+        user_id,
+        expiry_minutes=expiry_minutes,
+    )
+
+    p = _placeholder()
     with database_connection() as connection:
         user = connection.execute(
             f"""
-            SELECT id, email, full_name
+            SELECT id, email, full_name, recovery_email,
+                   recovery_email_verified
             FROM users
             WHERE id = {p}
               AND is_active = TRUE
@@ -350,9 +362,16 @@ def send_password_reset_email(
             "The requested user does not exist or is inactive."
         )
 
-    token = create_password_reset_token(
-        user_id,
-        expiry_minutes=expiry_minutes,
+    recovery_email = user["recovery_email"]
+    use_recovery_email = (
+        bool(user["recovery_email_verified"])
+        and isinstance(recovery_email, str)
+        and bool(recovery_email.strip())
+    )
+    recipient = (
+        recovery_email.strip()
+        if use_recovery_email
+        else user["email"]
     )
 
     reset_url = _build_password_reset_url(
@@ -361,7 +380,7 @@ def send_password_reset_email(
     )
 
     message = OutboundEmail(
-        recipient=user["email"],
+        recipient=recipient,
         subject=PASSWORD_RESET_SUBJECT,
         body=(
             f"Hello {user['full_name']},\n\n"
