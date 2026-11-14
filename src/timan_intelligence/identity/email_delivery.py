@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import re
 import smtplib
+import base64
 from dataclasses import dataclass
 
 import streamlit as st
@@ -51,6 +52,9 @@ class EmailDeliverySettings:
     smtp_password: str = ""
     use_starttls: bool = True
     timeout: int = DEFAULT_SMTP_TIMEOUT
+    gmail_client_id: str = ""
+    gmail_client_secret: str = ""
+    gmail_refresh_token: str = ""
 
     @classmethod
     def from_environment(
@@ -80,6 +84,9 @@ class EmailDeliverySettings:
                     "TIMAN_EMAIL_SMTP_PASSWORD",
                     "TIMAN_EMAIL_USE_STARTTLS",
                     "TIMAN_EMAIL_TIMEOUT",
+                    "TIMAN_GMAIL_CLIENT_ID",
+                    "TIMAN_GMAIL_CLIENT_SECRET",
+                    "TIMAN_GMAIL_REFRESH_TOKEN",
                 ):
                     value = secrets.get(key, "")
                     if value not in (None, ""):
@@ -99,9 +106,9 @@ class EmailDeliverySettings:
             "mock",
         ).strip().lower()
 
-        if provider not in {"mock", "smtp"}:
+        if provider not in {"mock", "smtp", "gmail_api"}:
             raise ValueError(
-                "TIMAN_EMAIL_PROVIDER must be 'mock' or 'smtp'."
+                "TIMAN_EMAIL_PROVIDER must be 'mock', 'smtp', or 'gmail_api'."
             )
 
         try:
@@ -165,6 +172,9 @@ class EmailDeliverySettings:
             ),
             use_starttls=use_starttls_value == "true",
             timeout=timeout,
+            gmail_client_id=env.get("TIMAN_GMAIL_CLIENT_ID", "").strip(),
+            gmail_client_secret=env.get("TIMAN_GMAIL_CLIENT_SECRET", "").strip(),
+            gmail_refresh_token=env.get("TIMAN_GMAIL_REFRESH_TOKEN", "").strip(),
         )
 
 
@@ -314,4 +324,77 @@ def build_email_sender(
     if settings.provider == "smtp":
         return SMTPEmailSender(settings)
 
+    if settings.provider == "gmail_api":
+        return GmailAPIEmailSender(settings)
+
     raise ValueError("Unsupported email delivery provider.")
+
+
+class GmailAPIEmailSender:
+    """Send email through Gmail API using an offline OAuth refresh token."""
+
+    def __init__(self, settings: EmailDeliverySettings) -> None:
+        self.settings = settings
+        if not settings.sender_email or not re.fullmatch(
+            r"[^@\s]+@[^@\s]+\.[^@\s]+", settings.sender_email
+        ):
+            raise ValueError("A valid sender email address is required.")
+        missing = [
+            label for label, value in (
+                ("Gmail OAuth client ID", settings.gmail_client_id),
+                ("Gmail OAuth client secret", settings.gmail_client_secret),
+                ("Gmail OAuth refresh token", settings.gmail_refresh_token),
+            ) if not value
+        ]
+        if missing:
+            raise ValueError(
+                "Missing Gmail API configuration: " + ", ".join(missing) + "."
+            )
+
+    def send(self, message: OutboundEmail) -> None:
+        """Refresh an access token and submit a MIME message to Gmail."""
+        _validate_message(message)
+        stage = "configuration"
+        try:
+            from google.auth.transport.requests import Request
+            from google.oauth2.credentials import Credentials
+            from googleapiclient.discovery import build
+
+            stage = "token_refresh"
+            credentials = Credentials(
+                token=None,
+                refresh_token=self.settings.gmail_refresh_token,
+                token_uri="https://oauth2.googleapis.com/token",
+                client_id=self.settings.gmail_client_id,
+                client_secret=self.settings.gmail_client_secret,
+                scopes=["https://www.googleapis.com/auth/gmail.send"],
+            )
+            credentials.refresh(Request())
+
+            stage = "message_prepare"
+            email_message = MIMEEmailMessage()
+            email_message["Subject"] = message.subject
+            email_message["From"] = (
+                f"{self.settings.sender_name} <{self.settings.sender_email}>"
+            )
+            email_message["To"] = message.recipient.strip()
+            email_message.set_content(message.body)
+            raw_message = base64.urlsafe_b64encode(
+                email_message.as_bytes()
+            ).decode("ascii")
+
+            stage = "send_message"
+            service = build(
+                "gmail", "v1", credentials=credentials,
+                cache_discovery=False,
+            )
+            service.users().messages().send(
+                userId="me", body={"raw": raw_message}
+            ).execute()
+
+        except Exception as exc:
+            raise EmailDeliveryError(
+                "Gmail API delivery failed. Check OAuth authorization and "
+                "Gmail API configuration.",
+                stage=stage,
+            ) from exc
