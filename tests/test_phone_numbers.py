@@ -47,4 +47,5 @@ def test_rejects_extension():
 
 
 def test_formats_canonical_number_for_display():
-    assert format_phone_number_international("+254712345678") == "+254 712 345 678"
+    # libphonenumber groups the Kenyan subscriber number as 712 345678.
+    assert format_phone_number_international("+254712345678") == "+254 712 345678"
