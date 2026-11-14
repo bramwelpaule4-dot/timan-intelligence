@@ -31,6 +31,7 @@ EXPECTED_MIGRATION_HISTORY = [
     (17, "payment_gateway_sessions"),
     (18, "mpesa_transaction_reconciliation"),
     (19, "federated_identity_links"),
+    (20, "user_contact_methods"),
 ]
 
 
@@ -358,6 +359,41 @@ def test_federated_identity_schema(migration_database):
         and row["on_delete"].upper() == "CASCADE"
         for row in foreign_keys
     )
+
+
+def test_user_contact_methods_schema(migration_database):
+    """Phone and recovery email fields default to unverified and optional."""
+
+    initialise_database()
+
+    with database_connection() as connection:
+        columns = {
+            row["name"]: row
+            for row in connection.execute(
+                "PRAGMA table_info(users)"
+            ).fetchall()
+        }
+        index = connection.execute(
+            """
+            SELECT name, tbl_name
+            FROM sqlite_master
+            WHERE type = 'index'
+              AND name = 'idx_users_phone_number_e164'
+            """
+        ).fetchone()
+
+    assert columns["phone_number_e164"]["notnull"] == 0
+    assert columns["phone_verified"]["notnull"] == 1
+    assert str(columns["phone_verified"]["dflt_value"]).upper() in (
+        "FALSE", "0"
+    )
+    assert columns["recovery_email"]["notnull"] == 0
+    assert columns["recovery_email_verified"]["notnull"] == 1
+    assert str(columns["recovery_email_verified"]["dflt_value"]).upper() in (
+        "FALSE", "0"
+    )
+    assert index is not None
+    assert index["tbl_name"] == "users"
 
 
 def test_fresh_database_applies_all_migrations(migration_database):
