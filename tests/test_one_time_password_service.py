@@ -321,3 +321,53 @@ def test_contact_verification_purpose_rejects_wrong_channel(otp_user):
 def test_contact_verification_requires_a_pending_contact(otp_user):
     with pytest.raises(OTPChallengeServiceError, match="already verified"):
         create_otp_challenge(otp_user, "verify_phone", "sms")
+
+
+
+def test_otp_challenge_can_be_invalidated_after_delivery_failure(otp_user):
+    from timan_intelligence.security.one_time_password_service import (
+        invalidate_otp_challenge,
+    )
+
+    challenge = create_otp_challenge(
+        otp_user, "verify_recovery_email", "email"
+    )
+    assert invalidate_otp_challenge(
+        challenge["challenge_id"], otp_user, "verify_recovery_email"
+    ) is True
+    assert _get_challenge(challenge["challenge_id"])["invalidated_at"] is not None
+    assert verify_otp_challenge(
+        challenge["challenge_id"],
+        otp_user,
+        "verify_recovery_email",
+        challenge["code"],
+    ) is False
+
+
+def test_otp_invalidation_is_scoped_to_owner_and_purpose(otp_user):
+    from timan_intelligence.security.one_time_password_service import (
+        invalidate_otp_challenge,
+    )
+
+    challenge = create_otp_challenge(
+        otp_user, "verify_recovery_email", "email"
+    )
+    assert invalidate_otp_challenge(
+        challenge["challenge_id"], "another-user", "verify_recovery_email"
+    ) is False
+    assert invalidate_otp_challenge(
+        challenge["challenge_id"], otp_user, "login_mfa"
+    ) is False
+    assert _get_challenge(challenge["challenge_id"])["invalidated_at"] is None
+
+
+def test_contact_method_status_returns_verification_flags(otp_user):
+    from timan_intelligence.security.one_time_password_service import (
+        get_contact_method_status,
+    )
+
+    status = get_contact_method_status(otp_user)
+    assert status["recovery_email"] == "recovery@example.com"
+    assert status["recovery_email_verified"] is True
+    assert status["phone_number_e164"] == "+254712345678"
+    assert status["phone_verified"] is True
