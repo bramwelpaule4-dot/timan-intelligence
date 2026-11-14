@@ -297,7 +297,7 @@ def test_recovery_email_change_and_verification(otp_user):
     assert verify_otp_challenge(
         challenge["challenge_id"],
         otp_user,
-        "login_mfa",
+        "verify_recovery_email",
         challenge["code"],
     ) is True
 
