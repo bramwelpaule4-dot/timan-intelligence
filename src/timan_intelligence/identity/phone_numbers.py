@@ -67,6 +67,15 @@ def normalise_phone_number(
             "numbering plan."
         )
 
+    number_type = phonenumbers.number_type(parsed)
+    if number_type not in {
+        phonenumbers.PhoneNumberType.MOBILE,
+        phonenumbers.PhoneNumberType.FIXED_LINE_OR_MOBILE,
+    }:
+        raise PhoneNumberError(
+            "Enter a mobile number that can be used as an SMS destination."
+        )
+
     formatted = phonenumbers.format_number(parsed, PhoneNumberFormat.E164)
     if not formatted.startswith("+"):
         raise PhoneNumberError("The phone number could not be normalised.")
