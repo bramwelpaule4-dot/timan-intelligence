@@ -36,6 +36,11 @@ def test_rejects_invalid_number():
         normalise_phone_number("+254 000 000 000")
 
 
+def test_rejects_landline_for_sms():
+    with pytest.raises(PhoneNumberError, match="mobile number"):
+        normalise_phone_number("+44 20 7946 0018")
+
+
 def test_rejects_extension():
     with pytest.raises(PhoneNumberError, match="extensions are not supported"):
         normalise_phone_number("+1 202 555 0123 ext. 45")
