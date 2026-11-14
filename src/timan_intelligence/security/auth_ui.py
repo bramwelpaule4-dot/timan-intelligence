@@ -189,8 +189,9 @@ def render_registration() -> None:
             max_chars=30,
             autocomplete="username",
             help=(
-                "Use 3–30 lowercase letters, numbers, dots, "
-                "underscores or hyphens."
+                "Use 3–30 characters. Letters (uppercase or lowercase), "
+                "numbers, dots (.), underscores (_) and hyphens (-) are "
+                "allowed. Spaces are not allowed."
             ),
         )
 
@@ -210,12 +211,17 @@ def render_registration() -> None:
             "Password",
             type=password_input_type,
             autocomplete="new-password",
+            help=(
+                "Use at least 12 characters. Avoid using personal "
+                "information such as your name or birth year."
+            ),
         )
 
         confirm_password = st.text_input(
             "Confirm password",
             type=password_input_type,
             autocomplete="new-password",
+            help="Enter the same password again to confirm it.",
         )
 
         submitted = st.form_submit_button(
