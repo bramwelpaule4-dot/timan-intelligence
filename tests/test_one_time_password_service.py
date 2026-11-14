@@ -282,7 +282,7 @@ def test_old_phone_code_cannot_verify_a_replaced_number(otp_user):
             (otp_user,),
         ).fetchone()
     assert user["phone_number_e164"] == "+254733123456"
-    assert user["phone_verified"] is False
+    assert bool(user["phone_verified"]) is False
 
 
 def test_recovery_email_change_and_verification(otp_user):
