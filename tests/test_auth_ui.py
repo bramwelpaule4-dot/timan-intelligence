@@ -81,6 +81,12 @@ class FakeStreamlit:
     def markdown(self, value):
         self.writes.append(value)
 
+    def divider(self):
+        return None
+
+    def rerun(self):
+        return None
+
 
 @pytest.fixture
 def valid_registration_inputs():
@@ -1004,3 +1010,61 @@ def test_login_explains_revoked_mfa_challenge_once(
         auth.PENDING_AUTHENTICATION_REVOKED_KEY
         not in fake_streamlit.session_state
     )
+
+
+
+def test_login_offers_email_otp_only_for_verified_recovery_email(
+    fake_streamlit, monkeypatch
+):
+    from timan_intelligence.security import auth
+
+    monkeypatch.setattr(auth, "st", fake_streamlit)
+    monkeypatch.setattr(auth, "is_authenticated", lambda: False)
+    monkeypatch.setattr(auth, "is_totp_pending", lambda: True)
+    monkeypatch.setattr(
+        auth, "is_pending_second_factor_temporarily_locked", lambda: False
+    )
+    monkeypatch.setattr(
+        auth, "get_contact_method_status",
+        lambda user_id: {
+            "recovery_email": "recovery@example.com",
+            "recovery_email_verified": True,
+        },
+    )
+    monkeypatch.setattr(auth, "verify_pending_second_factor", lambda code: False)
+    fake_streamlit.session_state["pending_user_id"] = "user-123"
+
+    auth.render_login()
+
+    assert "Send code to recovery email" in fake_streamlit.buttons
+    assert any(
+        "verified recovery email address" in caption
+        for caption in fake_streamlit.captions
+    )
+
+
+def test_login_hides_email_otp_for_unverified_recovery_email(
+    fake_streamlit, monkeypatch
+):
+    from timan_intelligence.security import auth
+
+    monkeypatch.setattr(auth, "st", fake_streamlit)
+    monkeypatch.setattr(auth, "is_authenticated", lambda: False)
+    monkeypatch.setattr(auth, "is_totp_pending", lambda: True)
+    monkeypatch.setattr(
+        auth, "is_pending_second_factor_temporarily_locked", lambda: False
+    )
+    monkeypatch.setattr(
+        auth, "get_contact_method_status",
+        lambda user_id: {
+            "recovery_email": "recovery@example.com",
+            "recovery_email_verified": False,
+        },
+    )
+    monkeypatch.setattr(auth, "verify_pending_second_factor", lambda code: False)
+    fake_streamlit.session_state["pending_user_id"] = "user-123"
+
+    auth.render_login()
+
+    assert "Send code to recovery email" not in fake_streamlit.buttons
+    assert "Send a new email code" not in fake_streamlit.buttons
