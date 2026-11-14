@@ -666,8 +666,24 @@ def is_pending_second_factor_temporarily_locked() -> bool:
     try:
         return any(
             totp_attempt_limiter.is_locked(user_id, operation)
-            for operation in ("verification", "recovery", "email_otp")
+            for operation in ("verification", "recovery")
         )
+    except Exception:
+        return True
+
+
+
+def is_pending_email_otp_temporarily_locked() -> bool:
+    """Check the independent rate limit for recovery-email sign-in codes."""
+    if not is_totp_pending():
+        return False
+
+    user_id = st.session_state.get("pending_user_id")
+    if not isinstance(user_id, str) or not user_id.strip():
+        return True
+
+    try:
+        return totp_attempt_limiter.is_locked(user_id, "email_otp")
     except Exception:
         return True
 
@@ -771,6 +787,7 @@ def render_login() -> None:
         )
 
         mfa_locked = is_pending_second_factor_temporarily_locked()
+        email_otp_locked = is_pending_email_otp_temporarily_locked()
         if mfa_locked:
             st.error(
                 "Too many unsuccessful verification attempts. For your "
@@ -836,7 +853,7 @@ def render_login() -> None:
                 if st.button(
                     "Send code to recovery email",
                     key="timanstat_send_login_email_otp",
-                    disabled=mfa_locked,
+                    disabled=email_otp_locked,
                 ):
                     if send_pending_email_otp():
                         st.success(
@@ -856,18 +873,18 @@ def render_login() -> None:
                         max_chars=6,
                         placeholder="Enter the six-digit code",
                         autocomplete="one-time-code",
-                        disabled=mfa_locked,
+                        disabled=email_otp_locked,
                     )
                     email_otp_submitted = st.form_submit_button(
                         "Verify email code and sign in",
-                        disabled=mfa_locked,
+                        disabled=email_otp_locked,
                     )
 
                 if email_otp_submitted and not mfa_locked:
                     if verify_pending_email_otp(email_otp_code):
                         st.success("Authentication successful.")
                         st.rerun()
-                    elif is_pending_second_factor_temporarily_locked():
+                    elif is_pending_email_otp_temporarily_locked():
                         st.error(
                             "Too many unsuccessful verification attempts. "
                             "For your security, verification is temporarily "
@@ -882,7 +899,7 @@ def render_login() -> None:
                 if st.button(
                     "Send a new email code",
                     key="timanstat_resend_login_email_otp",
-                    disabled=mfa_locked,
+                    disabled=email_otp_locked,
                 ):
                     if send_pending_email_otp():
                         st.success("A new sign-in code has been sent.")
