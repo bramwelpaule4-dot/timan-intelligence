@@ -807,6 +807,91 @@ def render_login() -> None:
                     "or sign in again if the verification request has expired."
                 )
 
+        pending_user_id = st.session_state.get("pending_user_id")
+        recovery_email_available = False
+        if isinstance(pending_user_id, str) and pending_user_id.strip():
+            try:
+                contact_status = get_contact_method_status(pending_user_id)
+                recovery_email_available = (
+                    isinstance(contact_status.get("recovery_email"), str)
+                    and bool(contact_status.get("recovery_email", "").strip())
+                    and contact_status.get("recovery_email_verified") is True
+                )
+            except Exception:
+                # The authenticator and recovery-code paths remain available
+                # if the optional recovery-email lookup is temporarily down.
+                recovery_email_available = False
+
+        if recovery_email_available:
+            st.divider()
+            st.caption(
+                "Alternatively, receive a one-time sign-in code at your "
+                "verified recovery email address."
+            )
+            challenge_id = st.session_state.get(
+                "pending_email_otp_challenge_id"
+            )
+
+            if not isinstance(challenge_id, str) or not challenge_id.strip():
+                if st.button(
+                    "Send code to recovery email",
+                    key="timanstat_send_login_email_otp",
+                    disabled=mfa_locked,
+                ):
+                    if send_pending_email_otp():
+                        st.success(
+                            "A sign-in code has been sent to your verified "
+                            "recovery email address."
+                        )
+                        st.rerun()
+                    else:
+                        st.error(
+                            "We could not send a sign-in code. Please try "
+                            "again later or use your authenticator code."
+                        )
+            else:
+                with st.form("timanstat_email_otp_login_form"):
+                    email_otp_code = st.text_input(
+                        "Email verification code",
+                        max_chars=6,
+                        placeholder="Enter the six-digit code",
+                        autocomplete="one-time-code",
+                        disabled=mfa_locked,
+                    )
+                    email_otp_submitted = st.form_submit_button(
+                        "Verify email code and sign in",
+                        disabled=mfa_locked,
+                    )
+
+                if email_otp_submitted and not mfa_locked:
+                    if verify_pending_email_otp(email_otp_code):
+                        st.success("Authentication successful.")
+                        st.rerun()
+                    elif is_pending_second_factor_temporarily_locked():
+                        st.error(
+                            "Too many unsuccessful verification attempts. "
+                            "For your security, verification is temporarily "
+                            "paused for this account. Please wait 15 minutes."
+                        )
+                    else:
+                        st.error(
+                            "We could not verify that code. Check it and try "
+                            "again, or request a new code if it has expired."
+                        )
+
+                if st.button(
+                    "Send a new email code",
+                    key="timanstat_resend_login_email_otp",
+                    disabled=mfa_locked,
+                ):
+                    if send_pending_email_otp():
+                        st.success("A new sign-in code has been sent.")
+                        st.rerun()
+                    else:
+                        st.error(
+                            "We could not send a new code. Please try again later."
+                        )
+
         if mfa_locked and st.button(
             "Check verification again",
             key="timanstat_retry_mfa_lockout",
