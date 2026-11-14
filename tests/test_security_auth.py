@@ -1115,3 +1115,133 @@ def test_federated_login_preserves_timanstat_totp_requirement(
     assert mock_session["pending_authentication"] is True
     assert mock_session["pending_user_id"] == "federated-user-id"
     assert "authenticated" not in mock_session
+
+
+
+def _prepare_pending_totp_login(monkeypatch, mock_session, valid_account):
+    account = dict(valid_account)
+    account["totp_enabled"] = True
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        lambda identifier, password: account,
+    )
+    assert auth.authenticate_user("testuser", VALID_PASSWORD) is False
+    assert auth.is_totp_pending() is True
+
+
+def test_pending_login_can_send_otp_to_verified_recovery_email(
+    monkeypatch, mock_session, valid_account
+):
+    _prepare_pending_totp_login(monkeypatch, mock_session, valid_account)
+    monkeypatch.setattr(
+        auth, "get_contact_method_status",
+        lambda user_id: {
+            "recovery_email": "recovery@example.com",
+            "recovery_email_verified": True,
+            "phone_number_e164": None,
+            "phone_verified": False,
+        },
+    )
+    monkeypatch.setattr(
+        auth, "create_otp_challenge",
+        lambda user_id, purpose, channel: {
+            "challenge_id": "challenge-123", "code": "123456", "channel": "email"
+        },
+    )
+    delivered = []
+    monkeypatch.setattr(
+        auth, "send_email_otp",
+        lambda recipient, code, purpose: delivered.append(
+            (recipient, code, purpose)
+        ),
+    )
+    monkeypatch.setattr(
+        auth, "totp_attempt_limiter",
+        SimpleNamespace(is_locked=lambda *args: False),
+    )
+
+    assert auth.send_pending_email_otp() is True
+    assert delivered == [
+        ("recovery@example.com", "123456", "login_mfa")
+    ]
+    assert mock_session["pending_email_otp_challenge_id"] == "challenge-123"
+    assert auth.is_authenticated() is False
+
+
+def test_pending_login_email_otp_requires_verified_recovery_email(
+    monkeypatch, mock_session, valid_account
+):
+    _prepare_pending_totp_login(monkeypatch, mock_session, valid_account)
+    monkeypatch.setattr(
+        auth, "get_contact_method_status",
+        lambda user_id: {
+            "recovery_email": "recovery@example.com",
+            "recovery_email_verified": False,
+        },
+    )
+    create = pytest.MonkeyPatch()
+    create.setattr(auth, "create_otp_challenge", lambda *args: pytest.fail(
+        "An unverified recovery email must not receive a sign-in code."
+    ))
+    monkeypatch.setattr(
+        auth, "totp_attempt_limiter",
+        SimpleNamespace(is_locked=lambda *args: False),
+    )
+
+    assert auth.send_pending_email_otp() is False
+    assert "pending_email_otp_challenge_id" not in mock_session
+
+
+def test_pending_email_otp_promotes_login_to_authenticated_session(
+    monkeypatch, mock_session, valid_account
+):
+    _prepare_pending_totp_login(monkeypatch, mock_session, valid_account)
+    mock_session["pending_email_otp_challenge_id"] = "challenge-123"
+    monkeypatch.setattr(
+        auth, "verify_otp_challenge",
+        lambda challenge_id, user_id, purpose, code: (
+            challenge_id == "challenge-123"
+            and user_id == "test-user-id"
+            and purpose == "login_mfa"
+            and code == "123456"
+        ),
+    )
+    limiter_calls = []
+    monkeypatch.setattr(
+        auth, "totp_attempt_limiter",
+        SimpleNamespace(
+            is_locked=lambda *args: False,
+            record_success=lambda *args: limiter_calls.append(("success", args)),
+            record_failure=lambda *args: limiter_calls.append(("failure", args)),
+        ),
+    )
+
+    assert auth.verify_pending_email_otp("123456") is True
+    assert mock_session["authenticated"] is True
+    assert mock_session["user_id"] == "test-user-id"
+    assert "pending_authentication" not in mock_session
+    assert "pending_email_otp_challenge_id" not in mock_session
+    assert limiter_calls == [("success", ("test-user-id", "email_otp"))]
+
+
+def test_invalid_pending_email_otp_records_rate_limit_failure(
+    monkeypatch, mock_session, valid_account
+):
+    _prepare_pending_totp_login(monkeypatch, mock_session, valid_account)
+    mock_session["pending_email_otp_challenge_id"] = "challenge-123"
+    monkeypatch.setattr(auth, "verify_otp_challenge", lambda *args: False)
+    limiter_calls = []
+    monkeypatch.setattr(
+        auth, "totp_attempt_limiter",
+        SimpleNamespace(
+            is_locked=lambda *args: False,
+            record_success=lambda *args: None,
+            record_failure=lambda *args: limiter_calls.append(args),
+        ),
+    )
+
+    assert auth.verify_pending_email_otp("000000") is False
+    assert limiter_calls == [("test-user-id", "email_otp")]
+    assert mock_session["pending_authentication"] is True
+    assert "authenticated" not in mock_session
