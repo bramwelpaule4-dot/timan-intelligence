@@ -22,6 +22,7 @@ from timan_intelligence.security.auth import is_authenticated, logout
 from timan_intelligence.security.auth_ui import render_authentication
 from timan_intelligence.security.federated_login import process_federated_login_callback
 from timan_intelligence.security.password_change_ui import render_password_change
+from timan_intelligence.security.contact_methods_ui import render_contact_methods
 from timan_intelligence.security.totp_management_ui import render_totp_management
 from timan_intelligence.organisations.service import list_user_organisations
 from timan_intelligence.entitlements.subscription_ui import render_subscription_page
@@ -1783,6 +1784,8 @@ elif page == "Account & Security":
         "Manage your sign-in credentials and account protection settings."
     )
     render_password_change()
+    st.divider()
+    render_contact_methods()
     st.divider()
     render_totp_management()
 
