@@ -35,6 +35,7 @@ EXPECTED_MIGRATION_HISTORY = [
     (18, "mpesa_transaction_reconciliation"),
     (19, "federated_identity_links"),
     (20, "user_contact_methods"),
+    (21, "one_time_password_challenges"),
 ]
 
 
@@ -215,6 +216,7 @@ def test_postgresql_schema_contains_required_tables(postgres_database):
         "email_verification_tokens",
         "password_reset_tokens",
         "totp_recovery_codes",
+        "one_time_password_challenges",
         "rate_limit_states",
         "subscriptions",
         "entitlement_usage",
