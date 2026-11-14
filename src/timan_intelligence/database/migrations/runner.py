@@ -29,6 +29,7 @@ from timan_intelligence.database.migrations.versions import (
     v0018_mpesa_transaction_reconciliation,
     v0019_federated_identity_links,
     v0020_user_contact_methods,
+    v0021_one_time_password_challenges,
 )
 
 
@@ -141,6 +142,11 @@ MIGRATIONS = (
         version=v0020_user_contact_methods.VERSION,
         name=v0020_user_contact_methods.NAME,
         upgrade=v0020_user_contact_methods.upgrade,
+    ),
+    Migration(
+        version=v0021_one_time_password_challenges.VERSION,
+        name=v0021_one_time_password_challenges.NAME,
+        upgrade=v0021_one_time_password_challenges.upgrade,
     ),
 )
 
