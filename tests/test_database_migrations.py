@@ -33,6 +33,7 @@ EXPECTED_MIGRATION_HISTORY = [
     (19, "federated_identity_links"),
     (20, "user_contact_methods"),
     (21, "one_time_password_challenges"),
+    (22, "otp_contact_binding"),
 ]
 
 
@@ -422,7 +423,7 @@ def test_one_time_password_challenge_schema(migration_database):
     assert set(columns) == {
         "id", "user_id", "purpose", "channel", "code_hash",
         "created_at", "expires_at", "failed_attempts", "max_attempts",
-        "consumed_at", "invalidated_at",
+        "consumed_at", "invalidated_at", "contact_binding_hash",
     }
     assert columns["code_hash"]["notnull"] == 1
     assert columns["expires_at"]["notnull"] == 1
