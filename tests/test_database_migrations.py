@@ -32,6 +32,7 @@ EXPECTED_MIGRATION_HISTORY = [
     (18, "mpesa_transaction_reconciliation"),
     (19, "federated_identity_links"),
     (20, "user_contact_methods"),
+    (21, "one_time_password_challenges"),
 ]
 
 
@@ -394,6 +395,47 @@ def test_user_contact_methods_schema(migration_database):
     )
     assert index is not None
     assert index["tbl_name"] == "users"
+
+
+def test_one_time_password_challenge_schema(migration_database):
+    """OTP challenges must be hashed, expiring, bounded and user-owned."""
+
+    initialise_database()
+
+    with database_connection() as connection:
+        columns = {
+            row["name"]: row
+            for row in connection.execute(
+                "PRAGMA table_info('one_time_password_challenges')"
+            ).fetchall()
+        }
+        foreign_keys = connection.execute(
+            "PRAGMA foreign_key_list('one_time_password_challenges')"
+        ).fetchall()
+        indexes = {
+            row["name"]: row
+            for row in connection.execute(
+                "PRAGMA index_list('one_time_password_challenges')"
+            ).fetchall()
+        }
+
+    assert set(columns) == {
+        "id", "user_id", "purpose", "channel", "code_hash",
+        "created_at", "expires_at", "failed_attempts", "max_attempts",
+        "consumed_at", "invalidated_at",
+    }
+    assert columns["code_hash"]["notnull"] == 1
+    assert columns["expires_at"]["notnull"] == 1
+    assert str(columns["failed_attempts"]["dflt_value"]) == "0"
+    assert str(columns["max_attempts"]["dflt_value"]) == "5"
+    assert any(
+        row["from"] == "user_id"
+        and row["table"] == "users"
+        and row["on_delete"].upper() == "CASCADE"
+        for row in foreign_keys
+    )
+    assert "idx_otp_challenges_user_purpose" in indexes
+    assert "idx_otp_challenges_expires" in indexes
 
 
 def test_fresh_database_applies_all_migrations(migration_database):
