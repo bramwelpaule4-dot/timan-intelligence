@@ -110,11 +110,12 @@ def _development_email_sender(
 
 
 def _configured_email_sender(base_url: str):
-    """Return a real SMTP sender, or an explicitly authorised dev simulator.
+    """Return a real email sender, or an explicitly authorised dev simulator.
 
     Public registration and verification-resend flows must never use the
     default in-memory mock provider: it accepts messages without delivering
-    them and would leave users unable to verify their accounts.
+    them and would leave users unable to verify their accounts. SMTP and
+    Gmail API are both supported real delivery providers.
     """
 
     development_sender = _development_email_sender(base_url)
@@ -124,7 +125,7 @@ def _configured_email_sender(base_url: str):
 
     settings = EmailDeliverySettings.from_environment()
 
-    if settings.provider != "smtp":
+    if settings.provider not in {"smtp", "gmail_api"}:
         raise EmailDeliveryError(
             "Real email delivery is not configured.",
             stage="configuration",
