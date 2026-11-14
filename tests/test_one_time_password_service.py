@@ -8,6 +8,8 @@ from timan_intelligence.identity.service import register_user
 from timan_intelligence.security.one_time_password_service import (
     OTPChallengeServiceError,
     create_otp_challenge,
+    set_phone_number_for_verification,
+    set_recovery_email_for_verification,
     verify_otp_challenge,
 )
 
@@ -220,3 +222,102 @@ def test_invalid_challenge_inputs_are_rejected(otp_user):
     with pytest.raises(OTPChallengeServiceError):
         create_otp_challenge(otp_user, "login_mfa", "voice")
     assert verify_otp_challenge("", otp_user, "login_mfa", "123456") is False
+
+
+
+def test_phone_number_change_requires_password_and_resets_verification(otp_user):
+    with pytest.raises(OTPChallengeServiceError, match="password"):
+        set_phone_number_for_verification(
+            otp_user, "+254722123456", "IncorrectPassword123!"
+        )
+
+    updated = set_phone_number_for_verification(
+        otp_user, "+254722123456", "SecureTestPassword123!"
+    )
+    assert updated == "+254722123456"
+
+    with database_connection() as connection:
+        user = connection.execute(
+            "SELECT phone_number_e164, phone_verified FROM users WHERE id = ?",
+            (otp_user,),
+        ).fetchone()
+    assert user["phone_number_e164"] == "+254722123456"
+    assert user["phone_verified"] is False
+
+
+def test_phone_contact_verification_marks_only_matching_number_verified(otp_user):
+    set_phone_number_for_verification(
+        otp_user, "+254722123456", "SecureTestPassword123!"
+    )
+    challenge = create_otp_challenge(otp_user, "verify_phone", "sms")
+
+    assert verify_otp_challenge(
+        challenge["challenge_id"], otp_user, "verify_phone", challenge["code"]
+    ) is True
+
+    with database_connection() as connection:
+        user = connection.execute(
+            "SELECT phone_verified FROM users WHERE id = ?",
+            (otp_user,),
+        ).fetchone()
+    assert user["phone_verified"] is True
+
+
+def test_old_phone_code_cannot_verify_a_replaced_number(otp_user):
+    set_phone_number_for_verification(
+        otp_user, "+254722123456", "SecureTestPassword123!"
+    )
+    challenge = create_otp_challenge(otp_user, "verify_phone", "sms")
+
+    set_phone_number_for_verification(
+        otp_user, "+254733123456", "SecureTestPassword123!"
+    )
+    assert verify_otp_challenge(
+        challenge["challenge_id"], otp_user, "verify_phone", challenge["code"]
+    ) is False
+
+    with database_connection() as connection:
+        user = connection.execute(
+            "SELECT phone_number_e164, phone_verified FROM users WHERE id = ?",
+            (otp_user,),
+        ).fetchone()
+    assert user["phone_number_e164"] == "+254733123456"
+    assert user["phone_verified"] is False
+
+
+def test_recovery_email_change_and_verification(otp_user):
+    updated = set_recovery_email_for_verification(
+        otp_user, "new-recovery@example.com", "SecureTestPassword123!"
+    )
+    assert updated == "new-recovery@example.com"
+
+    challenge = create_otp_challenge(
+        otp_user, "verify_recovery_email", "email"
+    )
+    assert verify_otp_challenge(
+        challenge["challenge_id"],
+        otp_user,
+        "verify_recovery_email",
+        challenge["code"],
+    ) is True
+
+    with database_connection() as connection:
+        user = connection.execute(
+            "SELECT recovery_email, recovery_email_verified FROM users WHERE id = ?",
+            (otp_user,),
+        ).fetchone()
+    assert user["recovery_email"] == "new-recovery@example.com"
+    assert user["recovery_email_verified"] is True
+
+
+def test_contact_verification_purpose_rejects_wrong_channel(otp_user):
+    set_phone_number_for_verification(
+        otp_user, "+254722123456", "SecureTestPassword123!"
+    )
+    with pytest.raises(OTPChallengeServiceError, match="channel"):
+        create_otp_challenge(otp_user, "verify_phone", "email")
+
+
+def test_contact_verification_requires_a_pending_contact(otp_user):
+    with pytest.raises(OTPChallengeServiceError, match="already verified"):
+        create_otp_challenge(otp_user, "verify_phone", "sms")
