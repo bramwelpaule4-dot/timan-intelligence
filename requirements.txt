@@ -3,6 +3,7 @@ pandas>=2.2,<4
 openpyxl>=3.1,<4
 reportlab>=4.2,<5
 scipy>=1.13,<2
+phonenumbers>=8.13,<10
 -e .
 fastapi>=0.115,<1
 uvicorn[standard]>=0.30,<1
