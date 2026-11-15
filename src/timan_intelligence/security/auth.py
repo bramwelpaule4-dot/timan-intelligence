@@ -225,7 +225,8 @@ def is_totp_pending() -> bool:
     # recovery-code regeneration, or other session revocation invalidates it.
     try:
         current_version = SESSION_MANAGER.get_current_session_version(user_id)
-    except Exception:
+    except Exception as exc:
+        logger.error("TimanStat pending authentication check failed. stage=session_version error_type=%s", type(exc).__name__)
         _clear_pending_authentication(session_state)
         return False
 
@@ -466,7 +467,8 @@ def verify_pending_recovery_code(code: str) -> bool:
 
     try:
         verified = consume_recovery_code(user_id, code)
-    except Exception:
+    except Exception as exc:
+        logger.error("TimanStat recovery-code verification failed. stage=code_verification error_type=%s", type(exc).__name__)
         return False
 
     if not verified or not is_totp_pending():
@@ -481,10 +483,12 @@ def verify_pending_recovery_code(code: str) -> bool:
             user_id=user_id,
             expected_session_version=expected_session_version,
         )
-    except (RuntimeError, ValueError):
+    except (RuntimeError, ValueError) as exc:
+        logger.error("TimanStat MFA session promotion failed. stage=session_creation error_type=%s", type(exc).__name__)
         SESSION_MANAGER.clear_session(session_state)
         return False
 
+    logger.info("TimanStat MFA verification completed. stage=session_creation outcome=success")
     return True
 
 
@@ -536,7 +540,8 @@ def verify_pending_totp(code: str) -> bool:
 
     try:
         verified = verify_totp_for_user(user_id, code.strip())
-    except TOTPServiceError:
+    except TOTPServiceError as exc:
+        logger.error("TimanStat authenticator verification failed. stage=totp_verification error_type=%s", type(exc).__name__)
         # Fail closed. Do not create a session when verification cannot
         # be completed reliably.
         return False
@@ -559,10 +564,12 @@ def verify_pending_totp(code: str) -> bool:
             user_id=user_id,
             expected_session_version=expected_session_version,
         )
-    except (RuntimeError, ValueError):
+    except (RuntimeError, ValueError) as exc:
+        logger.error("TimanStat authenticator session promotion failed. stage=session_creation error_type=%s", type(exc).__name__)
         SESSION_MANAGER.clear_session(session_state)
         return False
 
+    logger.info("TimanStat authenticator verification completed. stage=session_creation outcome=success")
     return True
 
 
@@ -591,7 +598,8 @@ def send_pending_email_otp() -> bool:
         challenge = create_otp_challenge(user_id, "login_mfa", "email")
         try:
             send_email_otp(destination, challenge["code"], "login_mfa")
-        except Exception:
+        except Exception as exc:
+            logger.error("TimanStat email MFA delivery failed. stage=message_delivery error_type=%s", type(exc).__name__)
             invalidate_otp_challenge(
                 challenge["challenge_id"], user_id, "login_mfa"
             )
@@ -601,7 +609,8 @@ def send_pending_email_otp() -> bool:
             challenge["challenge_id"]
         )
         return True
-    except Exception:
+    except Exception as exc:
+        logger.error("TimanStat email MFA challenge failed. stage=challenge_setup error_type=%s", type(exc).__name__)
         return False
 
 
@@ -642,7 +651,8 @@ def verify_pending_email_otp(code: str) -> bool:
         if not is_totp_pending():
             return False
         totp_attempt_limiter.record_success(user_id, "email_otp")
-    except Exception:
+    except Exception as exc:
+        logger.error("TimanStat email MFA verification failed. stage=code_verification error_type=%s", type(exc).__name__)
         return False
 
     _clear_pending_authentication(session_state)
