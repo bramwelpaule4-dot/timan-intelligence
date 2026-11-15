@@ -157,13 +157,36 @@ def render_password_reset_request() -> None:
             else None
         )
 
-        request_password_reset(
+        reset_email_sent = request_password_reset(
             email=email,
             base_url=base_url,
             sender=email_sender,
         )
+        # Store only a coarse, non-identifying outcome for the restricted
+        # development diagnostics panel. Never store the submitted address,
+        # account ID, reset token, recipient, or message content.
+        st.session_state["timanstat_dev_password_reset_probe"] = {
+            "outcome": (
+                "delivery_accepted"
+                if reset_email_sent
+                else "not_sent_or_suppressed"
+            ),
+            "stage": "request_completed",
+            "error_type": None,
+        }
 
     except (ValueError, EmailDeliveryError) as exc:
+        failure_stage = getattr(exc, "stage", None)
+        st.session_state["timanstat_dev_password_reset_probe"] = {
+            "outcome": "request_failed",
+            "stage": (
+                failure_stage
+                if isinstance(failure_stage, str)
+                and failure_stage.isidentifier()
+                else "request_processing"
+            ),
+            "error_type": type(exc).__name__,
+        }
         _log_email_delivery_failure(exc)
 
         st.warning(
@@ -173,6 +196,11 @@ def render_password_reset_request() -> None:
         return
 
     except Exception as exc:
+        st.session_state["timanstat_dev_password_reset_probe"] = {
+            "outcome": "request_failed",
+            "stage": "request_processing",
+            "error_type": type(exc).__name__,
+        }
         _log_email_delivery_failure(exc)
 
         st.warning(
