@@ -320,10 +320,23 @@ def render_development_diagnostics() -> None:
             st.write(f"Last stage: {stage or 'unknown'}")
             if error_type:
                 st.write(f"Error type: {error_type}")
+            explanations = {
+                ("input_validation", "rejected"): "The submitted address did not pass email-format validation.",
+                ("rate_limit", "throttled"): "The request was stopped by the password-reset rate limiter. Wait for the cooldown before trying once more.",
+                ("rate_limit", "error"): "The shared rate limiter encountered an internal error; no reset email was sent.",
+                ("account_lookup", "not_eligible"): "The account-eligibility check did not find an active matching account in this database. The public screen deliberately does not disclose this.",
+                ("token_cooldown", "suppressed"): "A recent reset token is still inside the cooldown window. Wait for the cooldown to expire.",
+                ("eligibility_lookup", "error"): "The database eligibility lookup failed; no reset email was sent.",
+                ("account_lookup", "eligible"): "The account passed the internal eligibility check.",
+                ("email_delivery", "started"): "Eligibility passed and the email-delivery function was entered; its result is not yet confirmed.",
+                ("email_delivery", "accepted"): "The email provider accepted the password-reset message for sending. This does not guarantee inbox placement.",
+            }
+            explanation = explanations.get((stage, outcome))
+            if explanation:
+                st.info(explanation)
             st.caption(
-                "This is a coarse result for the latest password-reset "
-                "request in this browser session. It does not reveal "
-                "whether an individual account exists."
+                "This detailed result is restricted to the development diagnostics panel. "
+                "The public recovery response remains generic to protect account privacy."
             )
         else:
             st.caption(
