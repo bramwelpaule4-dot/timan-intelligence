@@ -120,6 +120,7 @@ def _configured_email_sender(base_url: str):
 
     development_sender = _development_email_sender(base_url)
 
+    logger.info("TimanStat registration verification completed. stage=verification_delivery outcome=success")
     if development_sender is not None:
         return development_sender
 
@@ -257,8 +258,10 @@ def render_registration() -> None:
         )
         return
 
+    logger.info("TimanStat registration workflow started. stage=email_provider_configuration")
     try:
         email_sender = _configured_email_sender(base_url)
+        logger.info("TimanStat registration email provider ready. stage=email_provider_configuration outcome=success")
     except (ValueError, EmailDeliveryError) as exc:
         _log_email_delivery_failure(exc)
         st.error(
@@ -276,6 +279,7 @@ def render_registration() -> None:
         )
         return
 
+    logger.info("TimanStat registration account creation started. stage=account_creation")
     try:
         user_id = register_user(
             username=username,
@@ -290,7 +294,7 @@ def render_registration() -> None:
 
     except Exception as exc:
         logger.error(
-            "TimanStat account registration failed. error_type=%s",
+            "TimanStat account registration failed. stage=account_creation error_type=%s",
             type(exc).__name__,
         )
         st.error(
@@ -299,12 +303,14 @@ def render_registration() -> None:
         )
         return
 
+    logger.info("TimanStat registration account creation completed. stage=account_creation outcome=success")
     development_sender = (
         email_sender
         if isinstance(email_sender, MockEmailSender)
         else None
     )
 
+    logger.info("TimanStat registration verification started. stage=verification_delivery")
     try:
         send_email_verification(
             user_id=user_id,
