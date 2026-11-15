@@ -177,16 +177,20 @@ def send_email_verification(
 
     p = _placeholder()
 
-    with database_connection() as connection:
-        user = connection.execute(
-            f"""
+    try:
+        with database_connection() as connection:
+            user = connection.execute(
+                f"""
             SELECT id, email, full_name, email_verified
             FROM users
             WHERE id = {p}
               AND is_active = TRUE
             """,
-            (user_id,),
-        ).fetchone()
+                (user_id,),
+            ).fetchone()
+    except Exception as exc:
+        logger.error("TimanStat verification email failed. stage=account_lookup error_type=%s", type(exc).__name__)
+        raise
 
     if user is None:
         raise ValueError(
@@ -198,10 +202,14 @@ def send_email_verification(
             "This user's email address is already verified."
         )
 
-    token = create_email_verification_token(
-        user_id,
-        expiry_minutes=expiry_minutes,
-    )
+    try:
+        token = create_email_verification_token(
+            user_id,
+            expiry_minutes=expiry_minutes,
+        )
+    except Exception as exc:
+        logger.error("TimanStat verification email failed. stage=token_creation error_type=%s", type(exc).__name__)
+        raise
 
     verification_url = _build_verification_url(
         application_url,
@@ -225,8 +233,12 @@ def send_email_verification(
         ),
     )
 
-    email_sender = sender or build_email_sender()
-    logger.info("TimanStat email verification delivery started.")
+    try:
+        email_sender = sender or build_email_sender()
+    except Exception as exc:
+        logger.error("TimanStat verification email failed. stage=provider_configuration error_type=%s", type(exc).__name__)
+        raise
+    logger.info("TimanStat email verification delivery started. stage=provider_send")
     try:
         email_sender.send(message)
     except Exception as exc:
@@ -353,23 +365,31 @@ def send_password_reset_email(
     # recovery address changes concurrently, its setter invalidates this
     # token; selecting the current destination afterwards avoids sending a
     # newly-created token to a stale recovery address.
-    token = create_password_reset_token(
-        user_id,
-        expiry_minutes=expiry_minutes,
-    )
+    try:
+        token = create_password_reset_token(
+            user_id,
+            expiry_minutes=expiry_minutes,
+        )
+    except Exception as exc:
+        logger.error("TimanStat password-reset email failed. stage=token_creation error_type=%s", type(exc).__name__)
+        raise
 
     p = _placeholder()
-    with database_connection() as connection:
-        user = connection.execute(
-            f"""
+    try:
+        with database_connection() as connection:
+            user = connection.execute(
+                f"""
             SELECT id, email, full_name, recovery_email,
                    recovery_email_verified
             FROM users
             WHERE id = {p}
               AND is_active = TRUE
             """,
-            (user_id,),
-        ).fetchone()
+                (user_id,),
+            ).fetchone()
+    except Exception as exc:
+        logger.error("TimanStat password-reset email failed. stage=account_lookup error_type=%s", type(exc).__name__)
+        raise
 
     if user is None:
         raise ValueError(
@@ -412,8 +432,12 @@ def send_password_reset_email(
         ),
     )
 
-    email_sender = sender or build_email_sender()
-    logger.info("TimanStat password-reset email delivery started.")
+    try:
+        email_sender = sender or build_email_sender()
+    except Exception as exc:
+        logger.error("TimanStat password-reset email failed. stage=provider_configuration error_type=%s", type(exc).__name__)
+        raise
+    logger.info("TimanStat password-reset email delivery started. stage=provider_send")
     try:
         email_sender.send(message)
     except Exception as exc:
