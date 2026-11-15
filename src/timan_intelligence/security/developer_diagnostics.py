@@ -15,6 +15,7 @@ from urllib.parse import urlsplit
 import streamlit as st
 
 from timan_intelligence.database.connection import database_connection
+from timan_intelligence.security.distributed_rate_limit import DatabaseRateLimiter
 from timan_intelligence.identity.email_delivery import (
     EmailDeliverySettings,
     OutboundEmail,
@@ -74,6 +75,29 @@ def _check_database() -> tuple[bool, str]:
             type(exc).__name__,
         )
         return False, f"Database check failed ({type(exc).__name__})."
+
+
+def _check_rate_limiter() -> tuple[bool, str]:
+    """Read the shared limiter using a synthetic key, never a real account."""
+    try:
+        limiter = DatabaseRateLimiter(
+            scope="developer-diagnostics-health",
+            max_failed_attempts=1,
+        )
+        limiter.is_locked("synthetic-health-check")
+        return True, (
+            "Rate-limit HMAC configuration and rate_limit_states storage are working."
+        )
+    except Exception as exc:
+        logger.error(
+            "TimanStat developer diagnostic failed. check=rate_limiter "
+            "error_type=%s",
+            type(exc).__name__,
+        )
+        return False, (
+            f"Rate-limiter check failed ({type(exc).__name__}). "
+            "Verify TIMANSTAT_RATE_LIMIT_HMAC_KEY and the rate-limit database table."
+        )
 
 
 def _check_email_configuration() -> tuple[bool, str, EmailDeliverySettings | None]:
@@ -176,8 +200,7 @@ def render_development_diagnostics() -> None:
             attempts = st.session_state.get(DIAGNOSTIC_ATTEMPTS_KEY, 0)
             if attempts >= 5:
                 st.error(
-                    "The diagnostics access limit has been reached for this session. "
-                    "Reloading the app starts a new session."
+                    "The diagnostics access limit has been reached for this session."
                 )
                 return
 
@@ -207,11 +230,16 @@ def render_development_diagnostics() -> None:
 
         if st.button("Run database and email-configuration checks"):
             database_ok, database_message = _check_database()
+            rate_limit_ok, rate_limit_message = _check_rate_limiter()
             email_ok, email_message, settings = _check_email_configuration()
 
             st.session_state["timanstat_diagnostic_database_result"] = (
                 database_ok,
                 database_message,
+            )
+            st.session_state["timanstat_diagnostic_rate_limit_result"] = (
+                rate_limit_ok,
+                rate_limit_message,
             )
             st.session_state["timanstat_diagnostic_email_result"] = (
                 email_ok,
@@ -224,6 +252,9 @@ def render_development_diagnostics() -> None:
         database_result = st.session_state.get(
             "timanstat_diagnostic_database_result"
         )
+        rate_limit_result = st.session_state.get(
+            "timanstat_diagnostic_rate_limit_result"
+        )
         email_result = st.session_state.get(
             "timanstat_diagnostic_email_result"
         )
@@ -231,6 +262,10 @@ def render_development_diagnostics() -> None:
         if database_result:
             (st.success if database_result[0] else st.error)(
                 f"Database: {database_result[1]}"
+            )
+        if rate_limit_result:
+            (st.success if rate_limit_result[0] else st.error)(
+                f"Rate limiter: {rate_limit_result[1]}"
             )
         if email_result:
             (st.success if email_result[0] else st.error)(
@@ -255,6 +290,7 @@ def render_development_diagnostics() -> None:
                 DIAGNOSTIC_SESSION_KEY,
                 DIAGNOSTIC_ATTEMPTS_KEY,
                 "timanstat_diagnostic_database_result",
+                "timanstat_diagnostic_rate_limit_result",
                 "timanstat_diagnostic_email_result",
                 "timanstat_diagnostic_email_settings_ready",
             ):
