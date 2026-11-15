@@ -88,10 +88,11 @@ def fake_streamlit(monkeypatch):
         lambda: "https://timanstat.example.com",
     )
 
+    fake.configured_sender = object()
     monkeypatch.setattr(
         password_reset_ui,
-        "_development_email_sender",
-        lambda base_url: None,
+        "_configured_email_sender",
+        lambda base_url: fake.configured_sender,
     )
 
     return fake
@@ -160,7 +161,7 @@ def test_password_reset_request_uses_generic_response(
     request.assert_called_once_with(
         email="unknown@example.com",
         base_url="https://timanstat.example.com",
-        sender=None,
+        sender=fake_streamlit.configured_sender,
     )
 
     assert fake_streamlit.successes == [
@@ -287,7 +288,7 @@ def test_development_password_reset_displays_mock_link(
 
     monkeypatch.setattr(
         password_reset_ui,
-        "_development_email_sender",
+        "_configured_email_sender",
         lambda base_url: sender,
     )
 
