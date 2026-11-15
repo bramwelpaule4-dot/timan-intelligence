@@ -10,6 +10,7 @@ from __future__ import annotations
 import hmac
 import logging
 import os
+import re
 from urllib.parse import urlsplit
 
 import streamlit as st
@@ -189,7 +190,7 @@ def _send_controlled_test_email(settings: EmailDeliverySettings) -> tuple[bool, 
         safe_api_reason = (
             api_reason
             if isinstance(api_reason, str)
-            and __import__("re").fullmatch(r"[A-Za-z0-9_.-]{1,64}", api_reason)
+            and re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", api_reason)
             else "unknown"
         )
         logger.error(
