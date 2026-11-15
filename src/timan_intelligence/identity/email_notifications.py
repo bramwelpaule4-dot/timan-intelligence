@@ -160,6 +160,23 @@ def _validate_cooldown(
         )
 
 
+def _record_password_reset_diagnostic(
+    diagnostic: dict[str, str] | None,
+    *,
+    stage: str,
+    outcome: str,
+    error_type: str | None = None,
+) -> None:
+    """Record a safe, non-identifying password-reset workflow result."""
+    if diagnostic is None:
+        return
+    diagnostic.clear()
+    diagnostic["stage"] = stage
+    diagnostic["outcome"] = outcome
+    if error_type:
+        diagnostic["error_type"] = error_type
+
+
 def send_email_verification(
     user_id: str,
     base_url: str,
@@ -455,6 +472,7 @@ def request_password_reset(
     base_url: str,
     sender: EmailSender | None = None,
     cooldown_seconds: int = DEFAULT_PASSWORD_RESET_COOLDOWN_SECONDS,
+    diagnostic: dict[str, str] | None = None,
 ) -> bool:
     """
     Request a password-reset email without disclosing account existence.
@@ -471,9 +489,15 @@ def request_password_reset(
     A separate cooldown is applied to password-reset requests.
     """
 
+    _record_password_reset_diagnostic(
+        diagnostic, stage="input_validation", outcome="started"
+    )
     normalised_email = _validate_email(email)
 
     if normalised_email is None:
+        _record_password_reset_diagnostic(
+            diagnostic, stage="input_validation", outcome="rejected"
+        )
         return False
 
     _validate_cooldown(
@@ -498,6 +522,9 @@ def request_password_reset(
                 "TimanStat password-reset request stopped. "
                 "stage=rate_limit outcome=throttled"
             )
+            _record_password_reset_diagnostic(
+                diagnostic, stage="rate_limit", outcome="throttled"
+            )
             return False
     except Exception as exc:
         # Do not send mail when shared throttling cannot be enforced.
@@ -506,6 +533,12 @@ def request_password_reset(
             "TimanStat password-reset request failed. "
             "stage=rate_limit outcome=error error_type=%s",
             type(exc).__name__,
+        )
+        _record_password_reset_diagnostic(
+            diagnostic,
+            stage="rate_limit",
+            outcome="error",
+            error_type=type(exc).__name__,
         )
         return False
 
@@ -532,6 +565,9 @@ def request_password_reset(
                     "TimanStat password-reset request stopped. "
                     "stage=account_lookup outcome=not_eligible"
                 )
+                _record_password_reset_diagnostic(
+                    diagnostic, stage="account_lookup", outcome="not_eligible"
+                )
                 return False
 
             recent_token = connection.execute(
@@ -550,21 +586,39 @@ def request_password_reset(
                     "TimanStat password-reset request stopped. "
                     "stage=token_cooldown outcome=suppressed"
                 )
+                _record_password_reset_diagnostic(
+                    diagnostic, stage="token_cooldown", outcome="suppressed"
+                )
                 return False
 
             user_id = user["id"]
     except Exception as exc:
         logger.error("TimanStat password-reset request failed. stage=eligibility_lookup error_type=%s", type(exc).__name__)
+        _record_password_reset_diagnostic(
+            diagnostic,
+            stage="eligibility_lookup",
+            outcome="error",
+            error_type=type(exc).__name__,
+        )
         return False
 
     logger.info(
         "TimanStat password-reset request passed eligibility checks. "
         "stage=account_lookup outcome=eligible"
     )
+    _record_password_reset_diagnostic(
+        diagnostic, stage="account_lookup", outcome="eligible"
+    )
+    _record_password_reset_diagnostic(
+        diagnostic, stage="email_delivery", outcome="started"
+    )
     send_password_reset_email(
         user_id=user_id,
         base_url=application_url,
         sender=sender,
+    )
+    _record_password_reset_diagnostic(
+        diagnostic, stage="email_delivery", outcome="accepted"
     )
 
     return True
