@@ -11,6 +11,7 @@ from timan_intelligence.identity.email_delivery import OutboundEmail
 from timan_intelligence.identity.email_notifications import (
     EMAIL_VERIFICATION_SUBJECT,
     PASSWORD_RESET_SUBJECT,
+    request_password_reset,
     send_email_verification,
     send_password_reset_email,
 )
@@ -370,3 +371,52 @@ def test_password_reset_falls_back_to_primary_email_when_recovery_email_missing(
     assert len(sender.sent_messages) == 1
     assert sender.sent_messages[0].recipient == "notification@example.com"
     assert sender.sent_messages[0].subject == PASSWORD_RESET_SUBJECT
+
+
+
+def test_password_reset_request_uses_primary_email_to_find_account_then_sends_to_verified_recovery_email(
+    test_user,
+):
+    """Public recovery lookup uses the sign-in email, delivery uses verified recovery email."""
+    sender = RecordingEmailSender()
+
+    with database_connection() as connection:
+        connection.execute(
+            """
+            UPDATE users
+            SET recovery_email = ?,
+                recovery_email_verified = TRUE
+            WHERE id = ?
+            """,
+            ("recovery-request@example.com", test_user),
+        )
+
+    result = request_password_reset(
+        email="notification@example.com",
+        base_url="https://timanstat.example.com",
+        sender=sender,
+        cooldown_seconds=60,
+    )
+
+    assert result is True
+    assert len(sender.sent_messages) == 1
+    assert sender.sent_messages[0].recipient == "recovery-request@example.com"
+    assert sender.sent_messages[0].subject == PASSWORD_RESET_SUBJECT
+    assert "reset_password=" in sender.sent_messages[0].body
+
+
+def test_password_reset_request_keeps_generic_result_for_unknown_account(
+    test_database,
+):
+    """Unknown accounts do not trigger email delivery or disclose account existence."""
+    sender = RecordingEmailSender()
+
+    result = request_password_reset(
+        email="not-registered@example.com",
+        base_url="https://timanstat.example.com",
+        sender=sender,
+        cooldown_seconds=60,
+    )
+
+    assert result is False
+    assert sender.sent_messages == []
