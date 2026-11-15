@@ -5,6 +5,10 @@ import pytest
 from timan_intelligence.database.connection import database_connection
 from timan_intelligence.database.initialise import initialise_database
 from timan_intelligence.identity.service import register_user
+from timan_intelligence.identity.password_reset import (
+    create_password_reset_token,
+    reset_password_with_token,
+)
 from timan_intelligence.security.one_time_password_service import (
     OTPChallengeServiceError,
     create_otp_challenge,
@@ -371,3 +375,43 @@ def test_contact_method_status_returns_verification_flags(otp_user):
     assert status["recovery_email_verified"] is True
     assert status["phone_number_e164"] == "+254712345678"
     assert status["phone_verified"] is True
+
+
+def test_recovery_email_change_invalidates_outstanding_password_reset_token(
+    otp_user,
+):
+    token = create_password_reset_token(otp_user)
+
+    with database_connection() as connection:
+        outstanding = connection.execute(
+            """
+            SELECT id
+            FROM password_reset_tokens
+            WHERE user_id = ?
+            """,
+            (otp_user,),
+        ).fetchone()
+    assert outstanding is not None
+
+    set_recovery_email_for_verification(
+        otp_user,
+        "replacement-recovery@example.com",
+        "SecureTestPassword123!",
+    )
+
+    with database_connection() as connection:
+        remaining = connection.execute(
+            """
+            SELECT id
+            FROM password_reset_tokens
+            WHERE user_id = ?
+            """,
+            (otp_user,),
+        ).fetchone()
+    assert remaining is None
+
+    assert reset_password_with_token(
+        token,
+        "ChangedByStaleResetLink123!",
+    ) is False
+
