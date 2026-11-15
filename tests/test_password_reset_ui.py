@@ -241,8 +241,8 @@ def test_production_password_reset_does_not_display_reset_link(
 
     monkeypatch.setattr(
         password_reset_ui,
-        "_development_email_sender",
-        lambda base_url: None,
+        "_configured_email_sender",
+        lambda base_url: fake_streamlit.configured_sender,
     )
 
     password_reset_ui.render_password_reset_request()
