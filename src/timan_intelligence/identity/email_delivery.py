@@ -364,8 +364,8 @@ def _safe_gmail_api_error_details(exc: Exception) -> dict[str, int | str | None]
     if oauth_error is None:
         # Extract only a known OAuth error identifier; never log exception text.
         match = re.search(
-            r"\\b(invalid_grant|invalid_client|unauthorized_client|"
-            r"access_denied|invalid_scope)\\b",
+            r"\b(invalid_grant|invalid_client|unauthorized_client|"
+            r"access_denied|invalid_scope)\b",
             str(exc),
         )
         if match:
