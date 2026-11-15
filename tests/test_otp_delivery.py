@@ -87,3 +87,30 @@ def test_sms_otp_rejects_non_international_destination():
             "verify_phone",
             sender=RecordingSMSSender(),
         )
+
+
+
+def test_email_otp_delivery_failure_is_logged_without_sensitive_content(caplog):
+    """OTP diagnostics record stage and exception type, never message contents."""
+    import logging
+
+    class BrokenEmailSender:
+        def send(self, message):
+            raise RuntimeError(
+                "recovery@example.com code=123456 oauth-secret"
+            )
+
+    with caplog.at_level(logging.ERROR):
+        with pytest.raises(OTPDeliveryError):
+            send_email_otp(
+                "recovery@example.com",
+                "123456",
+                "login_mfa",
+                sender=BrokenEmailSender(),
+            )
+
+    assert "channel=email stage=send" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "recovery@example.com" not in caplog.text
+    assert "123456" not in caplog.text
+    assert "oauth-secret" not in caplog.text
