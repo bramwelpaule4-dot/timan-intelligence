@@ -7,6 +7,7 @@ SMTP errors retain a safe failure-stage label for diagnostics.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import smtplib
@@ -20,6 +21,8 @@ from typing import Protocol
 
 DEFAULT_SMTP_TIMEOUT = 20
 DEFAULT_SMTP_PORT = 587
+
+logger = logging.getLogger(__name__)
 
 
 class EmailDeliveryError(Exception):
@@ -330,6 +333,65 @@ def build_email_sender(
     raise ValueError("Unsupported email delivery provider.")
 
 
+def _safe_gmail_api_error_details(exc: Exception) -> dict[str, int | str | None]:
+    """Extract non-sensitive, allow-listed identifiers from Google errors.
+
+    Never return raw exception text, response bodies, credentials, email
+    addresses, message content, or OAuth tokens.
+    """
+
+    http_status: int | None = None
+    response = getattr(exc, "resp", None) or getattr(exc, "response", None)
+    candidate_status = getattr(response, "status", None)
+    if isinstance(candidate_status, int) and 100 <= candidate_status <= 599:
+        http_status = candidate_status
+
+    allowed_oauth_errors = {
+        "invalid_grant",
+        "invalid_client",
+        "unauthorized_client",
+        "access_denied",
+        "invalid_scope",
+    }
+    oauth_error: str | None = None
+
+    for attribute in ("error", "error_code"):
+        candidate = getattr(exc, attribute, None)
+        if isinstance(candidate, str) and candidate in allowed_oauth_errors:
+            oauth_error = candidate
+            break
+
+    if oauth_error is None:
+        # Extract only a known OAuth error identifier; never log exception text.
+        match = re.search(
+            r"\\b(invalid_grant|invalid_client|unauthorized_client|"
+            r"access_denied|invalid_scope)\\b",
+            str(exc),
+        )
+        if match:
+            oauth_error = match.group(1)
+
+    api_reason: str | None = None
+    error_details = getattr(exc, "error_details", None)
+    if isinstance(error_details, (list, tuple)):
+        for detail in error_details:
+            if not isinstance(detail, dict):
+                continue
+            reason = detail.get("reason")
+            if (
+                isinstance(reason, str)
+                and re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", reason)
+            ):
+                api_reason = reason
+                break
+
+    return {
+        "http_status": http_status,
+        "oauth_error": oauth_error,
+        "api_reason": api_reason,
+    }
+
+
 class GmailAPIEmailSender:
     """Send email through Gmail API using an offline OAuth refresh token."""
 
@@ -393,6 +455,18 @@ class GmailAPIEmailSender:
             ).execute()
 
         except Exception as exc:
+            details = _safe_gmail_api_error_details(exc)
+            # Log only allow-listed diagnostic identifiers. Do not log the
+            # exception text, traceback, recipient, message, or credentials.
+            logger.error(
+                "Gmail API delivery failed; stage=%s exception_type=%s "
+                "oauth_error=%s http_status=%s api_reason=%s",
+                stage,
+                type(exc).__name__,
+                details["oauth_error"] or "unknown",
+                details["http_status"] or "unknown",
+                details["api_reason"] or "unknown",
+            )
             raise EmailDeliveryError(
                 "Gmail API delivery failed. Check OAuth authorization and "
                 "Gmail API configuration.",
