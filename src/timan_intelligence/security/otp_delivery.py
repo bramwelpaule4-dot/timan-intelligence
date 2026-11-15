@@ -7,8 +7,11 @@ simulated in production.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Protocol
+
+logger = logging.getLogger(__name__)
 
 from timan_intelligence.identity.email_delivery import (
     EmailDeliveryError,
@@ -74,6 +77,7 @@ def send_email_otp(
             settings = EmailDeliverySettings.from_environment()
             sender = build_email_sender(settings)
         except Exception as exc:
+            logger.error("TimanStat OTP delivery failed. channel=email stage=configuration error_type=%s", type(exc).__name__)
             raise OTPDeliveryError(
                 "The email delivery service is not configured."
             ) from exc
@@ -98,13 +102,16 @@ def send_email_otp(
             )
         )
     except (EmailDeliveryError, ValueError) as exc:
+        logger.error("TimanStat OTP delivery failed. channel=email stage=send error_type=%s provider_stage=%s", type(exc).__name__, getattr(exc, "stage", None) or "unknown")
         raise OTPDeliveryError(
             "The one-time password could not be delivered by email."
         ) from exc
     except Exception as exc:
+        logger.error("TimanStat OTP delivery failed. channel=email stage=send error_type=%s", type(exc).__name__)
         raise OTPDeliveryError(
             "The one-time password could not be delivered by email."
         ) from exc
+    logger.info("TimanStat OTP delivery completed. channel=email stage=send outcome=success")
 
 
 def send_sms_otp(
@@ -136,6 +143,8 @@ def send_sms_otp(
     try:
         sender.send(OutboundSMS(recipient=recipient, body=body))
     except Exception as exc:
+        logger.error("TimanStat OTP delivery failed. channel=sms stage=send error_type=%s", type(exc).__name__)
         raise OTPDeliveryError(
             "The one-time password could not be delivered by SMS."
         ) from exc
+    logger.info("TimanStat OTP delivery completed. channel=sms stage=send outcome=success")
