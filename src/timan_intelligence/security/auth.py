@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 import re
 import time
@@ -35,6 +36,8 @@ from timan_intelligence.security.totp_rate_limit import (
     totp_attempt_limiter,
 )
 
+
+logger = logging.getLogger(__name__)
 
 VALID_ROLES = {"super_admin", "developer", "admin", "user"}
 
@@ -100,7 +103,8 @@ def _reject_login(identifier: str) -> bool:
 
     try:
         LOGIN_RATE_LIMITER.record_failure(identifier)
-    except Exception:
+    except Exception as exc:
+        logger.error("TimanStat login rate-limit update failed. stage=record_failure error_type=%s", type(exc).__name__)
         # A failed attempt that cannot be recorded means the security
         # control is unavailable; never disguise this as bad credentials.
         st.session_state[LOGIN_UNAVAILABLE_KEY] = True
@@ -258,7 +262,8 @@ def is_login_temporarily_locked(identifier: str) -> bool:
         return LOGIN_RATE_LIMITER.is_locked(
             identifier.strip().casefold()
         )
-    except Exception:
+    except Exception as exc:
+        logger.error("TimanStat login lockout check failed. stage=lockout_check error_type=%s", type(exc).__name__)
         return False
 
 
@@ -295,8 +300,10 @@ def authenticate_user(username: str, password: str) -> bool:
 
     try:
         if LOGIN_RATE_LIMITER.is_locked(identifier):
+            logger.info("TimanStat password authentication stopped. stage=lockout_check outcome=locked")
             return False
-    except Exception:
+    except Exception as exc:
+        logger.error("TimanStat password authentication unavailable. stage=lockout_check error_type=%s", type(exc).__name__)
         # Fail closed, but distinguish a broken security dependency from
         # an incorrect password so users receive an actionable message.
         st.session_state[LOGIN_UNAVAILABLE_KEY] = True
@@ -304,12 +311,14 @@ def authenticate_user(username: str, password: str) -> bool:
 
     try:
         user = authenticate_identity_user(identifier, password)
-    except Exception:
+    except Exception as exc:
+        logger.error("TimanStat password authentication unavailable. stage=identity_lookup error_type=%s", type(exc).__name__)
         # Database or identity-service failures are not bad credentials.
         st.session_state[LOGIN_UNAVAILABLE_KEY] = True
         return False
 
     if user is None:
+        logger.info("TimanStat password authentication rejected. stage=identity_lookup outcome=rejected")
         return _reject_login(identifier)
 
     if not isinstance(user, dict):
@@ -333,7 +342,8 @@ def authenticate_user(username: str, password: str) -> bool:
 
     try:
         LOGIN_RATE_LIMITER.record_success(identifier)
-    except Exception:
+    except Exception as exc:
+        logger.error("TimanStat password authentication unavailable. stage=record_success error_type=%s", type(exc).__name__)
         # Do not establish a session if rate-limit state cannot be cleared.
         st.session_state[LOGIN_UNAVAILABLE_KEY] = True
         return False
@@ -350,7 +360,8 @@ def authenticate_user(username: str, password: str) -> bool:
                     "role": role,
                 },
             )
-        except Exception:
+        except Exception as exc:
+            logger.error("TimanStat second-factor challenge creation failed. stage=pending_authentication error_type=%s", type(exc).__name__)
             _clear_pending_authentication(st.session_state)
             st.session_state[LOGIN_UNAVAILABLE_KEY] = True
             return False
@@ -363,11 +374,13 @@ def authenticate_user(username: str, password: str) -> bool:
             role,
             user_id=user_id,
         )
-    except Exception:
+    except Exception as exc:
+        logger.error("TimanStat session creation failed. stage=session_creation error_type=%s", type(exc).__name__)
         SESSION_MANAGER.clear_session(st.session_state)
         st.session_state[LOGIN_UNAVAILABLE_KEY] = True
         return False
 
+    logger.info("TimanStat password authentication completed. stage=session_creation outcome=success")
     return True
 
 
