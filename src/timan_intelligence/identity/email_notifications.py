@@ -466,9 +466,19 @@ def request_password_reset(
     )
     try:
         if not request_limiter.consume_attempt(normalised_email):
+            logger.info(
+                "TimanStat password-reset request stopped. "
+                "stage=rate_limit outcome=throttled"
+            )
             return False
-    except Exception:
+    except Exception as exc:
         # Do not send mail when shared throttling cannot be enforced.
+        # Record the exception type, never the exception text or identifier.
+        logger.error(
+            "TimanStat password-reset request failed. "
+            "stage=rate_limit outcome=error error_type=%s",
+            type(exc).__name__,
+        )
         return False
 
     p = _placeholder()
@@ -489,6 +499,10 @@ def request_password_reset(
         ).fetchone()
 
         if user is None:
+            logger.info(
+                "TimanStat password-reset request stopped. "
+                "stage=account_lookup outcome=not_eligible"
+            )
             return False
 
         recent_token = connection.execute(
@@ -503,12 +517,18 @@ def request_password_reset(
         ).fetchone()
 
         if recent_token is not None:
-            logger.info("TimanStat email request suppressed by token cooldown.")
+            logger.info(
+                "TimanStat password-reset request stopped. "
+                "stage=token_cooldown outcome=suppressed"
+            )
             return False
 
         user_id = user["id"]
 
-    logger.info("TimanStat password-reset request passed eligibility checks.")
+    logger.info(
+        "TimanStat password-reset request passed eligibility checks. "
+        "stage=account_lookup outcome=eligible"
+    )
     send_password_reset_email(
         user_id=user_id,
         base_url=application_url,
