@@ -376,8 +376,13 @@ def test_password_reset_falls_back_to_primary_email_when_recovery_email_missing(
 
 def test_password_reset_request_uses_primary_email_to_find_account_then_sends_to_verified_recovery_email(
     test_user,
+    monkeypatch,
 ):
     """Public recovery lookup uses the sign-in email, delivery uses verified recovery email."""
+    monkeypatch.setenv(
+        "TIMANSTAT_RATE_LIMIT_HMAC_KEY",
+        "test-rate-limit-hmac-key-with-at-least-32-bytes",
+    )
     sender = RecordingEmailSender()
 
     with database_connection() as connection:
@@ -407,8 +412,13 @@ def test_password_reset_request_uses_primary_email_to_find_account_then_sends_to
 
 def test_password_reset_request_keeps_generic_result_for_unknown_account(
     test_database,
+    monkeypatch,
 ):
     """Unknown accounts do not trigger email delivery or disclose account existence."""
+    monkeypatch.setenv(
+        "TIMANSTAT_RATE_LIMIT_HMAC_KEY",
+        "test-rate-limit-hmac-key-with-at-least-32-bytes",
+    )
     sender = RecordingEmailSender()
 
     result = request_password_reset(
