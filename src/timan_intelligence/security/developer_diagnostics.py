@@ -305,6 +305,32 @@ def render_development_diagnostics() -> None:
                 f"Email configuration: {email_result[1]}"
             )
 
+        # This probe is written by the password-reset request in the same
+        # browser session. It intentionally excludes account identity,
+        # submitted email, recipient, reset token, and message content.
+        reset_probe = st.session_state.get(
+            "timanstat_dev_password_reset_probe"
+        )
+        if isinstance(reset_probe, dict):
+            st.subheader("Password-reset workflow probe")
+            outcome = reset_probe.get("outcome")
+            stage = reset_probe.get("stage")
+            error_type = reset_probe.get("error_type")
+            st.write(f"Outcome: {outcome or 'unavailable'}")
+            st.write(f"Last stage: {stage or 'unknown'}")
+            if error_type:
+                st.write(f"Error type: {error_type}")
+            st.caption(
+                "This is a coarse result for the latest password-reset "
+                "request in this browser session. It does not reveal "
+                "whether an individual account exists."
+            )
+        else:
+            st.caption(
+                "No password-reset request has been recorded in this "
+                "browser session yet."
+            )
+
         if st.session_state.get("timanstat_diagnostic_email_settings_ready"):
             st.warning(
                 "The next step sends a real test email to the configured "
