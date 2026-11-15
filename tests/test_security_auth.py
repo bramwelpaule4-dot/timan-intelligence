@@ -1247,3 +1247,38 @@ def test_invalid_pending_email_otp_records_rate_limit_failure(
     assert limiter_calls == [("test-user-id", "email_otp")]
     assert mock_session["pending_authentication"] is True
     assert "authenticated" not in mock_session
+
+
+
+def test_identity_authentication_failure_is_logged_without_identifiers_or_exception_text(
+    mock_session,
+    monkeypatch,
+    caplog,
+):
+    """Internal diagnostics identify the stage without exposing credentials."""
+    import logging
+
+    def fail_authentication(identifier, password):
+        raise RuntimeError(
+            "private-user@example.com SecurePassword123! database-secret"
+        )
+
+    monkeypatch.setattr(
+        auth,
+        "authenticate_identity_user",
+        fail_authentication,
+    )
+
+    with caplog.at_level(logging.ERROR):
+        result = auth.authenticate_user(
+            "private-user@example.com",
+            "SecurePassword123!",
+        )
+
+    assert result is False
+    assert mock_session[auth.LOGIN_UNAVAILABLE_KEY] is True
+    assert "stage=identity_lookup" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "private-user@example.com" not in caplog.text
+    assert "SecurePassword123!" not in caplog.text
+    assert "database-secret" not in caplog.text
