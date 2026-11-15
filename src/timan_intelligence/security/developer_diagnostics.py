@@ -164,16 +164,48 @@ def _send_controlled_test_email(settings: EmailDeliverySettings) -> tuple[bool, 
         )
     except Exception as exc:
         stage = getattr(exc, "stage", None)
-        safe_stage = stage if isinstance(stage, str) and stage.isidentifier() else "unknown"
+        safe_stage = (
+            stage if isinstance(stage, str) and stage.isidentifier() else "unknown"
+        )
+        oauth_error = getattr(exc, "oauth_error", None)
+        safe_oauth_error = (
+            oauth_error
+            if oauth_error in {
+                "invalid_grant",
+                "invalid_client",
+                "unauthorized_client",
+                "access_denied",
+                "invalid_scope",
+            }
+            else "unclassified"
+        )
+        http_status = getattr(exc, "http_status", None)
+        safe_http_status = (
+            http_status
+            if isinstance(http_status, int) and 100 <= http_status <= 599
+            else "unknown"
+        )
+        api_reason = getattr(exc, "api_reason", None)
+        safe_api_reason = (
+            api_reason
+            if isinstance(api_reason, str)
+            and __import__("re").fullmatch(r"[A-Za-z0-9_.-]{1,64}", api_reason)
+            else "unknown"
+        )
         logger.error(
             "TimanStat developer diagnostic failed. check=email_delivery "
-            "error_type=%s stage=%s",
+            "error_type=%s stage=%s oauth_error=%s http_status=%s api_reason=%s",
             type(exc).__name__,
             safe_stage,
+            safe_oauth_error,
+            safe_http_status,
+            safe_api_reason,
         )
         return False, (
-            f"Email delivery failed ({type(exc).__name__}; stage: {safe_stage}). "
-            "No credentials or message content were exposed."
+            f"Email delivery failed ({type(exc).__name__}; stage: {safe_stage}; "
+            f"OAuth error: {safe_oauth_error}; HTTP status: {safe_http_status}; "
+            f"API reason: {safe_api_reason}). "
+            "No credentials, raw provider response, or message content were exposed."
         )
 
 
