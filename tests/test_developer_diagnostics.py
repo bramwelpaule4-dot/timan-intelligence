@@ -56,6 +56,27 @@ def test_database_check_uses_read_only_queries(monkeypatch):
     ]
 
 
+def test_rate_limiter_health_check_uses_synthetic_identifier(monkeypatch):
+    calls = []
+
+    class FakeLimiter:
+        def __init__(self, **kwargs):
+            calls.append(("init", kwargs))
+
+        def is_locked(self, identifier):
+            calls.append(("check", identifier))
+            return False
+
+    monkeypatch.setattr(diagnostics, "DatabaseRateLimiter", FakeLimiter)
+
+    success, message = diagnostics._check_rate_limiter()
+
+    assert success is True
+    assert "HMAC configuration" in message
+    assert calls[0][1]["scope"] == "developer-diagnostics-health"
+    assert calls[1][1] == "synthetic-health-check"
+
+
 def test_email_configuration_rejects_mock_provider(monkeypatch):
     settings = SimpleNamespace(
         provider="mock",
