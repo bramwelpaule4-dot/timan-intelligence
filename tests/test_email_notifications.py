@@ -301,7 +301,6 @@ def test_rejects_inactive_user(test_user):
     assert sender.sent_messages == []
 
 
-
 def test_password_reset_prefers_verified_recovery_email(test_user):
     sender = RecordingEmailSender()
 
