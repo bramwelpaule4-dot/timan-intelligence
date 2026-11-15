@@ -10,7 +10,9 @@ from timan_intelligence.database.initialise import initialise_database
 from timan_intelligence.identity.email_delivery import OutboundEmail
 from timan_intelligence.identity.email_notifications import (
     EMAIL_VERIFICATION_SUBJECT,
+    PASSWORD_RESET_SUBJECT,
     send_email_verification,
+    send_password_reset_email,
 )
 from timan_intelligence.identity.email_verification import (
     verify_email_token,
@@ -297,3 +299,75 @@ def test_rejects_inactive_user(test_user):
         )
 
     assert sender.sent_messages == []
+
+
+
+def test_password_reset_prefers_verified_recovery_email(test_user):
+    sender = RecordingEmailSender()
+
+    with database_connection() as connection:
+        connection.execute(
+            """
+            UPDATE users
+            SET recovery_email = ?,
+                recovery_email_verified = TRUE
+            WHERE id = ?
+            """,
+            ("recovery@example.com", test_user),
+        )
+
+    send_password_reset_email(
+        user_id=test_user,
+        base_url="https://timanstat.example.com",
+        sender=sender,
+    )
+
+    assert len(sender.sent_messages) == 1
+    message = sender.sent_messages[0]
+    assert message.recipient == "recovery@example.com"
+    assert message.subject == PASSWORD_RESET_SUBJECT
+    assert "reset_password=" in message.body
+    assert "expires in 30 minutes" in message.body
+
+
+def test_password_reset_falls_back_to_primary_email_when_recovery_email_unverified(
+    test_user,
+):
+    sender = RecordingEmailSender()
+
+    with database_connection() as connection:
+        connection.execute(
+            """
+            UPDATE users
+            SET recovery_email = ?,
+                recovery_email_verified = FALSE
+            WHERE id = ?
+            """,
+            ("pending-recovery@example.com", test_user),
+        )
+
+    send_password_reset_email(
+        user_id=test_user,
+        base_url="https://timanstat.example.com",
+        sender=sender,
+    )
+
+    assert len(sender.sent_messages) == 1
+    assert sender.sent_messages[0].recipient == "notification@example.com"
+    assert sender.sent_messages[0].subject == PASSWORD_RESET_SUBJECT
+
+
+def test_password_reset_falls_back_to_primary_email_when_recovery_email_missing(
+    test_user,
+):
+    sender = RecordingEmailSender()
+
+    send_password_reset_email(
+        user_id=test_user,
+        base_url="https://timanstat.example.com",
+        sender=sender,
+    )
+
+    assert len(sender.sent_messages) == 1
+    assert sender.sent_messages[0].recipient == "notification@example.com"
+    assert sender.sent_messages[0].subject == PASSWORD_RESET_SUBJECT
