@@ -299,38 +299,42 @@ def resend_email_verification(
         - timedelta(seconds=cooldown_seconds)
     )
 
-    with database_connection() as connection:
-        user = connection.execute(
-            f"""
+    try:
+        with database_connection() as connection:
+            user = connection.execute(
+                f"""
             SELECT id
             FROM users
             WHERE email = {p}
               AND is_active = TRUE
               AND email_verified = FALSE
             """,
-            (normalised_email,),
-        ).fetchone()
+                (normalised_email,),
+            ).fetchone()
 
-        if user is None:
-            logger.info("TimanStat email request not eligible.")
-            return False
+            if user is None:
+                logger.info("TimanStat email request not eligible.")
+                return False
 
-        recent_token = connection.execute(
-            f"""
+            recent_token = connection.execute(
+                f"""
             SELECT id
             FROM email_verification_tokens
             WHERE user_id = {p}
               AND created_at >= {p}
             LIMIT 1
             """,
-            (user["id"], cutoff),
-        ).fetchone()
+                (user["id"], cutoff),
+            ).fetchone()
 
-        if recent_token is not None:
-            logger.info("TimanStat email request suppressed by token cooldown.")
-            return False
+            if recent_token is not None:
+                logger.info("TimanStat email request suppressed by token cooldown.")
+                return False
 
-        user_id = user["id"]
+            user_id = user["id"]
+    except Exception as exc:
+        logger.error("TimanStat verification resend failed. stage=eligibility_lookup error_type=%s", type(exc).__name__)
+        raise
 
     logger.info("TimanStat verification resend delivery started.")
     send_email_verification(
@@ -511,43 +515,47 @@ def request_password_reset(
         - timedelta(seconds=cooldown_seconds)
     )
 
-    with database_connection() as connection:
-        user = connection.execute(
-            f"""
+    try:
+        with database_connection() as connection:
+            user = connection.execute(
+                f"""
             SELECT id
             FROM users
             WHERE email = {p}
               AND is_active = TRUE
             """,
-            (normalised_email,),
-        ).fetchone()
+                (normalised_email,),
+            ).fetchone()
 
-        if user is None:
-            logger.info(
-                "TimanStat password-reset request stopped. "
-                "stage=account_lookup outcome=not_eligible"
-            )
-            return False
+            if user is None:
+                logger.info(
+                    "TimanStat password-reset request stopped. "
+                    "stage=account_lookup outcome=not_eligible"
+                )
+                return False
 
-        recent_token = connection.execute(
-            f"""
+            recent_token = connection.execute(
+                f"""
             SELECT id
             FROM password_reset_tokens
             WHERE user_id = {p}
               AND created_at >= {p}
             LIMIT 1
             """,
-            (user["id"], cutoff),
-        ).fetchone()
+                (user["id"], cutoff),
+            ).fetchone()
 
-        if recent_token is not None:
-            logger.info(
-                "TimanStat password-reset request stopped. "
-                "stage=token_cooldown outcome=suppressed"
-            )
-            return False
+            if recent_token is not None:
+                logger.info(
+                    "TimanStat password-reset request stopped. "
+                    "stage=token_cooldown outcome=suppressed"
+                )
+                return False
 
-        user_id = user["id"]
+            user_id = user["id"]
+    except Exception as exc:
+        logger.error("TimanStat password-reset request failed. stage=eligibility_lookup error_type=%s", type(exc).__name__)
+        return False
 
     logger.info(
         "TimanStat password-reset request passed eligibility checks. "
