@@ -52,23 +52,186 @@ st.set_page_config(
 st.markdown(
     """
     <style>
+    :root {
+        --timan-navy: #173B67;
+        --timan-blue: #2586C7;
+        --timan-red: #D94A45;
+        --timan-teal: #169B78;
+        --timan-gold: #F2B544;
+        --timan-bg: #F3F6FA;
+        --timan-border: #DCE5EF;
+        --timan-text: #24364B;
+        --timan-muted: #64758B;
+    }
+
     .stApp {
-        background-color: #f7f9fc;
+        background:
+            radial-gradient(circle at 92% 0%, rgba(37, 134, 199, .08), transparent 26rem),
+            var(--timan-bg);
+        color: var(--timan-text);
+    }
+
+    /* Consistent typography and page rhythm */
+    .block-container {
+        padding-top: 2rem;
+        padding-bottom: 3rem;
+    }
+    h1, h2, h3 {
+        color: var(--timan-navy);
+        letter-spacing: -0.025em;
+    }
+    h1 {
+        font-weight: 800;
+        padding-bottom: .35rem;
+        border-bottom: 3px solid rgba(37, 134, 199, .22);
+    }
+    h2, h3 {
+        font-weight: 700;
     }
     .brand {
-        color: #174a7e;
+        color: var(--timan-navy);
         font-size: 32px;
         font-weight: 800;
     }
     .subtitle {
-        color: #526579;
+        color: var(--timan-muted);
         font-size: 15px;
     }
+    p, li, label, [data-testid="stCaptionContainer"] {
+        color: var(--timan-text);
+    }
+    [data-testid="stCaptionContainer"] {
+        color: var(--timan-muted);
+    }
+
+    /* Sidebar: branded navy surface with clear navigation contrast */
+    section[data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #173B67 0%, #102D50 100%);
+        border-right: 1px solid rgba(255,255,255,.10);
+    }
+    section[data-testid="stSidebar"] > div {
+        background: transparent;
+    }
+    section[data-testid="stSidebar"] p,
+    section[data-testid="stSidebar"] label,
+    section[data-testid="stSidebar"] span,
+    section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] {
+        color: #F3F7FC;
+    }
+    section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {
+        color: #C2D3E5;
+    }
+    section[data-testid="stSidebar"] hr {
+        border-color: rgba(255,255,255,.20);
+    }
+    section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] {
+        color: #D9E7F5;
+    }
+    section[data-testid="stSidebar"] div[role="radiogroup"] label {
+        border-radius: 9px;
+        padding: 7px 10px;
+        transition: background .18s ease;
+    }
+    section[data-testid="stSidebar"] div[role="radiogroup"] label:hover {
+        background: rgba(255,255,255,.12);
+    }
+    section[data-testid="stSidebar"] div[role="radiogroup"] label[data-checked="true"] {
+        background: rgba(37,134,199,.32);
+        border-left: 3px solid #F2B544;
+    }
+    section[data-testid="stSidebar"] [data-testid="stImage"] img {
+        border-radius: 12px;
+    }
+
+    /* Buttons and interactive controls */
+    .stButton > button, .stDownloadButton > button {
+        border-radius: 9px;
+        border: 1px solid var(--timan-blue);
+        font-weight: 650;
+        transition: all .18s ease;
+    }
+    .stButton > button[kind="primary"],
+    .stDownloadButton > button[kind="primary"] {
+        background: var(--timan-blue);
+        border-color: var(--timan-blue);
+        color: #FFFFFF;
+    }
+    .stButton > button[kind="primary"]:hover,
+    .stDownloadButton > button[kind="primary"]:hover {
+        background: var(--timan-navy);
+        border-color: var(--timan-navy);
+        color: #FFFFFF;
+    }
+    .stButton > button:not([kind="primary"]):hover,
+    .stDownloadButton > button:not([kind="primary"]):hover {
+        border-color: var(--timan-blue);
+        color: var(--timan-navy);
+        background: rgba(37,134,199,.07);
+    }
+    input:focus, textarea:focus, [data-baseweb="select"]:focus-within {
+        border-color: var(--timan-blue) !important;
+        box-shadow: 0 0 0 1px var(--timan-blue) !important;
+    }
+    [role="tab"][aria-selected="true"] {
+        color: var(--timan-navy) !important;
+        border-bottom-color: var(--timan-blue) !important;
+        font-weight: 700;
+    }
+
+    /* Dashboard metrics and content surfaces */
     div[data-testid="stMetric"] {
-        background: white;
-        padding: 14px;
+        background: linear-gradient(145deg, #FFFFFF 0%, #F8FBFE 100%);
+        padding: 16px;
+        border-radius: 12px;
+        border: 1px solid var(--timan-border);
+        border-top: 3px solid var(--timan-blue);
+        box-shadow: 0 3px 12px rgba(23,59,103,.045);
+    }
+    div[data-testid="stMetric"] label {
+        color: var(--timan-muted);
+        font-weight: 600;
+    }
+    div[data-testid="stMetric"] [data-testid="stMetricValue"] {
+        color: var(--timan-navy);
+        font-weight: 800;
+    }
+    div[data-testid="stDataFrame"],
+    div[data-testid="stTable"] {
+        border: 1px solid var(--timan-border);
         border-radius: 10px;
-        border: 1px solid #e3eaf2;
+        overflow: hidden;
+    }
+    div[data-testid="stAlert"] {
+        border-radius: 10px;
+    }
+    div[data-testid="stProgressBar"] > div > div {
+        background: var(--timan-teal);
+    }
+    div[data-testid="stExpander"] {
+        border: 1px solid var(--timan-border);
+        border-radius: 10px;
+        background: rgba(255,255,255,.72);
+    }
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 8px 8px 0 0;
+        padding: 9px 14px;
+    }
+
+    /* Keep Streamlit's native focus indicators visible */
+    button:focus-visible, a:focus-visible, input:focus-visible {
+        outline: 2px solid var(--timan-gold) !important;
+        outline-offset: 2px !important;
+    }
+
+    @media (max-width: 768px) {
+        .block-container {
+            padding-top: 1.2rem;
+            padding-left: 1rem;
+            padding-right: 1rem;
+        }
     }
     </style>
     """,
