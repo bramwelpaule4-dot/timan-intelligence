@@ -28,9 +28,38 @@ logger = logging.getLogger(__name__)
 class EmailDeliveryError(Exception):
     """Raised when an email cannot be delivered."""
 
-    def __init__(self, message: str, stage: str | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        stage: str | None = None,
+        *,
+        oauth_error: str | None = None,
+        http_status: int | None = None,
+        api_reason: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.stage = stage
+        allowed_oauth_errors = {
+            "invalid_grant",
+            "invalid_client",
+            "unauthorized_client",
+            "access_denied",
+            "invalid_scope",
+        }
+        self.oauth_error = (
+            oauth_error if oauth_error in allowed_oauth_errors else None
+        )
+        self.http_status = (
+            http_status
+            if isinstance(http_status, int) and 100 <= http_status <= 599
+            else None
+        )
+        self.api_reason = (
+            api_reason
+            if isinstance(api_reason, str)
+            and re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", api_reason)
+            else None
+        )
 
 
 @dataclass(frozen=True)
@@ -471,4 +500,7 @@ class GmailAPIEmailSender:
                 "Gmail API delivery failed. Check OAuth authorization and "
                 "Gmail API configuration.",
                 stage=stage,
+                oauth_error=details["oauth_error"],
+                http_status=details["http_status"],
+                api_reason=details["api_reason"],
             ) from exc
