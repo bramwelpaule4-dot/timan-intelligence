@@ -430,3 +430,48 @@ def test_password_reset_request_keeps_generic_result_for_unknown_account(
 
     assert result is False
     assert sender.sent_messages == []
+
+
+def test_password_reset_rate_limiter_exception_is_logged_safely(
+    test_user,
+    monkeypatch,
+    caplog,
+):
+    """Limiter failures are visible internally without logging identifiers or exception text."""
+    import logging
+
+    from timan_intelligence.identity import email_notifications
+
+    class BrokenRateLimiter:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def consume_attempt(self, identifier):
+            raise RuntimeError("sensitive diagnostic text must not be logged")
+
+    monkeypatch.setattr(
+        email_notifications,
+        "DatabaseRateLimiter",
+        BrokenRateLimiter,
+    )
+    monkeypatch.setenv(
+        "TIMANSTAT_RATE_LIMIT_HMAC_KEY",
+        "test-rate-limit-hmac-key-with-at-least-32-bytes",
+    )
+    sender = RecordingEmailSender()
+
+    with caplog.at_level(logging.ERROR):
+        result = request_password_reset(
+            email="notification@example.com",
+            base_url="https://timanstat.example.com",
+            sender=sender,
+            cooldown_seconds=60,
+        )
+
+    assert result is False
+    assert sender.sent_messages == []
+    assert "stage=rate_limit outcome=error" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "sensitive diagnostic text must not be logged" not in caplog.text
+    assert "notification@example.com" not in caplog.text
+
