@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode, urlsplit, urlunsplit
@@ -31,6 +32,8 @@ from timan_intelligence.security.distributed_rate_limit import (
 
 EMAIL_VERIFICATION_SUBJECT = "Verify your TimanStat account"
 PASSWORD_RESET_SUBJECT = "Reset your TimanStat password"
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_RESEND_COOLDOWN_SECONDS = 60
 MAX_RESEND_COOLDOWN_SECONDS = 3600
@@ -223,7 +226,13 @@ def send_email_verification(
     )
 
     email_sender = sender or build_email_sender()
-    email_sender.send(message)
+    logger.info("TimanStat email verification delivery started.")
+    try:
+        email_sender.send(message)
+    except Exception as exc:
+        logger.error("TimanStat email verification delivery failed. error_type=%s", type(exc).__name__)
+        raise
+    logger.info("TimanStat email verification delivery completed.")
 
 
 def resend_email_verification(
@@ -265,9 +274,11 @@ def resend_email_verification(
     )
     try:
         if not request_limiter.consume_attempt(normalised_email):
+            logger.info("TimanStat email request throttled.")
             return False
-    except Exception:
+    except Exception as exc:
         # Do not send mail when shared throttling cannot be enforced.
+        logger.error("TimanStat email request limiter failed. error_type=%s", type(exc).__name__)
         return False
 
     p = _placeholder()
@@ -289,6 +300,7 @@ def resend_email_verification(
         ).fetchone()
 
         if user is None:
+            logger.info("TimanStat email request not eligible.")
             return False
 
         recent_token = connection.execute(
@@ -303,10 +315,12 @@ def resend_email_verification(
         ).fetchone()
 
         if recent_token is not None:
+            logger.info("TimanStat email request suppressed by token cooldown.")
             return False
 
         user_id = user["id"]
 
+    logger.info("TimanStat verification resend delivery started.")
     send_email_verification(
         user_id=user_id,
         base_url=application_url,
@@ -399,7 +413,13 @@ def send_password_reset_email(
     )
 
     email_sender = sender or build_email_sender()
-    email_sender.send(message)
+    logger.info("TimanStat password-reset email delivery started.")
+    try:
+        email_sender.send(message)
+    except Exception as exc:
+        logger.error("TimanStat password-reset email delivery failed. error_type=%s", type(exc).__name__)
+        raise
+    logger.info("TimanStat password-reset email delivery completed.")
 
 
 def request_password_reset(
@@ -483,10 +503,12 @@ def request_password_reset(
         ).fetchone()
 
         if recent_token is not None:
+            logger.info("TimanStat email request suppressed by token cooldown.")
             return False
 
         user_id = user["id"]
 
+    logger.info("TimanStat password-reset request passed eligibility checks.")
     send_password_reset_email(
         user_id=user_id,
         base_url=application_url,
