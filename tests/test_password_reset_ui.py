@@ -158,11 +158,12 @@ def test_password_reset_request_uses_generic_response(
 
     password_reset_ui.render_password_reset_request()
 
-    request.assert_called_once_with(
-        email="unknown@example.com",
-        base_url="https://timanstat.example.com",
-        sender=fake_streamlit.configured_sender,
-    )
+    request.assert_called_once()
+    call_kwargs = request.call_args.kwargs
+    assert call_kwargs["email"] == "unknown@example.com"
+    assert call_kwargs["base_url"] == "https://timanstat.example.com"
+    assert call_kwargs["sender"] is fake_streamlit.configured_sender
+    assert isinstance(call_kwargs["diagnostic"], dict)
 
     assert fake_streamlit.successes == [
         password_reset_ui.PASSWORD_RESET_GENERIC_MESSAGE
@@ -294,11 +295,12 @@ def test_development_password_reset_displays_mock_link(
 
     password_reset_ui.render_password_reset_request()
 
-    request.assert_called_once_with(
-        email="test@example.com",
-        base_url="https://timanstat.example.com",
-        sender=sender,
-    )
+    request.assert_called_once()
+    call_kwargs = request.call_args.kwargs
+    assert call_kwargs["email"] == "test@example.com"
+    assert call_kwargs["base_url"] == "https://timanstat.example.com"
+    assert call_kwargs["sender"] is sender
+    assert isinstance(call_kwargs["diagnostic"], dict)
 
     assert any(
         "development-test-token" in message
