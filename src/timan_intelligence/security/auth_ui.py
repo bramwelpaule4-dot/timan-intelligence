@@ -21,6 +21,9 @@ from timan_intelligence.identity.email_notifications import (
 )
 from timan_intelligence.identity.service import register_user
 from timan_intelligence.security.auth import render_login
+from timan_intelligence.security.developer_diagnostics import (
+    render_development_diagnostics,
+)
 from timan_intelligence.security.session import (
     SESSION_EXPIRED_KEY,
     SESSION_REVOKED_KEY,
@@ -120,7 +123,6 @@ def _configured_email_sender(base_url: str):
 
     development_sender = _development_email_sender(base_url)
 
-    logger.info("TimanStat registration verification completed. stage=verification_delivery outcome=success")
     if development_sender is not None:
         return development_sender
 
@@ -684,3 +686,7 @@ def render_authentication() -> None:
 
     with register_tab:
         render_registration()
+
+    # This panel is inert unless explicitly enabled, host-restricted,
+    # and unlocked with a separate development-only access key.
+    render_development_diagnostics()
