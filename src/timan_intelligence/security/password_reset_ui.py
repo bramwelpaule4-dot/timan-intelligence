@@ -21,7 +21,7 @@ from timan_intelligence.identity.password_reset import (
 
 from timan_intelligence.security.auth_ui import (
     _application_base_url,
-    _development_email_sender,
+    _configured_email_sender,
     _log_email_delivery_failure,
     PASSWORD_RESET_EMAIL_PREFILL_KEY,
 )
@@ -147,12 +147,20 @@ def render_password_reset_request() -> None:
     development_sender = None
 
     try:
-        development_sender = _development_email_sender(base_url)
+        # Use the same explicitly configured real email provider as account
+        # registration and verification. The default mock sender silently
+        # accepts messages without delivering them to the user's inbox.
+        email_sender = _configured_email_sender(base_url)
+        development_sender = (
+            email_sender
+            if isinstance(email_sender, MockEmailSender)
+            else None
+        )
 
         request_password_reset(
             email=email,
             base_url=base_url,
-            sender=development_sender,
+            sender=email_sender,
         )
 
     except (ValueError, EmailDeliveryError) as exc:
