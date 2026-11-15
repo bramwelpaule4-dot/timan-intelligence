@@ -20,6 +20,9 @@ from timan_intelligence.database.initialise import initialise_database
 from timan_intelligence.identity.email_verification import verify_email_token
 from timan_intelligence.security.auth import is_authenticated, logout
 from timan_intelligence.security.auth_ui import render_authentication
+from timan_intelligence.security.developer_diagnostics import (
+    render_development_diagnostics,
+)
 from timan_intelligence.security.federated_login import process_federated_login_callback
 from timan_intelligence.security.password_change_ui import render_password_change
 from timan_intelligence.security.contact_methods_ui import render_contact_methods
@@ -251,6 +254,9 @@ except Exception:
         "TimanStat could not connect to its database. "
         "Please try again later or contact the platform administrator."
     )
+    # Allow authorised developers to inspect database connectivity even
+    # when initialisation fails and the normal authentication screen cannot load.
+    render_development_diagnostics()
     st.stop()
 
 # Convert a completed OIDC callback into a database-backed TimanStat session.
