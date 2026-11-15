@@ -467,3 +467,38 @@ def test_environment_overrides_streamlit_secret_values(monkeypatch):
 
     assert settings.provider == "mock"
     assert settings.sender_email == "environment@example.com"
+
+
+def test_safe_gmail_api_error_details_extract_allowlisted_identifiers():
+    """Extract OAuth and HTTP identifiers without exposing raw error text."""
+
+    error = RuntimeError(
+        "invalid_grant: refresh-token-value-must-not-be-logged"
+    )
+    error.resp = type("Response", (), {"status": 403})()
+    error.error_details = [{"reason": "insufficientPermissions"}]
+
+    details = email_delivery._safe_gmail_api_error_details(error)
+
+    assert details == {
+        "http_status": 403,
+        "oauth_error": "invalid_grant",
+        "api_reason": "insufficientPermissions",
+    }
+    assert "refresh-token-value-must-not-be-logged" not in str(details)
+
+
+def test_safe_gmail_api_error_details_ignores_unrecognised_values():
+    """Do not copy arbitrary exception attributes into diagnostic output."""
+
+    error = RuntimeError("provider returned a private diagnostic")
+    error.error = "private-error-description"
+    error.error_details = [{"reason": "private reason with spaces"}]
+
+    details = email_delivery._safe_gmail_api_error_details(error)
+
+    assert details == {
+        "http_status": None,
+        "oauth_error": None,
+        "api_reason": None,
+    }
