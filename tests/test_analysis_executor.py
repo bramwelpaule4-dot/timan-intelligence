@@ -120,3 +120,47 @@ def test_execution_registry_exposes_only_implemented_methods():
     assert "Independent-samples t-test" in methods
     assert "One-way ANOVA" in methods
     assert "Frequencies and proportions" not in methods
+
+def test_execution_blocks_catalogued_but_unimplemented_method():
+    df = pd.DataFrame({
+        "score": [1, 2, 3, 4, 5, 6],
+        "group": ["A", "A", "A", "B", "B", "B"],
+    })
+    recommendation = {
+        "method": "Mann–Whitney U test",
+        "variables": ["score", "group"],
+        "status": "review_required",
+        "method_id": "method.inference.comparison.mann_whitney",
+    }
+
+    with pytest.raises(AnalysisExecutionError, match="does not yet"):
+        execute_recommendation(df, recommendation, approved=True)
+
+
+def test_execution_rejects_a_method_identifier_that_does_not_match_catalogue():
+    df = pd.DataFrame({"score": [1, 2, 3]})
+    recommendation = {
+        "method": "Descriptive statistics",
+        "variables": ["score"],
+        "status": "review_required",
+        "method_id": "method.inference.comparison.anova.one_way",
+    }
+
+    with pytest.raises(AnalysisExecutionError, match="does not match"):
+        execute_recommendation(df, recommendation, approved=True)
+
+
+def test_execution_result_records_catalogue_provenance():
+    df = pd.DataFrame({"score": [1, 2, 3, 4]})
+    recommendation = {
+        "method": "Descriptive statistics",
+        "variables": ["score"],
+        "status": "review_required",
+        "method_id": "method.descriptive.numeric.summary",
+    }
+
+    result = execute_recommendation(df, recommendation, approved=True)
+
+    assert result.metadata["method_id"] == "method.descriptive.numeric.summary"
+    assert result.metadata["catalogue_version"] == "1.0.0"
+    assert result.metadata["sampling_design_aware"] is False
