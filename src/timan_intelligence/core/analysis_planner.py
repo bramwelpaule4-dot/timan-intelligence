@@ -89,6 +89,7 @@ def _add_candidate(
     reason: str,
     checks: list[str] | None = None,
     status: str = "review_required",
+    catalogue: dict[str, Any] | None = None,
 ) -> None:
     """Add a structured method recommendation without duplicating it."""
     if any(
@@ -105,6 +106,7 @@ def _add_candidate(
             "reason": reason,
             "checks": list(checks or []),
             "status": status,
+            **(catalogue or {}),
         }
     )
 
@@ -350,6 +352,7 @@ def _add_method_recommendations(
                     assessment.clarification_questions
                 ),
                 "is_preferred": True,
+                **assessment.catalogue,
             }
         )
 
@@ -363,6 +366,7 @@ def _add_method_recommendations(
                 reason=candidate.rationale,
                 checks=candidate.checks,
                 status=candidate.status,
+                catalogue=candidate.catalogue,
             )
 
         for question in assessment.clarification_questions:
