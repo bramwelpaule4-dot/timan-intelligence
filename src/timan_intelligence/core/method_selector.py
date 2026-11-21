@@ -376,6 +376,7 @@ def assess_preferred_method(
     predictor_type: str | None = None,
     group_count: int | None = None,
     independent_groups: bool | None = None,
+    study_design: str | None = None,
 ) -> MethodAssessment:
     """Assess a preferred method before suggesting alternatives.
 
@@ -424,6 +425,56 @@ def assess_preferred_method(
                 group_count,
                 independent_groups,
             ),
+        )
+
+    specification = registry_method.statistical_specification or {}
+    allowed_outcomes = list(specification.get("outcome_types", []))
+    allowed_predictors = list(specification.get("predictor_types", []))
+    allowed_designs = list(specification.get("compatible_study_designs", []))
+
+    if outcome_type is not None and allowed_outcomes and outcome_type not in allowed_outcomes:
+        return MethodAssessment(
+            preferred_method=method,
+            eligibility=INELIGIBLE,
+            rationale=(
+                f"{registry_method.name} does not support the supplied "
+                f"outcome type '{outcome_type}' according to the catalogue."
+            ),
+            alternatives=select_methods(
+                objective_type, outcome_type, predictor_type, group_count,
+                independent_groups, study_design,
+            ),
+            catalogue=_catalogue_metadata(method),
+        )
+
+    if predictor_type is not None and allowed_predictors and predictor_type not in allowed_predictors:
+        return MethodAssessment(
+            preferred_method=method,
+            eligibility=INELIGIBLE,
+            rationale=(
+                f"{registry_method.name} does not support the supplied "
+                f"predictor type '{predictor_type}' according to the catalogue."
+            ),
+            alternatives=select_methods(
+                objective_type, outcome_type, predictor_type, group_count,
+                independent_groups, study_design,
+            ),
+            catalogue=_catalogue_metadata(method),
+        )
+
+    if study_design is not None and allowed_designs and study_design not in allowed_designs:
+        return MethodAssessment(
+            preferred_method=method,
+            eligibility=INELIGIBLE,
+            rationale=(
+                f"{registry_method.name} is not catalogued for the supplied "
+                f"study design '{study_design}'."
+            ),
+            alternatives=select_methods(
+                objective_type, outcome_type, predictor_type, group_count,
+                independent_groups, study_design,
+            ),
+            catalogue=_catalogue_metadata(method),
         )
 
     assessable_methods = {
