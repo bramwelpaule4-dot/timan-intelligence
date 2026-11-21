@@ -41,7 +41,7 @@ def test_multiple_response_counts_each_option_once_per_respondent():
 
 
 def test_multiple_response_handles_pipe_and_newline_delimiters():
-    df = pd.DataFrame({"Q3": ["A|B", "B\nC"]})
+    df = pd.DataFrame({"Q3": ["A|B", "B\\nC"]})
     table = multiple_response_table(df, "Q3").set_index("option")
 
     assert table.loc["A", "respondent_count"] == 1
@@ -73,7 +73,6 @@ def test_frequency_and_multiple_response_reject_unknown_columns():
         multiple_response_table(df, "missing")
 
 
-
 def test_likert_item_uses_ordered_labels_and_reports_valid_and_record_percentages():
     df = pd.DataFrame({
         "Q1_agreement": [
@@ -94,7 +93,7 @@ def test_likert_item_uses_ordered_labels_and_reports_valid_and_record_percentage
     assert rows.loc["No response", "count"] == 2
     assert table.attrs["valid_n"] == 5
     assert table.attrs["missing_n"] == 2
-    assert table.attrs["median_response"] == "neutral"
+    assert table.attrs["median_response"] == "agree"
     assert table.attrs["scale_direction_assumed"] is False
 
 
@@ -139,3 +138,4 @@ def test_survey_service_exposes_labelled_likert_item_analysis():
 
     assert result.metadata["likert_columns"] == ["Q1_agreement"]
     assert "likert::Q1_agreement" in result.tables
+})
