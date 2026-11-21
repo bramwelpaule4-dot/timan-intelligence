@@ -271,3 +271,42 @@ def test_planner_does_not_recommend_independent_tests_for_paired_design():
         "paired/repeated-measures" in item.lower()
         for item in plan.information_needed
     )
+
+def test_planner_exposes_registry_status_for_each_recommendation():
+    df = pd.DataFrame({
+        "income": [10, 20, 30, 40, 50, 60],
+        "group": ["A", "A", "A", "B", "B", "B"],
+    })
+    request = AnalysisRequest(
+        question="Does income differ between the two groups?",
+        selected_variables=["income", "group"],
+        options={"independent_groups": True},
+    )
+
+    plan = plan_analysis(df, request)
+    recommendations = {item["method"]: item for item in plan.recommendations}
+
+    assert recommendations["Independent-samples t-test"]["method_id"] == (
+        "method.inference.comparison.t_test.independent.welch"
+    )
+    assert recommendations["Independent-samples t-test"]["implementation_status"] == "implemented"
+    assert recommendations["Mann–Whitney U test"]["implementation_status"] == "planned"
+    assert recommendations["Mann–Whitney U test"]["execution_eligibility"] == "not_assessed"
+
+
+def test_planner_exposes_registry_metadata_for_descriptive_recommendations():
+    df = pd.DataFrame({"income": [10, 20, 30], "sex": ["F", "M", "F"]})
+    request = AnalysisRequest(
+        question="What is the distribution of income and sex?",
+        selected_variables=["income", "sex"],
+    )
+
+    plan = plan_analysis(df, request)
+    recommendations = {item["method"]: item for item in plan.recommendations}
+
+    assert recommendations["Descriptive statistics"]["method_id"] == (
+        "method.descriptive.numeric.summary"
+    )
+    assert recommendations["Frequency distribution"]["method_id"] == (
+        "method.descriptive.categorical.frequency"
+    )
