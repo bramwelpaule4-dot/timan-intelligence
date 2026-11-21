@@ -5,6 +5,7 @@ import pandas as pd
 from timan_intelligence.core.contracts import AnalysisResult, AnalysisRequest
 from timan_intelligence.core.data_quality import profile_dataframe
 from timan_intelligence.core.categorical_analysis import run_categorical_association
+from timan_intelligence.core.numeric_comparison import run_numeric_group_comparison
 from timan_intelligence.core.survey_profiler import (
     profile_survey_dataframe,
     question_frequency_table,
@@ -126,6 +127,44 @@ def run_categorical_comparison(
         metadata=metadata,
     )
 
+
+
+def run_numeric_group_comparison_service(
+    df: pd.DataFrame,
+    group_variable: str,
+    outcome_variable: str,
+) -> AnalysisResult:
+    """Run a shared numeric-outcome comparison across independent groups."""
+    output = run_numeric_group_comparison(
+        df,
+        group_variable,
+        outcome_variable,
+    )
+    metadata = output["metadata"]
+    findings = list(output["findings"])
+    if metadata["test_status"] == "tested":
+        if metadata["mean_difference"] is not None:
+            ci = metadata["confidence_interval_95"]
+            findings.append(
+                f"Mean difference ({metadata['group_labels'][1]} minus "
+                f"{metadata['group_labels'][0]}) = "
+                f"{metadata['mean_difference']:.3g}; 95% CI "
+                f"[{ci[0]:.3g}, {ci[1]:.3g}]."
+            )
+    return AnalysisResult(
+        title=f"Numeric comparison: {outcome_variable} by {group_variable}",
+        method=metadata["test"],
+        status="success" if metadata["test_status"] == "tested" else "descriptive_only",
+        tables={"group_summaries": output["group_summaries"]},
+        findings=findings,
+        assumptions=[
+            "Groups are independent and each record represents one observational unit.",
+            "The outcome is measured on a numeric scale with meaningful differences.",
+            "Welch procedures do not require equal population variances, but observations must be independent.",
+        ],
+        limitations=output["warnings"],
+        metadata=metadata,
+    )
 
 def run_numeric_summary(df: pd.DataFrame, request: AnalysisRequest | None = None) -> AnalysisResult:
     summary = numeric_summary(df)
