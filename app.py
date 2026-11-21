@@ -1927,7 +1927,7 @@ def render_ordinal_logistic_regression(df):
         selected = st.selectbox(
             f"Category {position + 1} (rank {position + 1})",
             available,
-            key=f"ordinal_logistic_order_{_dataset_analysis_key(df)[:10]}_{position}",
+            key=f"ordinal_logistic_order_{_dataset_analysis_key(df)[:10]}_{position}_{repr(tuple(ordered))}",
             format_func=str,
         )
         ordered.append(selected)
