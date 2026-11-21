@@ -42,6 +42,7 @@ from timan_intelligence.services.analysis_service import (
     run_simple_linear_regression_service,
     run_multiple_linear_regression_service,
     run_binary_logistic_regression_service,
+    run_ordinal_logistic_regression_service,
     run_regression_diagnostics_service,
 )
 from timan_intelligence.entitlements.subscriptions import process_due_subscriptions
@@ -1891,6 +1892,136 @@ def render_binary_logistic_regression(df):
             st.warning(warning)
 
 
+
+def render_ordinal_logistic_regression(df):
+    """Render guided proportional-odds ordinal logistic regression."""
+    st.subheader("Analyse an ordered categorical outcome")
+    st.write(
+        "Ordinal logistic regression is suitable when an outcome has three or "
+        "more categories with a meaningful order, such as food security levels, "
+        "satisfaction ratings or training performance bands."
+    )
+    candidates = [
+        column for column in df.columns
+        if 3 <= df[column].dropna().nunique() <= 8
+    ]
+    numeric_predictors = [
+        column for column in df.select_dtypes(include="number").columns
+        if not pd.api.types.is_bool_dtype(df[column].dtype)
+    ]
+    if not candidates:
+        st.info("No outcome with 3–8 observed categories was detected.")
+        return
+    outcome = st.selectbox(
+        "Ordered outcome variable", candidates, key="ordinal_logistic_outcome"
+    )
+    categories = list(pd.unique(df[outcome].dropna()))
+    st.markdown("**Specify the category order from lowest to highest.**")
+    st.caption(
+        "TimanStat will not guess whether categories such as 1, 2, 3 or "
+        "Poor, Fair, Good are ordered. Confirm the correct substantive order."
+    )
+    ordered = []
+    for position in range(len(categories)):
+        available = [value for value in categories if value not in ordered]
+        selected = st.selectbox(
+            f"Category {position + 1} (rank {position + 1})",
+            available,
+            key=f"ordinal_logistic_order_{_dataset_analysis_key(df)[:10]}_{position}",
+            format_func=str,
+        )
+        ordered.append(selected)
+    predictor_options = [
+        column for column in numeric_predictors if column != outcome
+    ]
+    if not predictor_options:
+        st.info("At least one numeric predictor is required in this guided version.")
+        return
+    predictors = st.multiselect(
+        "Numeric predictor variables",
+        predictor_options,
+        key="ordinal_logistic_predictors",
+        max_selections=15,
+        help="Select numeric variables that may be associated with movement towards higher outcome categories.",
+    )
+    st.caption(
+        "This guided version does not yet include categorical predictors or "
+        "complex survey-design adjustments. Avoid treating arbitrary category "
+        "codes as continuous predictors."
+    )
+    if not predictors:
+        st.info("Select at least one numeric predictor to continue.")
+        return
+    dataset_key = _dataset_analysis_key(df)
+    result_key = f"timanstat_ordinal_logistic_{dataset_key}"
+    if st.button(
+        "Run ordinal logistic regression",
+        type="primary",
+        key="run_ordinal_logistic",
+    ):
+        try:
+            model = run_ordinal_logistic_regression_service(
+                df, list(predictors), str(outcome), ordered
+            )
+        except (TypeError, ValueError) as exc:
+            st.error(str(exc))
+        except Exception:
+            st.error(
+                "The ordinal model could not be estimated. No inferential "
+                "result has been reported."
+            )
+        else:
+            st.session_state[result_key] = {
+                "predictors": list(predictors),
+                "outcome": outcome,
+                "ordered_categories": ordered,
+                "result": model,
+            }
+    saved = st.session_state.get(result_key)
+    if not saved:
+        st.info("Confirm the category order, select predictors and run the model.")
+        return
+    if (
+        saved["predictors"] != list(predictors)
+        or saved["outcome"] != outcome
+        or saved["ordered_categories"] != ordered
+    ):
+        st.info("Run the model again to apply the changed category order or predictors.")
+        return
+    result = saved["result"]
+    metadata = result.metadata
+    st.markdown("#### Model results")
+    metrics = st.columns(3)
+    metrics[0].metric("Complete records", f"{metadata['valid_n']:,}")
+    metrics[1].metric("Outcome categories", len(ordered))
+    metrics[2].metric("AIC", f"{metadata['aic']:.3f}")
+    st.caption(
+        f"Overall likelihood-ratio chi-square({metadata['predictor_count']}) = "
+        f"{metadata['likelihood_ratio_chi_square']:.4g}; "
+        f"p-value = {metadata['model_p_value']:.4g}."
+    )
+    st.markdown("#### Adjusted common odds ratios")
+    st.dataframe(result.tables["coefficients"], hide_index=True, use_container_width=True)
+    st.caption(
+        "An odds ratio above 1 indicates greater odds of being in a higher "
+        "rather than lower outcome category, under the proportional-odds model."
+    )
+    st.markdown("#### Predicted category probabilities")
+    st.dataframe(
+        result.tables["category_probabilities"].head(100),
+        hide_index=True,
+        use_container_width=True,
+    )
+    st.caption("Predicted probabilities are shown for up to the first 100 complete records.")
+    st.markdown("#### Interpretation")
+    for finding in result.findings:
+        st.write(f"• {finding}")
+    if result.limitations:
+        st.markdown("#### Assumptions and limitations")
+        for warning in result.limitations:
+            st.warning(warning)
+
+
 def show_under_development(page, purpose):
     """Display an honest status page for an unfinished module."""
     st.title(page)
@@ -3183,6 +3314,8 @@ elif page == "Descriptive Statistics":
             render_multiple_linear_regression(df)
             st.divider()
             render_binary_logistic_regression(df)
+            st.divider()
+            render_ordinal_logistic_regression(df)
 
 
 # VISUALISATIONS
