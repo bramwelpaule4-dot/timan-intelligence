@@ -7,6 +7,7 @@ from timan_intelligence.core.data_quality import profile_dataframe
 from timan_intelligence.core.categorical_analysis import run_categorical_association
 from timan_intelligence.core.numeric_comparison import run_numeric_group_comparison
 from timan_intelligence.core.numeric_association import run_numeric_association
+from timan_intelligence.core.simple_regression import run_simple_linear_regression
 from timan_intelligence.core.survey_profiler import (
     profile_survey_dataframe,
     question_frequency_table,
@@ -190,6 +191,56 @@ def run_numeric_association_service(
         assumptions=[
             "Each complete pair represents one independent observational unit.",
             "Pearson correlation describes linear association; Spearman correlation describes monotonic rank association.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata=metadata,
+    )
+
+
+
+def run_simple_linear_regression_service(
+    df: pd.DataFrame,
+    predictor_variable: str,
+    outcome_variable: str,
+) -> AnalysisResult:
+    """Run a shared one-predictor ordinary least-squares regression."""
+    output = run_simple_linear_regression(
+        df,
+        predictor_variable,
+        outcome_variable,
+    )
+    metadata = output["metadata"]
+    coefficients = pd.DataFrame(
+        [
+            {
+                "Coefficient": "Intercept",
+                "Estimate": metadata["intercept"],
+                "Standard error": metadata["intercept_standard_error"],
+                "95% CI lower": metadata["intercept_confidence_interval_95"][0],
+                "95% CI upper": metadata["intercept_confidence_interval_95"][1],
+            },
+            {
+                "Coefficient": predictor_variable,
+                "Estimate": metadata["slope"],
+                "Standard error": metadata["slope_standard_error"],
+                "95% CI lower": metadata["slope_confidence_interval_95"][0],
+                "95% CI upper": metadata["slope_confidence_interval_95"][1],
+            },
+        ]
+    )
+    return AnalysisResult(
+        title=f"Simple linear regression: {outcome_variable} by {predictor_variable}",
+        method="Ordinary least squares (one numeric predictor)",
+        status="success",
+        tables={
+            "coefficients": coefficients,
+            "fitted_data": output["fitted_data"],
+        },
+        findings=list(output["findings"]),
+        assumptions=[
+            "The expected relationship between predictor and outcome is linear.",
+            "Errors are independent and have constant variance; residual normality supports conventional small-sample inference.",
+            "The model includes one predictor and does not adjust for confounders or other explanatory variables.",
         ],
         limitations=list(output["warnings"]),
         metadata=metadata,
