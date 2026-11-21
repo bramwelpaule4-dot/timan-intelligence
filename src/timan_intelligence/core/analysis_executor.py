@@ -64,6 +64,7 @@ def _validate_design_compatibility(
     complex_sampling = (
         study_design in {"clustered", "complex_survey"}
         or sampling_design in {"cluster", "stratified", "multistage"}
+        or bool(context.get("sampling_weight"))
     )
     if executor != "descriptive" and complex_sampling and not sampling_design_aware:
         raise AnalysisExecutionError(
