@@ -1,0 +1,593 @@
+"""Curated statistical method catalogue built on the shared registry.
+
+This catalogue describes method requirements and lifecycle status. It does
+not implement statistical calculations or independently determine whether
+a method is suitable for a particular dataset.
+"""
+
+from __future__ import annotations
+
+import copy
+from collections import Counter
+from typing import Any
+
+from timan_intelligence.registry.identifiers import validate_entity_id
+from timan_intelligence.registry.identity import RegistryIdentityIndex
+from timan_intelligence.registry.method import MethodEntity
+from timan_intelligence.registry.method_repository import MethodRepository
+
+
+CATALOGUE_VERSION = "1.0.0"
+
+IMPLEMENTED_METHODS = frozenset(
+    {
+        "method.descriptive.numeric.summary",
+        "method.inference.comparison.t_test.independent.welch",
+        "method.inference.comparison.anova.one_way",
+    }
+)
+
+
+def _method(
+    *,
+    entity_id: str,
+    name: str,
+    description: str,
+    family: str,
+    purpose: str,
+    priority: str,
+    outcome_types: list[str],
+    data_requirements: list[str],
+    assumptions: list[str],
+    outputs: list[str],
+    use_cases: list[str],
+    required_roles: list[str] | None = None,
+    predictor_types: list[str] | None = None,
+    study_designs: list[str] | None = None,
+    aliases: list[str] | None = None,
+    limitations: list[str] | None = None,
+    implementation_status: str = "planned",
+    verification_status: str = "not_tested",
+    execution_eligibility: str = "not_assessed",
+    validation_requirements: list[str] | None = None,
+) -> MethodEntity:
+    """Construct a method record using the shared registry contract."""
+    implemented = implementation_status == "implemented"
+    return MethodEntity(
+        entity_id=entity_id,
+        name=name,
+        description=description,
+        knowledge_areas=[family],
+        statistical_purposes=[purpose],
+        record_maturity="reviewed" if implemented else "catalogued",
+        implementation_status=implementation_status,
+        verification_status=verification_status,
+        execution_eligibility=execution_eligibility,
+        aliases=list(aliases or []),
+        application_domains=[
+            "general_research",
+            "public_health",
+            "development",
+            "business",
+            "education",
+            "agriculture",
+        ],
+        tags=[family, purpose, priority.lower()],
+        method_families=[family],
+        use_cases=list(use_cases),
+        data_requirements=list(data_requirements),
+        statistical_specification={
+            "method_family": family,
+            "statistical_purpose": purpose,
+            "release_priority": priority,
+            "outcome_types": list(outcome_types),
+            "predictor_types": list(predictor_types or []),
+            "required_variable_roles": list(required_roles or []),
+            "compatible_study_designs": list(study_designs or []),
+            "sampling_design_aware": False,
+        },
+        assumptions=list(assumptions),
+        outputs=list(outputs),
+        computational_requirements=[
+            "A valid dataset with the required variables.",
+            "Method-specific sample-size and data-type checks.",
+        ],
+        validation_requirements=list(
+            validation_requirements
+            or [
+                "Validate variable roles and measurement scales.",
+                "Assess missing data and invalid values.",
+                "Check method-specific assumptions before interpretation.",
+                "Record exclusions, warnings and limitations.",
+            ]
+        ),
+        limitations=list(limitations or []),
+        provenance={
+            "catalogue": "TimanStat Statistical Methods Catalogue",
+            "catalogue_version": CATALOGUE_VERSION,
+            "record_source": "curated_initial_registry",
+        },
+        metadata={
+            "release_priority": priority,
+            "method_family": family,
+            "catalogue_version": CATALOGUE_VERSION,
+            "calculation_implemented": implemented,
+        },
+    )
+
+
+def _build_catalogue() -> tuple[MethodEntity, ...]:
+    """Return the curated first-release catalogue.
+
+    Only methods with an existing, tested execution function are marked
+    implemented. Planned records are discoverable but must not be executed.
+    """
+    methods = [
+        _method(
+            entity_id="method.descriptive.numeric.summary",
+            name="Descriptive statistics",
+            description="Summarises the centre, spread and range of a numeric variable.",
+            family="descriptive_statistics",
+            purpose="description",
+            priority="P1",
+            outcome_types=["numeric"],
+            required_roles=["analysis_variable"],
+            data_requirements=["At least one numeric variable."],
+            assumptions=["The variable's numeric values represent a meaningful quantity."],
+            outputs=["Valid observation count", "Mean", "Median", "Sample standard deviation", "Minimum", "Maximum", "Quartiles"],
+            use_cases=["Describe a numeric variable", "Summarise continuous measurements"],
+            aliases=["Numeric summary", "Summary statistics"],
+            implementation_status="implemented",
+            verification_status="unit_tested",
+            execution_eligibility="eligible",
+            limitations=["Descriptive summaries alone do not support population inference or causal conclusions."],
+        ),
+        _method(
+            entity_id="method.descriptive.categorical.frequency",
+            name="Frequency distribution",
+            description="Counts category occurrences and calculates proportions and percentages.",
+            family="descriptive_statistics",
+            purpose="description",
+            priority="P1",
+            outcome_types=["categorical", "binary", "ordinal"],
+            required_roles=["analysis_variable"],
+            data_requirements=["One categorical, binary or ordinal variable."],
+            assumptions=["Category labels and missing-value codes have been reviewed."],
+            outputs=["Category counts", "Valid percentages", "Cumulative percentages", "Missing count"],
+            use_cases=["Describe categorical responses", "Summarise survey questions", "Profile population characteristics"],
+            aliases=["Frequencies", "Frequency table", "Counts and percentages"],
+        ),
+        _method(
+            entity_id="method.descriptive.categorical.cross_tabulation",
+            name="Cross-tabulation",
+            description="Summarises the joint distribution of two or more categorical variables.",
+            family="descriptive_statistics",
+            purpose="description",
+            priority="P1",
+            outcome_types=["categorical", "binary", "ordinal"],
+            required_roles=["row_variable", "column_variable"],
+            data_requirements=["At least two categorical variables."],
+            assumptions=["Category definitions are consistent.", "The denominator for row or column percentages is explicit."],
+            outputs=["Observed cell counts", "Row percentages", "Column percentages", "Total percentages"],
+            use_cases=["Compare response patterns across groups", "Disaggregate survey indicators"],
+            aliases=["Contingency table", "Crosstab"],
+        ),
+        _method(
+            entity_id="method.inference.confidence_interval.mean",
+            name="Confidence interval for a mean",
+            description="Estimates a population mean with a confidence interval under a stated sampling and modelling framework.",
+            family="estimation",
+            purpose="inference",
+            priority="P1",
+            outcome_types=["numeric"],
+            required_roles=["analysis_variable"],
+            data_requirements=["A numeric outcome and a defined sampling or modelling framework."],
+            assumptions=["Observations and sampling structure are correctly represented.", "The selected interval procedure is appropriate for the data and sample size."],
+            outputs=["Sample mean", "Standard error", "Confidence level", "Lower confidence limit", "Upper confidence limit"],
+            use_cases=["Estimate an average outcome", "Quantify uncertainty around a sample mean"],
+        ),
+        _method(
+            entity_id="method.inference.confidence_interval.proportion",
+            name="Confidence interval for a proportion",
+            description="Estimates a population proportion with an interval using an appropriate binomial or survey-based procedure.",
+            family="estimation",
+            purpose="inference",
+            priority="P1",
+            outcome_types=["binary", "categorical"],
+            required_roles=["binary_outcome"],
+            data_requirements=["A clearly defined numerator and denominator."],
+            assumptions=["The outcome definition is valid.", "The sampling design is reflected in the selected interval procedure."],
+            outputs=["Estimated proportion", "Standard error", "Confidence level", "Lower confidence limit", "Upper confidence limit"],
+            use_cases=["Estimate prevalence", "Estimate coverage", "Report programme indicator proportions"],
+        ),
+        _method(
+            entity_id="method.inference.comparison.t_test.independent.welch",
+            name="Welch's independent-samples t-test",
+            description="Compares the means of a numeric outcome between two independent groups without assuming equal population variances.",
+            family="group_comparison",
+            purpose="inference",
+            priority="P1",
+            outcome_types=["numeric"],
+            required_roles=["numeric_outcome", "two_group_factor"],
+            data_requirements=["A numeric outcome.", "A grouping variable with exactly two observed groups.", "Independent observations."],
+            assumptions=["The two groups are independent.", "Observations are independent within groups.", "The outcome is numeric; severe influential observations and distribution shape require review."],
+            outputs=["Group sample sizes", "Group means", "Mean difference", "Welch t-statistic", "Degrees of freedom", "P-value", "Confidence interval"],
+            use_cases=["Compare a numeric outcome between two independent groups", "Compare intervention and comparison groups when design permits"],
+            aliases=["Welch t-test", "Unequal-variance t-test"],
+            implementation_status="implemented",
+            verification_status="unit_tested",
+            execution_eligibility="conditional",
+            limitations=["The existing execution function must be checked for sampling-design compatibility before use on clustered or weighted survey data."],
+        ),
+        _method(
+            entity_id="method.inference.comparison.anova.one_way",
+            name="One-way ANOVA",
+            description="Tests whether the means of a numeric outcome differ across independent groups.",
+            family="group_comparison",
+            purpose="inference",
+            priority="P1",
+            outcome_types=["numeric"],
+            required_roles=["numeric_outcome", "grouping_factor"],
+            data_requirements=["A numeric outcome.", "A categorical grouping variable with at least two groups.", "Independent observations."],
+            assumptions=["Independent observations.", "Residual distribution is reasonably compatible with the model.", "Variance assumptions are assessed."],
+            outputs=["Group count", "Observation count", "F-statistic", "Degrees of freedom", "P-value"],
+            use_cases=["Compare mean outcomes across multiple independent groups", "Compare outcomes across programme arms"],
+            implementation_status="implemented",
+            verification_status="unit_tested",
+            execution_eligibility="conditional",
+            limitations=["A significant omnibus result does not identify which groups differ.", "The current implementation does not provide post-hoc comparisons or design-based survey inference."],
+        ),
+        _method(
+            entity_id="method.inference.comparison.t_test.paired",
+            name="Paired-samples t-test",
+            description="Tests the mean within-pair difference for two related measurements.",
+            family="group_comparison",
+            purpose="inference",
+            priority="P1",
+            outcome_types=["numeric"],
+            required_roles=["paired_measurement_before", "paired_measurement_after", "pair_identifier"],
+            study_designs=["paired", "repeated_measure"],
+            data_requirements=["Two numeric measurements linked to the same unit or matched pair."],
+            assumptions=["Pairs are correctly matched.", "Pair-level differences are independent.", "The distribution of differences is assessed."],
+            outputs=["Pair count", "Mean difference", "Standard error", "t-statistic", "Degrees of freedom", "P-value", "Confidence interval"],
+            use_cases=["Before-and-after analysis", "Repeated measurement of the same participants"],
+        ),
+        _method(
+            entity_id="method.inference.comparison.mann_whitney",
+            name="Mann–Whitney U test",
+            description="Compares two independent samples using ranks; interpretation depends on the distributions and estimand.",
+            family="group_comparison",
+            purpose="inference",
+            priority="P2",
+            outcome_types=["ordinal", "numeric"],
+            required_roles=["outcome", "two_group_factor"],
+            data_requirements=["Two independent groups and an ordered outcome."],
+            assumptions=["Independent observations.", "Outcome values are at least ordinal.", "Distributional shapes are considered before interpreting a location shift."],
+            outputs=["U statistic", "P-value", "Group sample sizes", "Effect-size option"],
+            use_cases=["Compare two independent groups using a rank-based procedure"],
+            limitations=["It is not automatically a test of medians."],
+        ),
+        _method(
+            entity_id="method.inference.comparison.kruskal_wallis",
+            name="Kruskal–Wallis test",
+            description="Compares rank distributions across three or more independent groups.",
+            family="group_comparison",
+            purpose="inference",
+            priority="P2",
+            outcome_types=["ordinal", "numeric"],
+            required_roles=["outcome", "grouping_factor"],
+            data_requirements=["An ordered outcome and at least two independent groups."],
+            assumptions=["Independent observations.", "Outcome values are at least ordinal.", "Group distribution shapes are reviewed."],
+            outputs=["H statistic", "P-value", "Group sizes", "Post-hoc analysis requirement"],
+            use_cases=["Compare several independent groups using a rank-based procedure"],
+            limitations=["A significant result does not identify which groups differ."],
+        ),
+        _method(
+            entity_id="method.inference.association.chi_square.independence",
+            name="Chi-square test of independence",
+            description="Assesses evidence of association between two categorical variables using a contingency table.",
+            family="categorical_association",
+            purpose="inference",
+            priority="P1",
+            outcome_types=["categorical", "binary", "ordinal"],
+            required_roles=["row_variable", "column_variable"],
+            data_requirements=["Two categorical variables.", "Observed contingency-table counts."],
+            assumptions=["Observations are independent for the ordinary test.", "Expected cell counts are assessed.", "Sampling design is compatible with the ordinary test."],
+            outputs=["Contingency table", "Expected counts", "Chi-square statistic", "Degrees of freedom", "P-value", "Association effect size"],
+            use_cases=["Test association between categorical variables", "Examine relationships between demographic groups and outcomes"],
+        ),
+        _method(
+            entity_id="method.inference.association.fisher_exact",
+            name="Fisher's exact test",
+            description="Provides an exact test of association for a 2 by 2 contingency table under its sampling assumptions.",
+            family="categorical_association",
+            purpose="inference",
+            priority="P1",
+            outcome_types=["categorical", "binary"],
+            required_roles=["binary_variable_one", "binary_variable_two"],
+            data_requirements=["A 2 by 2 contingency table."],
+            assumptions=["Independent observations under the applicable sampling model.", "The table structure and alternative hypothesis are specified."],
+            outputs=["Odds ratio", "Exact p-value", "Contingency table"],
+            use_cases=["Assess association in a 2 by 2 table, particularly when counts are sparse"],
+            limitations=["The standard Fisher exact procedure is not a general substitute for complex-sample survey inference."],
+        ),
+        _method(
+            entity_id="method.inference.association.correlation.pearson",
+            name="Pearson correlation",
+            description="Quantifies the strength and direction of a linear association between two numeric variables.",
+            family="correlation",
+            purpose="association",
+            priority="P1",
+            outcome_types=["numeric"],
+            predictor_types=["numeric"],
+            required_roles=["numeric_variable_one", "numeric_variable_two"],
+            data_requirements=["Two paired numeric variables."],
+            assumptions=["The relationship is approximately linear for linear interpretation.", "Influential outliers are reviewed.", "Inference assumptions are assessed separately from the coefficient."],
+            outputs=["Pearson correlation coefficient", "Confidence interval where supported", "P-value where requested", "Sample size"],
+            use_cases=["Measure linear association between numeric variables"],
+            limitations=["Correlation does not establish causation."],
+        ),
+        _method(
+            entity_id="method.inference.association.correlation.spearman",
+            name="Spearman rank correlation",
+            description="Measures the strength and direction of a monotonic association using ranks.",
+            family="correlation",
+            purpose="association",
+            priority="P1",
+            outcome_types=["ordinal", "numeric"],
+            predictor_types=["ordinal", "numeric"],
+            required_roles=["ordered_variable_one", "ordered_variable_two"],
+            data_requirements=["Two paired variables that can be meaningfully ordered."],
+            assumptions=["Observations are paired and independent across units.", "A monotonic relationship is the intended target."],
+            outputs=["Spearman rank correlation coefficient", "P-value where requested", "Sample size"],
+            use_cases=["Measure monotonic association", "Analyse ordinal-scale relationships"],
+            limitations=["Correlation does not establish causation."],
+        ),
+        _method(
+            entity_id="method.inference.regression.linear.multiple",
+            name="Multiple linear regression",
+            description="Models a numeric outcome using multiple explanatory variables.",
+            family="regression",
+            purpose="explanation",
+            priority="P2",
+            outcome_types=["numeric"],
+            predictor_types=["numeric", "categorical", "binary"],
+            required_roles=["numeric_outcome", "one_or_more_predictors"],
+            data_requirements=["A numeric outcome and one or more explanatory variables."],
+            assumptions=["Model specification and linearity are assessed.", "Residual variance and dependence are assessed.", "Multicollinearity and influential observations are reviewed."],
+            outputs=["Regression coefficients", "Standard errors", "Confidence intervals", "P-values", "Model fit statistics", "Residual diagnostics"],
+            use_cases=["Estimate adjusted associations", "Model a numeric outcome"],
+            limitations=["Associational regression does not establish causal effects without a defensible causal design."],
+        ),
+        _method(
+            entity_id="method.inference.regression.logistic.binary",
+            name="Binary logistic regression",
+            description="Models the probability or odds of a binary outcome using explanatory variables.",
+            family="regression",
+            purpose="prediction",
+            priority="P2",
+            outcome_types=["binary"],
+            predictor_types=["numeric", "categorical", "binary"],
+            required_roles=["binary_outcome", "one_or_more_predictors"],
+            data_requirements=["A binary outcome and one or more explanatory variables."],
+            assumptions=["Outcome coding is valid.", "Model specification and predictor relationships are assessed.", "Sample size, separation and influential observations are reviewed."],
+            outputs=["Regression coefficients", "Odds ratios", "Confidence intervals", "P-values", "Model diagnostics", "Prediction performance where validated"],
+            use_cases=["Model binary outcomes", "Estimate adjusted odds"],
+            limitations=["Odds ratios should not be interpreted as risk ratios without justification."],
+        ),
+        _method(
+            entity_id="method.measurement.reliability.cronbach_alpha",
+            name="Cronbach's alpha",
+            description="Summarises internal consistency for a set of items intended to measure a common construct.",
+            family="measurement_reliability",
+            purpose="measurement",
+            priority="P2",
+            outcome_types=["ordinal", "numeric"],
+            required_roles=["multi_item_scale"],
+            data_requirements=["Multiple items intended to measure a defined construct."],
+            assumptions=["Items are coded in consistent directions.", "The scale structure and measurement assumptions are considered."],
+            outputs=["Cronbach's alpha", "Item-total statistics", "Item-deletion diagnostics"],
+            use_cases=["Assess internal consistency of questionnaire scales", "Review multi-item measurement instruments"],
+            limitations=["A high alpha does not establish unidimensionality or validity."],
+        ),
+        _method(
+            entity_id="method.survey.estimation.weighted_proportion",
+            name="Weighted survey proportion",
+            description="Estimates a population proportion using supplied survey weights and a declared target population.",
+            family="survey_estimation",
+            purpose="inference",
+            priority="P2",
+            outcome_types=["binary"],
+            required_roles=["binary_outcome", "sampling_weight"],
+            data_requirements=["A valid sampling weight and a defined survey target population."],
+            assumptions=["Weights are appropriate and documented.", "The sample design and non-response adjustments are understood."],
+            outputs=["Weighted proportion", "Unweighted count", "Weighted denominator", "Design-aware uncertainty when supported"],
+            use_cases=["Estimate weighted population coverage or prevalence"],
+            limitations=["This catalogue entry is planned; ordinary unweighted proportions must not be presented as weighted population estimates."],
+        ),
+        _method(
+            entity_id="method.survey.inference.complex_design",
+            name="Complex survey estimation",
+            description="Produces design-aware estimates and uncertainty for stratified, clustered or otherwise complex probability samples.",
+            family="complex_survey_inference",
+            purpose="inference",
+            priority="P3",
+            outcome_types=["numeric", "binary", "categorical"],
+            required_roles=["outcome", "sampling_weight", "stratum_identifier", "cluster_identifier"],
+            data_requirements=["Documented sampling weights and applicable strata and cluster identifiers."],
+            assumptions=["The sample design is correctly specified.", "Weight construction and finite population corrections are documented where applicable.", "Variance estimation matches the design."],
+            outputs=["Design-weighted estimates", "Design-based standard errors", "Confidence intervals", "Design effects", "Effective sample sizes"],
+            use_cases=["Analyse stratified and cluster household surveys", "Estimate population indicators from complex samples"],
+            limitations=["The full complex-survey execution capability is planned and is not provided by the current ordinary statistical tests."],
+        ),
+        _method(
+            entity_id="method.inference.resampling.bootstrap.confidence_interval",
+            name="Bootstrap confidence interval",
+            description="Uses resampling to estimate uncertainty for a statistic under a defensible resampling scheme.",
+            family="resampling",
+            purpose="inference",
+            priority="P3",
+            outcome_types=["numeric", "ordinal", "categorical"],
+            required_roles=["analysis_variables", "statistic_definition"],
+            data_requirements=["A defined statistic and a resampling unit consistent with the study design."],
+            assumptions=["The resampling scheme reflects the data-generating and sampling structure.", "Monte Carlo error is assessed."],
+            outputs=["Bootstrap estimate", "Confidence interval", "Resampling configuration", "Monte Carlo diagnostics"],
+            use_cases=["Estimate uncertainty for statistics with difficult analytic intervals"],
+            limitations=["Naive row-wise resampling is not valid for every clustered, stratified or dependent dataset."],
+        ),
+        _method(
+            entity_id="method.inference.comparison.posthoc.tukey",
+            name="Tukey's honestly significant difference",
+            description="Performs pairwise group-mean comparisons following a suitable ANOVA model.",
+            family="multiple_comparisons",
+            purpose="inference",
+            priority="P3",
+            outcome_types=["numeric"],
+            required_roles=["numeric_outcome", "grouping_factor"],
+            data_requirements=["A suitable fitted group-comparison model with at least three groups."],
+            assumptions=["The underlying model assumptions are assessed.", "The family of comparisons is defined."],
+            outputs=["Pairwise mean differences", "Simultaneous confidence intervals", "Multiplicity-adjusted p-values"],
+            use_cases=["Identify which group means differ after an omnibus comparison"],
+        ),
+        _method(
+            entity_id="method.inference.survival.kaplan_meier",
+            name="Kaplan–Meier survival analysis",
+            description="Estimates a time-to-event survival function while accounting for right-censoring under stated assumptions.",
+            family="survival_analysis",
+            purpose="description",
+            priority="P3",
+            outcome_types=["time_to_event"],
+            required_roles=["event_time", "event_indicator"],
+            data_requirements=["Time-to-event information and an event or censoring indicator."],
+            assumptions=["Censoring is appropriately represented.", "The event-time origin and event definition are clear."],
+            outputs=["Survival estimates", "Confidence intervals", "Median survival where estimable", "At-risk counts"],
+            use_cases=["Describe time to an event", "Analyse programme retention or time-to-event outcomes"],
+        ),
+        _method(
+            entity_id="method.forecasting.time_series.arima",
+            name="ARIMA time-series model",
+            description="Models temporal dependence in a univariate time series for explanation and forecasting.",
+            family="time_series",
+            purpose="prediction",
+            priority="P3",
+            outcome_types=["numeric_time_series"],
+            required_roles=["time_index", "numeric_outcome"],
+            data_requirements=["A consistently indexed time series with sufficient observations."],
+            assumptions=["Time index and frequency are valid.", "Stationarity and differencing requirements are assessed.", "Residual diagnostics and forecast validation are performed."],
+            outputs=["Model specification", "Parameter estimates", "Forecasts", "Prediction intervals", "Residual diagnostics"],
+            use_cases=["Forecast regularly observed numeric outcomes"],
+        ),
+    ]
+    return tuple(methods)
+
+
+def create_statistical_method_repository() -> MethodRepository:
+    """Build an isolated repository containing the curated method catalogue."""
+    identity_index = RegistryIdentityIndex()
+    repository = MethodRepository(identity_index)
+
+    for method in _build_catalogue():
+        repository.register(method)
+
+    return repository
+
+
+def get_statistical_methods(
+    *,
+    implementation_status: str | None = None,
+    method_family: str | None = None,
+    release_priority: str | None = None,
+) -> tuple[MethodEntity, ...]:
+    """Return defensive copies of catalogue records matching all filters."""
+    methods = create_statistical_method_repository().list_all()
+
+    if implementation_status is not None:
+        methods = tuple(
+            method for method in methods
+            if method.implementation_status == implementation_status
+        )
+
+    if method_family is not None:
+        methods = tuple(
+            method for method in methods
+            if method.method_families and method_family in method.method_families
+        )
+
+    if release_priority is not None:
+        methods = tuple(
+            method for method in methods
+            if method.metadata.get("release_priority") == release_priority
+        )
+
+    return tuple(copy.deepcopy(method) for method in methods)
+
+
+def get_statistical_method(method_id: str) -> MethodEntity | None:
+    """Return one method by canonical identifier, or None when unknown."""
+    return create_statistical_method_repository().get(method_id)
+
+
+def get_statistical_method_summary() -> dict[str, Any]:
+    """Return catalogue counts grouped by lifecycle, family and priority."""
+    methods = get_statistical_methods()
+    statuses = Counter(method.implementation_status for method in methods)
+    families = Counter(
+        method.method_families[0]
+        for method in methods
+        if method.method_families
+    )
+    priorities = Counter(
+        str(method.metadata.get("release_priority", "unspecified"))
+        for method in methods
+    )
+
+    return {
+        "catalogue_version": CATALOGUE_VERSION,
+        "total_methods": len(methods),
+        "implementation_status": dict(sorted(statuses.items())),
+        "method_families": dict(sorted(families.items())),
+        "release_priorities": dict(sorted(priorities.items())),
+    }
+
+
+def validate_statistical_method_catalogue() -> tuple[str, ...]:
+    """Validate canonical IDs and lifecycle consistency across the catalogue."""
+    errors: list[str] = []
+    methods = _build_catalogue()
+    seen: set[str] = set()
+
+    for method in methods:
+        try:
+            validate_entity_id(method.entity_id, expected_entity_type="method")
+        except ValueError as exc:
+            errors.append(f"{method.entity_id}: {exc}")
+
+        if method.entity_id in seen:
+            errors.append(f"Duplicate method identifier: {method.entity_id}")
+        seen.add(method.entity_id)
+
+        if method.implementation_status == "implemented":
+            if method.verification_status == "not_tested":
+                errors.append(
+                    f"{method.entity_id}: implemented method has not been tested."
+                )
+            if method.execution_eligibility == "not_assessed":
+                errors.append(
+                    f"{method.entity_id}: implemented method has no execution eligibility assessment."
+                )
+        elif method.execution_eligibility != "not_assessed":
+            errors.append(
+                f"{method.entity_id}: non-implemented method must not be executable."
+            )
+
+        if method.metadata.get("release_priority") not in {"P1", "P2", "P3"}:
+            errors.append(
+                f"{method.entity_id}: invalid or missing release priority."
+            )
+
+        if not method.description.strip() or not method.assumptions:
+            errors.append(
+                f"{method.entity_id}: description and assumptions are required."
+            )
+
+    return tuple(errors)
