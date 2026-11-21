@@ -47,7 +47,7 @@ def test_detects_delimited_multiple_response_field():
     profile = profile_survey_dataframe(df)
 
     assert profile["columns"][0]["type"] == "multiple_response"
-    assert any("not yet expanded" in warning for warning in profile["warnings"])
+    assert not any("not yet expanded" in warning for warning in profile["warnings"])
 
 
 def test_does_not_label_plain_numeric_dataset_as_survey():
