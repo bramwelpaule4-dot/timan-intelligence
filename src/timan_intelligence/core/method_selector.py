@@ -8,6 +8,8 @@ or claim that unverified assumptions have been satisfied.
 
 from dataclasses import dataclass, field
 
+from timan_intelligence.registry.method_catalogue import get_statistical_methods
+
 
 ELIGIBLE = "eligible"
 CONDITIONALLY_ELIGIBLE = "conditionally_eligible"
@@ -23,6 +25,7 @@ class MethodCandidate:
     rationale: str
     checks: list[str] = field(default_factory=list)
     status: str = "review_required"
+    catalogue: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass
@@ -36,6 +39,53 @@ class MethodAssessment:
     checks: list[str] = field(default_factory=list)
     alternatives: list[MethodCandidate] = field(default_factory=list)
     status: str = "review_required"
+    catalogue: dict[str, object] = field(default_factory=dict)
+
+
+def _normalise_method_label(value: str) -> str:
+    """Normalise method labels for matching registry names and aliases."""
+    return " ".join(value.casefold().split())
+
+
+def _find_catalogue_method(label: str):
+    """Resolve a display label or alias against the authoritative catalogue."""
+    normalised = _normalise_method_label(label)
+    for record in get_statistical_methods():
+        labels = [record.name, *record.aliases]
+        if any(_normalise_method_label(item) == normalised for item in labels):
+            return record
+    return None
+
+
+def _catalogue_metadata(label: str) -> dict[str, object]:
+    """Expose lifecycle and design metadata without implying executability."""
+    record = _find_catalogue_method(label)
+    if record is None:
+        return {}
+    specification = record.statistical_specification or {}
+    return {
+        "method_id": record.entity_id,
+        "implementation_status": record.implementation_status,
+        "verification_status": record.verification_status,
+        "execution_eligibility": record.execution_eligibility,
+        "sampling_design_aware": bool(
+            specification.get("sampling_design_aware", False)
+        ),
+        "catalogue_version": record.metadata.get("catalogue_version"),
+        "release_priority": record.metadata.get("release_priority"),
+    }
+
+
+def _attach_catalogue_metadata(candidates: list[MethodCandidate]) -> list[MethodCandidate]:
+    """Keep only catalogue-defined candidates and attach their lifecycle data."""
+    registered = []
+    for candidate in candidates:
+        metadata = _catalogue_metadata(candidate.method)
+        if not metadata:
+            continue
+        candidate.catalogue = metadata
+        registered.append(candidate)
+    return registered
 
 
 def select_methods(
@@ -275,7 +325,7 @@ def select_methods(
                 )
             )
 
-    return candidates
+    return _attach_catalogue_metadata(candidates)
 
 
 def assess_preferred_method(
@@ -314,24 +364,8 @@ def assess_preferred_method(
             ),
         )
 
-    known_methods = {
-        "Descriptive statistics",
-        "Frequencies and proportions",
-        "Independent-samples t-test",
-        "Mann–Whitney U test",
-        "Paired-samples t-test",
-        "Wilcoxon signed-rank test",
-        "One-way ANOVA",
-        "Kruskal–Wallis test",
-        "Chi-square test of independence",
-        "Fisher's exact test",
-        "Pearson correlation",
-        "Spearman rank correlation",
-        "Logistic regression",
-        "Linear regression",
-    }
-
-    if method not in known_methods:
+    registry_method = _find_catalogue_method(method)
+    if registry_method is None:
         return MethodAssessment(
             preferred_method=method,
             eligibility=INSUFFICIENT_INFORMATION,
@@ -349,6 +383,42 @@ def assess_preferred_method(
                 group_count,
                 independent_groups,
             ),
+        )
+
+    assessable_methods = {
+        "Descriptive statistics",
+        "Frequencies and proportions",
+        "Independent-samples t-test",
+        "Mann–Whitney U test",
+        "Paired-samples t-test",
+        "One-way ANOVA",
+        "Kruskal–Wallis test",
+        "Chi-square test of independence",
+        "Fisher's exact test",
+        "Pearson correlation",
+        "Spearman rank correlation",
+        "Logistic regression",
+        "Linear regression",
+    }
+    if method not in assessable_methods:
+        return MethodAssessment(
+            preferred_method=method,
+            eligibility=INSUFFICIENT_INFORMATION,
+            rationale=(
+                "This method is present in the statistical catalogue, but "
+                "method-specific suitability rules have not yet been added."
+            ),
+            clarification_questions=[
+                "This method is catalogued but cannot yet be assessed automatically."
+            ],
+            alternatives=select_methods(
+                objective_type,
+                outcome_type,
+                predictor_type,
+                group_count,
+                independent_groups,
+            ),
+            catalogue=_catalogue_metadata(method),
         )
 
     questions = []
@@ -548,4 +618,5 @@ def assess_preferred_method(
         clarification_questions=questions,
         checks=checks,
         alternatives=alternatives,
+        catalogue=_catalogue_metadata(method),
     )
