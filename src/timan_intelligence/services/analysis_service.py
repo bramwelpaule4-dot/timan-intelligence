@@ -4,6 +4,7 @@ import pandas as pd
 
 from timan_intelligence.core.contracts import AnalysisResult, AnalysisRequest
 from timan_intelligence.core.data_quality import profile_dataframe
+from timan_intelligence.core.categorical_analysis import run_categorical_association
 from timan_intelligence.core.survey_profiler import (
     profile_survey_dataframe,
     question_frequency_table,
@@ -91,6 +92,38 @@ def run_survey_profile(df: pd.DataFrame) -> AnalysisResult:
             "multiple_response_columns": multiple_response_columns,
             "likert_columns": likert_columns,
         },
+    )
+
+
+def run_categorical_comparison(
+    df: pd.DataFrame,
+    row_variable: str,
+    column_variable: str,
+) -> AnalysisResult:
+    """Run reusable categorical cross-tabulation and guarded association testing."""
+    output = run_categorical_association(df, row_variable, column_variable)
+    metadata = output["metadata"]
+    findings = list(output["findings"])
+    if metadata["test_status"] == "tested":
+        findings.append(
+            f"{metadata['test']} returned p={metadata['p_value']:.4g}."
+        )
+    return AnalysisResult(
+        title=f"Categorical comparison: {row_variable} by {column_variable}",
+        method=metadata["test"],
+        status="success" if metadata["test_status"] == "tested" else "descriptive_only",
+        tables={
+            "observed_counts": output["counts"],
+            "row_percentages": output["row_percentages"],
+            "column_percentages": output["column_percentages"],
+        },
+        findings=findings,
+        assumptions=[
+            "Each row is treated as one independent observational unit.",
+            "Only records with non-missing values for both selected variables are included.",
+        ],
+        limitations=output["warnings"],
+        metadata=metadata,
     )
 
 
