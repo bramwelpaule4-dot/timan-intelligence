@@ -821,9 +821,6 @@ st.sidebar.markdown(
     """,
     unsafe_allow_html=True,
 )
-    """,
-    unsafe_allow_html=True,
-)
 
 st.sidebar.divider()
 
