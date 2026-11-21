@@ -89,11 +89,23 @@ def catalogue_metadata_for_method(label: str) -> dict[str, object]:
     return _catalogue_metadata(label)
 
 
+def _missing_required_roles(
+    metadata: dict[str, object],
+    available_variable_roles: set[str] | None,
+) -> list[str]:
+    """Return catalogue-required roles that have not been explicitly supplied."""
+    if available_variable_roles is None:
+        return []
+    required = metadata.get("required_variable_roles", [])
+    return [role for role in required if role not in available_variable_roles]
+
+
 def _attach_catalogue_metadata(
     candidates: list[MethodCandidate],
     outcome_type: str | None = None,
     predictor_type: str | None = None,
     study_design: str | None = None,
+    available_variable_roles: set[str] | None = None,
 ) -> list[MethodCandidate]:
     """Apply catalogue type/design constraints and attach authoritative metadata.
 
@@ -118,6 +130,9 @@ def _attach_catalogue_metadata(
         if study_design is not None and allowed_designs and study_design not in allowed_designs:
             continue
 
+        if _missing_required_roles(metadata, available_variable_roles):
+            continue
+
         candidate.catalogue = metadata
         registered.append(candidate)
     return registered
@@ -130,6 +145,7 @@ def select_methods(
     group_count: int | None = None,
     independent_groups: bool | None = None,
     study_design: str | None = None,
+    available_variable_roles: set[str] | None = None,
 ) -> list[MethodCandidate]:
     """Return candidate methods from the supplied objective and data types.
 
@@ -366,6 +382,7 @@ def select_methods(
         outcome_type=outcome_type,
         predictor_type=predictor_type,
         study_design=study_design,
+        available_variable_roles=available_variable_roles,
     )
 
 
@@ -377,6 +394,7 @@ def assess_preferred_method(
     group_count: int | None = None,
     independent_groups: bool | None = None,
     study_design: str | None = None,
+    available_variable_roles: set[str] | None = None,
 ) -> MethodAssessment:
     """Assess a preferred method before suggesting alternatives.
 
@@ -404,6 +422,7 @@ def assess_preferred_method(
                 group_count,
                 independent_groups,
                 study_design,
+                available_variable_roles,
             ),
         )
 
@@ -426,6 +445,7 @@ def assess_preferred_method(
                 group_count,
                 independent_groups,
                 study_design,
+                available_variable_roles,
             ),
         )
 
@@ -444,7 +464,7 @@ def assess_preferred_method(
             ),
             alternatives=select_methods(
                 objective_type, outcome_type, predictor_type, group_count,
-                independent_groups, study_design,
+                independent_groups, study_design, available_variable_roles,
             ),
             catalogue=_catalogue_metadata(method),
         )
@@ -459,7 +479,7 @@ def assess_preferred_method(
             ),
             alternatives=select_methods(
                 objective_type, outcome_type, predictor_type, group_count,
-                independent_groups, study_design,
+                independent_groups, study_design, available_variable_roles,
             ),
             catalogue=_catalogue_metadata(method),
         )
@@ -474,7 +494,32 @@ def assess_preferred_method(
             ),
             alternatives=select_methods(
                 objective_type, outcome_type, predictor_type, group_count,
-                independent_groups, study_design,
+                independent_groups, study_design, available_variable_roles,
+            ),
+            catalogue=_catalogue_metadata(method),
+        )
+
+    missing_roles = _missing_required_roles(
+        _catalogue_metadata(method),
+        available_variable_roles,
+    )
+    if missing_roles:
+        return MethodAssessment(
+            preferred_method=method,
+            eligibility=INSUFFICIENT_INFORMATION,
+            rationale=(
+                "The selected method requires additional variable roles: "
+                + ", ".join(missing_roles)
+                + ". These roles have not been identified in the analysis request."
+            ),
+            clarification_questions=[
+                "Identify the dataset column for each required role: "
+                + ", ".join(missing_roles)
+                + "."
+            ],
+            alternatives=select_methods(
+                objective_type, outcome_type, predictor_type, group_count,
+                independent_groups, study_design, available_variable_roles,
             ),
             catalogue=_catalogue_metadata(method),
         )
@@ -512,6 +557,7 @@ def assess_preferred_method(
                 group_count,
                 independent_groups,
                 study_design,
+                available_variable_roles,
             ),
             catalogue=_catalogue_metadata(method),
         )
