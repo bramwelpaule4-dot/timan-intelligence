@@ -8,6 +8,7 @@ from timan_intelligence.core.categorical_analysis import run_categorical_associa
 from timan_intelligence.core.numeric_comparison import run_numeric_group_comparison
 from timan_intelligence.core.numeric_association import run_numeric_association
 from timan_intelligence.core.simple_regression import run_simple_linear_regression
+from timan_intelligence.core.multiple_regression import run_multiple_linear_regression
 from timan_intelligence.core.survey_profiler import (
     profile_survey_dataframe,
     question_frequency_table,
@@ -245,6 +246,39 @@ def run_simple_linear_regression_service(
         limitations=list(output["warnings"]),
         metadata=metadata,
     )
+
+
+
+def run_multiple_linear_regression_service(
+    df: pd.DataFrame,
+    predictor_variables: list[str],
+    outcome_variable: str,
+) -> AnalysisResult:
+    """Run a shared multiple-predictor ordinary least-squares regression."""
+    output = run_multiple_linear_regression(
+        df,
+        predictor_variables,
+        outcome_variable,
+    )
+    metadata = output["metadata"]
+    return AnalysisResult(
+        title=f"Multiple linear regression: {outcome_variable}",
+        method="Ordinary least squares (multiple numeric predictors)",
+        status="success",
+        tables={
+            "coefficients": output["coefficients"],
+            "fitted_data": output["fitted_data"],
+        },
+        findings=list(output["findings"]),
+        assumptions=[
+            "The expected relationship between the outcome and included predictors is linear and additive.",
+            "Errors are independent and have constant variance; residual normality supports conventional small-sample inference.",
+            "Predictors are not perfectly or near-perfectly collinear.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata=metadata,
+    )
+
 
 
 def run_numeric_summary(df: pd.DataFrame, request: AnalysisRequest | None = None) -> AnalysisResult:
