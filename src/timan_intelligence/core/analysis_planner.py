@@ -17,6 +17,7 @@ from timan_intelligence.core.method_selector import (
     INELIGIBLE,
     INSUFFICIENT_INFORMATION,
     assess_preferred_method,
+    catalogue_metadata_for_method,
     select_methods,
 )
 from timan_intelligence.core.objective_classifier import classify_objective
@@ -173,6 +174,7 @@ def _add_descriptive_recommendations(
                     "Consider whether the numeric coding represents a "
                     "quantity or a categorical code.",
                 ],
+                catalogue=catalogue_metadata_for_method("Descriptive statistics"),
             )
         else:
             _add_candidate(
@@ -188,6 +190,7 @@ def _add_descriptive_recommendations(
                     "Confirm whether survey weights are required.",
                     "Review missing and invalid category values.",
                 ],
+                catalogue=catalogue_metadata_for_method("Frequency distribution"),
             )
 
 
@@ -443,6 +446,7 @@ def _add_method_recommendations(
                 reason=candidate.rationale,
                 checks=candidate.checks,
                 status=candidate.status,
+                catalogue=candidate.catalogue,
             )
 
     _add_warning(
