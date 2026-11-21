@@ -15,7 +15,11 @@ from urllib.parse import urlsplit
 
 import streamlit as st
 
-from timan_intelligence.database.connection import database_connection
+from timan_intelligence.database.connection import (
+    database_connection,
+    get_database_type,
+    get_database_url,
+)
 from timan_intelligence.security.distributed_rate_limit import DatabaseRateLimiter
 from timan_intelligence.identity.email_delivery import (
     EmailDeliverySettings,
@@ -62,13 +66,34 @@ def _configured_access_key() -> str:
     return _configuration_value("TIMAN_DEV_DIAGNOSTICS_KEY")
 
 
+def _database_configuration_summary() -> str:
+    """Describe the selected backend and configuration source without secrets."""
+    database_url = get_database_url()
+    if os.getenv("DATABASE_URL", "").strip():
+        source = "environment variable DATABASE_URL"
+    elif database_url:
+        source = "Streamlit Secrets database.url"
+    else:
+        source = "implicit SQLite fallback (no database URL configured)"
+
+    database_type = get_database_type()
+    return f"Backend: {database_type}; configuration source: {source}."
+
+
 def _check_database() -> tuple[bool, str]:
     """Perform read-only connectivity and identity-schema checks."""
     try:
+        summary = _database_configuration_summary()
         with database_connection() as connection:
             connection.execute("SELECT 1").fetchone()
             connection.execute("SELECT id FROM users LIMIT 0")
-        return True, "Database reachable; identity table is present."
+        message = f"Database reachable; identity table is present. {summary}"
+        if get_database_type() == "sqlite":
+            message += (
+                " WARNING: SQLite is not recommended for a hosted multi-user "
+                "deployment because local application storage may not be persistent."
+            )
+        return True, message
     except Exception as exc:
         logger.error(
             "TimanStat developer diagnostic failed. check=database "
