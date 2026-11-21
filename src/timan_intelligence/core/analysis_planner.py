@@ -216,6 +216,52 @@ def _candidate_variables(
     return [outcome]
 
 
+def _available_variable_roles(
+    df: pd.DataFrame,
+    options: dict,
+    outcome: str,
+    group: str | None,
+    predictor: str | None,
+    predictors: list[str] | None,
+) -> set[str]:
+    """Identify roles supported by selected columns and explicit role mappings."""
+    roles = {"outcome", "analysis_variable"}
+    outcome_type = _infer_variable_type(df[outcome])
+
+    if outcome_type == "numeric":
+        roles.add("numeric_outcome")
+    elif outcome_type == "binary":
+        roles.add("binary_outcome")
+
+    if group is not None:
+        roles.add("grouping_factor")
+        if int(df[group].dropna().nunique()) == 2:
+            roles.add("two_group_factor")
+        if outcome_type in {"categorical", "binary", "ordinal"} and _infer_variable_type(df[group]) in {"categorical", "binary", "ordinal"}:
+            roles.update({"row_variable", "column_variable"})
+
+    if predictor is not None:
+        predictor_type = _infer_variable_type(df[predictor])
+        if outcome_type == "numeric" and predictor_type == "numeric":
+            roles.update({"numeric_variable_one", "numeric_variable_two"})
+        if outcome_type in {"numeric", "ordinal"} and predictor_type in {"numeric", "ordinal"}:
+            roles.update({"ordered_variable_one", "ordered_variable_two"})
+
+    if predictors:
+        roles.add("one_or_more_predictors")
+
+    # Additional roles, such as before/after measures and pair identifiers,
+    # must be explicitly mapped by the user to real dataset columns.
+    configured_roles = options.get("variable_roles", {})
+    if isinstance(configured_roles, dict):
+        for role, columns in configured_roles.items():
+            values = columns if isinstance(columns, (list, tuple)) else [columns]
+            if values and all(isinstance(name, str) and name in df.columns for name in values):
+                roles.add(str(role))
+
+    return roles
+
+
 def _add_method_recommendations(
     plan: AnalysisPlan,
     df: pd.DataFrame,
@@ -314,6 +360,10 @@ def _add_method_recommendations(
     )
     independent_groups = options.get("independent_groups")
     study_design = options.get("study_design")
+    available_variable_roles = _available_variable_roles(
+        df, options, outcome, group, predictor,
+        predictors if objective_type == "prediction" else None,
+    )
 
     if objective_type == "comparison":
         if group_count is None or group_count < 2:
@@ -342,6 +392,7 @@ def _add_method_recommendations(
             group_count=group_count,
             independent_groups=independent_groups,
             study_design=study_design,
+            available_variable_roles=available_variable_roles,
         )
 
         plan.recommendations.append(
@@ -415,6 +466,7 @@ def _add_method_recommendations(
                 group_count=group_count,
                 independent_groups=True,
                 study_design=study_design,
+                available_variable_roles=available_variable_roles,
             )
 
         elif objective_type == "association":
