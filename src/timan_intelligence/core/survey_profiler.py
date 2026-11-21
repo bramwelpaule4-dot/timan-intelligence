@@ -44,7 +44,7 @@ def _is_delimited_multi_response(series: pd.Series) -> bool:
     if len(values) < 2:
         return False
     text = values.astype(str)
-    delimiter_rows = text.str.contains(r"[;,|]", regex=True)
+    delimiter_rows = text.str.contains(r"[;,|\\r\\n]", regex=True)
     return bool(delimiter_rows.mean() >= 0.25 and text[delimiter_rows].nunique() >= 1)
 
 
@@ -148,7 +148,7 @@ def profile_survey_dataframe(df: pd.DataFrame) -> dict[str, Any]:
         )
     if any(item["type"] == "multiple_response" for item in columns):
         warnings.append(
-            "Delimited multiple-response fields are identified but are not yet expanded into option-level counts."
+            "Delimited multiple-response fields are expanded into option-level counts; verify that the detected delimiters match the questionnaire export format."
         )
 
     return {
