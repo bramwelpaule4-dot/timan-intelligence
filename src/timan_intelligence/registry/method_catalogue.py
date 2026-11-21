@@ -155,7 +155,7 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             assumptions=["Category labels and missing-value codes have been reviewed."],
             outputs=["Category counts", "Valid percentages", "Cumulative percentages", "Missing count"],
             use_cases=["Describe categorical responses", "Summarise survey questions", "Profile population characteristics"],
-            aliases=["Frequencies", "Frequency table", "Counts and percentages"],
+            aliases=["Frequencies", "Frequencies and proportions", "Frequency table", "Counts and percentages"],
         ),
         _method(
             entity_id="method.descriptive.categorical.cross_tabulation",
@@ -213,7 +213,7 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             assumptions=["The two groups are independent.", "Observations are independent within groups.", "The outcome is numeric; severe influential observations and distribution shape require review."],
             outputs=["Group sample sizes", "Group means", "Mean difference", "Welch t-statistic", "Degrees of freedom", "P-value", "Confidence interval"],
             use_cases=["Compare a numeric outcome between two independent groups", "Compare intervention and comparison groups when design permits"],
-            aliases=["Welch t-test", "Unequal-variance t-test"],
+            aliases=["Welch t-test", "Unequal-variance t-test", "Independent-samples t-test"],
             implementation_status="implemented",
             verification_status="unit_tested",
             execution_eligibility="conditional",
@@ -357,6 +357,7 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             assumptions=["Model specification and linearity are assessed.", "Residual variance and dependence are assessed.", "Multicollinearity and influential observations are reviewed."],
             outputs=["Regression coefficients", "Standard errors", "Confidence intervals", "P-values", "Model fit statistics", "Residual diagnostics"],
             use_cases=["Estimate adjusted associations", "Model a numeric outcome"],
+            aliases=["Linear regression"],
             limitations=["Associational regression does not establish causal effects without a defensible causal design."],
         ),
         _method(
@@ -373,6 +374,7 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             assumptions=["Outcome coding is valid.", "Model specification and predictor relationships are assessed.", "Sample size, separation and influential observations are reviewed."],
             outputs=["Regression coefficients", "Odds ratios", "Confidence intervals", "P-values", "Model diagnostics", "Prediction performance where validated"],
             use_cases=["Model binary outcomes", "Estimate adjusted odds"],
+            aliases=["Logistic regression"],
             limitations=["Odds ratios should not be interpreted as risk ratios without justification."],
         ),
         _method(
