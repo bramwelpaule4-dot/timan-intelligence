@@ -8,6 +8,7 @@ from timan_intelligence.core.survey_profiler import (
     profile_survey_dataframe,
     question_frequency_table,
     multiple_response_table,
+    likert_item_table,
 )
 from timan_intelligence.modules.descriptive import numeric_summary, frequency_table
 
@@ -63,6 +64,12 @@ def run_survey_profile(df: pd.DataFrame) -> AnalysisResult:
         tables[f"frequency::{column}"] = question_frequency_table(df, column)
     for column in multiple_response_columns:
         tables[f"multiple_response::{column}"] = multiple_response_table(df, column)
+    likert_columns = [
+        item["column"] for item in profile["columns"]
+        if item["type"] == "likert_item" and not item["identifier_name_hint"]
+    ]
+    for column in likert_columns:
+        tables[f"likert::{column}"] = likert_item_table(df, column)
 
     return AnalysisResult(
         title="Survey data recognition and profile",
@@ -82,6 +89,7 @@ def run_survey_profile(df: pd.DataFrame) -> AnalysisResult:
             "response_type_counts": profile.get("response_type_counts", {}),
             "frequency_columns": frequency_columns,
             "multiple_response_columns": multiple_response_columns,
+            "likert_columns": likert_columns,
         },
     )
 
