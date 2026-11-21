@@ -653,8 +653,8 @@ MODULES = {
         "Calculate numeric summaries and categorical frequencies.",
     ),
     "Survey Analysis": (
-        "Available — recognition and profiling",
-        "Recognise questionnaire structures and inspect response patterns.",
+        "Available — profiling and Likert item analysis",
+        "Inspect questionnaire structure, response patterns and ordered Likert items.",
     ),
     "Statistical Inference": (
         "Under development",
@@ -1901,6 +1901,46 @@ elif page == "Survey Analysis":
                 "No delimited multiple-response questions were detected. "
                 "If the questionnaire stores each option in a separate column, "
                 "that structure needs a separate checkbox-matrix recogniser."
+            )
+
+        st.subheader("Likert item analysis")
+        likert_columns = metadata.get("likert_columns", [])
+        if likert_columns:
+            selected_likert = st.selectbox(
+                "Choose a recognised Likert question",
+                likert_columns,
+                key="survey_likert_question",
+            )
+            likert_table = result.tables[f"likert::{selected_likert}"]
+            likert_summary = likert_table.attrs
+            summary_columns = st.columns(4)
+            summary_columns[0].metric("Valid responses", f"{likert_summary['valid_n']:,}")
+            summary_columns[1].metric("Missing responses", f"{likert_summary['missing_n']:,}")
+            summary_columns[2].metric(
+                "Median response",
+                str(likert_summary["median_response"])
+                if likert_summary["median_response"] is not None else "—",
+            )
+            summary_columns[3].metric(
+                "Mode",
+                ", ".join(map(str, likert_summary["mode_responses"])) or "—",
+            )
+            st.dataframe(
+                likert_table,
+                hide_index=True,
+                use_container_width=True,
+            )
+            st.caption(
+                "Responses are displayed in the recognised ordinal order. "
+                "Percentages are shown among valid responses and among all records. "
+                "The median is reported as an ordered response category; no mean "
+                "score or positive/negative direction is assumed."
+            )
+        else:
+            st.info(
+                "No recognised labelled Likert items are available. Numeric or "
+                "custom-coded scales must be confirmed against the questionnaire "
+                "or codebook before they can be analysed as ordinal responses."
             )
 
         st.info(
