@@ -305,8 +305,18 @@ def validate_current_dataset_limits(
 
 
 # Core statistical tools are session-based and do not require the identity
-# database. Authentication, registration, subscriptions and account security
-# remain in the repository but are not exposed in this public preview.
+# database. Initialise it opportunistically for development monitoring, but
+# never block public statistical work if the database is unavailable.
+PUBLIC_DATABASE_AVAILABLE = False
+if PUBLIC_ACCESS_MODE:
+    try:
+        initialise_database()
+        PUBLIC_DATABASE_AVAILABLE = True
+    except Exception:
+        PUBLIC_DATABASE_AVAILABLE = False
+
+# Authentication, registration, subscriptions and account security remain
+# in the repository but are not exposed in this public preview.
 if not PUBLIC_ACCESS_MODE:
     try:
         initialise_database()
@@ -872,6 +882,10 @@ navigation_options = [
             "Account & Security",
         }
     )
+    and (
+        not PUBLIC_ACCESS_MODE
+        or PUBLIC_DATABASE_AVAILABLE
+        or name != "Project Status"
     and (
         name != "User Administration"
         or current_role in {"admin", "super_admin"}
