@@ -403,6 +403,7 @@ def assess_preferred_method(
                 predictor_type,
                 group_count,
                 independent_groups,
+                study_design,
             ),
         )
 
@@ -424,6 +425,7 @@ def assess_preferred_method(
                 predictor_type,
                 group_count,
                 independent_groups,
+                study_design,
             ),
         )
 
@@ -509,6 +511,7 @@ def assess_preferred_method(
                 predictor_type,
                 group_count,
                 independent_groups,
+                study_design,
             ),
             catalogue=_catalogue_metadata(method),
         )
@@ -694,6 +697,7 @@ def assess_preferred_method(
             predictor_type,
             group_count,
             independent_groups,
+            study_design,
         )
         if candidate.method != method
     ]
