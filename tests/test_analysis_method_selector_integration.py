@@ -489,6 +489,40 @@ def test_planner_requests_cluster_and_weight_details_for_complex_survey():
     )
 
 
+def test_descriptive_recommendations_are_explicitly_sample_level_and_keep_design_mappings():
+    df = pd.DataFrame({
+        "income": [10, 20, 30, 40],
+        "weight": [1.2, 0.8, 1.1, 0.9],
+        "cluster": [1, 1, 2, 2],
+    })
+    request = AnalysisRequest(
+        question="What is the distribution of income?",
+        selected_variables=["income"],
+        options={
+            "study_design": "complex survey",
+            "sampling_design": "cluster",
+            "sampling_weight_variable": "weight",
+            "cluster_variable": "cluster",
+        },
+    )
+
+    plan = plan_analysis(df, request)
+
+    numeric_summary = next(
+        item for item in plan.recommendations
+        if item["method"] == "Descriptive statistics"
+    )
+    assert numeric_summary["estimate_scope"] == "observed_dataset"
+    assert numeric_summary["population_representative"] is False
+    assert any(
+        "observed dataset" in check.lower()
+        and "population estimates" in check.lower()
+        for check in numeric_summary["checks"]
+    )
+    assert numeric_summary["design_context"]["sampling_weight"] == "weight"
+    assert numeric_summary["design_context"]["cluster_identifier"] == "cluster"
+
+
 def test_planner_rejects_unrecognised_study_design_label():
     df = pd.DataFrame({
         "income": [10, 20, 30, 40],
