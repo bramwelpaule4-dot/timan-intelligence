@@ -138,4 +138,4 @@ def test_survey_service_exposes_labelled_likert_item_analysis():
 
     assert result.metadata["likert_columns"] == ["Q1_agreement"]
     assert "likert::Q1_agreement" in result.tables
-})
+
