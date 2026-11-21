@@ -1577,7 +1577,6 @@ def render_simple_linear_regression(df):
         y="Residual",
         use_container_width=True,
     )
-    render_regression_diagnostics(fitted, list(predictor_variables), outcome_variable)
     st.caption(
         "Residuals are observed minus fitted outcomes. Look for curvature, "
         "changing spread, clusters and unusually large residuals."
@@ -1721,6 +1720,7 @@ def render_multiple_linear_regression(df):
         y="Residual",
         use_container_width=True,
     )
+    render_regression_diagnostics(fitted, list(predictor_variables), outcome_variable)
     st.caption(
         "Residuals are observed minus fitted outcomes. Look for systematic "
         "patterns, changing spread, clusters and unusually large residuals."
