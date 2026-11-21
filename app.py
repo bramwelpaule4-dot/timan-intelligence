@@ -232,6 +232,55 @@ st.markdown(
         outline-offset: 2px !important;
     }
 
+    /* Branded landing-page header */
+    .home-hero {
+        background: linear-gradient(118deg, #FFFFFF 0%, #F0F6FC 72%, #E7F1FA 100%);
+        border: 1px solid var(--timan-border);
+        border-left: 5px solid var(--timan-blue);
+        border-radius: 16px;
+        padding: 1.35rem 1.6rem;
+        margin: .2rem 0 1.25rem 0;
+        box-shadow: 0 8px 24px rgba(23,59,103,.055);
+    }
+    .home-eyebrow {
+        color: var(--timan-blue);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: .13em;
+        text-transform: uppercase;
+        margin-bottom: .45rem;
+    }
+    .home-heading {
+        color: var(--timan-navy);
+        font-size: clamp(1.8rem, 3vw, 2.55rem);
+        font-weight: 850;
+        line-height: 1.08;
+        letter-spacing: -.04em;
+        margin: 0 0 .55rem 0;
+    }
+    .home-tagline {
+        color: var(--timan-muted);
+        font-size: 1rem;
+        line-height: 1.55;
+        margin: 0;
+        max-width: 48rem;
+    }
+    .home-description {
+        color: var(--timan-text);
+        font-size: 1rem;
+        line-height: 1.7;
+        max-width: 70rem;
+        margin: .8rem 0 1.35rem 0;
+    }
+    .section-kicker {
+        color: var(--timan-blue);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: .12em;
+        text-transform: uppercase;
+        margin-bottom: .35rem;
+    }
+
     @media (max-width: 768px) {
         .block-container {
             padding-top: 1.2rem;
@@ -745,26 +794,19 @@ def show_under_development(page, purpose):
 # SIDEBAR: LOGO AND NAVIGATION
 # ============================================================
 
-logo_path = Path(__file__).parent / "timan_analytics_logo.png"
+# Prefer the transparent PNG brand asset; use the committed JPEG logo
+# when the PNG variant is not present in this deployment.
+logo_candidates = (
+    Path(__file__).parent / "timan_analytics_logo.png",
+    Path(__file__).parent / "Timan Analytics logo.jpeg",
+)
+logo_path = next((candidate for candidate in logo_candidates if candidate.is_file()), None)
 
-if logo_path.exists():
-    st.sidebar.image(
-        str(logo_path),
-        use_container_width=True,
-    )
+if logo_path is not None:
+    st.sidebar.image(str(logo_path), use_container_width=True)
 else:
     st.sidebar.markdown(
-        """
-        <div style="
-            text-align:center;
-            padding:16px 6px;
-            border:1px dashed #8aa1b8;
-            border-radius:12px;
-        ">
-            <strong>Timan Analytics logo</strong><br/>
-            <small>Add timan_analytics_logo.png beside app.py</small>
-        </div>
-        """,
+        '<div class="brand" style="text-align:center; color:#FFFFFF; padding:18px 4px 8px;">Timan Analytics</div>',
         unsafe_allow_html=True,
     )
 
@@ -950,20 +992,28 @@ else:
 # ============================================================
 
 if page == "Home":
-    st.markdown(
-        f'<div class="brand">{APP_NAME.upper()}</div>',
-        unsafe_allow_html=True,
-    )
+    hero_left, hero_right = st.columns([1.05, 4.2], vertical_alignment="center")
+    with hero_left:
+        if logo_path is not None:
+            st.image(str(logo_path), use_container_width=True)
+        else:
+            st.markdown(
+                '<div style="font-size:1.35rem;font-weight:850;color:#173B67;">TIMAN<br/>ANALYTICS</div>',
+                unsafe_allow_html=True,
+            )
+    with hero_right:
+        st.markdown(
+            f'<div class="home-hero"><div class="home-eyebrow">{PLATFORM_LABEL} · BY {APP_ORGANISATION.upper()}</div>'
+            f'<div class="home-heading">{APP_NAME}</div>'
+            f'<p class="home-tagline">{APP_TAGLINE}</p></div>',
+            unsafe_allow_html=True,
+        )
 
     st.markdown(
-        '<div class="subtitle">'
-        f"{APP_TAGLINE}</div>",
+        f'<div class="home-description">{APP_DESCRIPTION}</div>',
         unsafe_allow_html=True,
     )
-
-    st.write("")
-
-    st.write(APP_DESCRIPTION)
+    st.markdown('<div class="section-kicker">Your analytical workspace</div>', unsafe_allow_html=True)
 
     df = st.session_state.dataset
 
