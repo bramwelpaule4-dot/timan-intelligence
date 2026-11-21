@@ -744,6 +744,7 @@ def assess_preferred_method(
             group_count,
             independent_groups,
             study_design,
+            available_variable_roles,
         )
         if candidate.method != method
     ]
