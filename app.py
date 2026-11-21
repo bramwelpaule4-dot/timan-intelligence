@@ -1852,10 +1852,61 @@ elif page == "Survey Analysis":
         for warning in result.limitations:
             st.warning(warning)
 
+        st.subheader("Question-level response frequencies")
+        frequency_columns = metadata.get("frequency_columns", [])
+        if frequency_columns:
+            selected_question = st.selectbox(
+                "Choose a question",
+                frequency_columns,
+                key="survey_frequency_question",
+            )
+            st.dataframe(
+                result.tables[f"frequency::{selected_question}"],
+                hide_index=True,
+                use_container_width=True,
+            )
+            st.caption(
+                "Percentages use all imported records as the denominator; "
+                "missing responses are shown separately."
+            )
+        else:
+            st.info(
+                "No categorical or recognised scale questions are available "
+                "for frequency tabulation."
+            )
+
+        st.subheader("Multiple-response questions")
+        multiple_columns = metadata.get("multiple_response_columns", [])
+        if multiple_columns:
+            selected_multiple = st.selectbox(
+                "Choose a multiple-response question",
+                multiple_columns,
+                key="survey_multiple_response_question",
+            )
+            multiple_table = result.tables[f"multiple_response::{selected_multiple}"]
+            answered = multiple_table.attrs.get("respondents_with_selection", 0)
+            st.metric("Respondents selecting at least one option", f"{answered:,}")
+            st.dataframe(
+                multiple_table,
+                hide_index=True,
+                use_container_width=True,
+            )
+            st.caption(
+                "Each respondent is counted once per selected option. "
+                "Percentages use respondents with at least one recorded selection; "
+                "they can therefore add up to more than 100%."
+            )
+        else:
+            st.info(
+                "No delimited multiple-response questions were detected. "
+                "If the questionnaire stores each option in a separate column, "
+                "that structure needs a separate checkbox-matrix recogniser."
+            )
+
         st.info(
-            "This first release recognises and profiles survey-like data. "
-            "It does not yet calculate multiple-response option totals, "
-            "weighted population estimates, or design-adjusted standard errors."
+            "All frequencies in this release are unweighted descriptions of "
+            "the imported records. Weighted population estimates and "
+            "design-adjusted standard errors are not yet available."
         )
     else:
         st.info("Upload and import a survey dataset in Data Management to begin.")
