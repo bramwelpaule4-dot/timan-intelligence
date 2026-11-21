@@ -313,6 +313,7 @@ def _add_method_recommendations(
         else None
     )
     independent_groups = options.get("independent_groups")
+    study_design = options.get("study_design")
 
     if objective_type == "comparison":
         if group_count is None or group_count < 2:
@@ -340,6 +341,7 @@ def _add_method_recommendations(
             predictor_type=predictor_type,
             group_count=group_count,
             independent_groups=independent_groups,
+            study_design=study_design,
         )
 
         plan.recommendations.append(
@@ -412,6 +414,7 @@ def _add_method_recommendations(
                 outcome_type=outcome_type,
                 group_count=group_count,
                 independent_groups=True,
+                study_design=study_design,
             )
 
         elif objective_type == "association":
@@ -419,12 +422,14 @@ def _add_method_recommendations(
                 objective_type=objective_type,
                 outcome_type=outcome_type,
                 predictor_type=predictor_type,
+                study_design=study_design,
             )
 
         else:
             candidates = select_methods(
                 objective_type=objective_type,
                 outcome_type=outcome_type,
+                study_design=study_design,
             )
 
         if not candidates:
