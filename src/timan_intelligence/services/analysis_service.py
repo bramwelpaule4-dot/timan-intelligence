@@ -4,6 +4,7 @@ import pandas as pd
 
 from timan_intelligence.core.contracts import AnalysisResult, AnalysisRequest
 from timan_intelligence.core.data_quality import profile_dataframe
+from timan_intelligence.core.survey_profiler import profile_survey_dataframe
 from timan_intelligence.modules.descriptive import numeric_summary, frequency_table
 
 
@@ -20,6 +21,46 @@ def run_data_quality(df: pd.DataFrame) -> AnalysisResult:
         ],
         limitations=profile["warnings"],
         metadata={"rows": profile["rows"], "columns": profile["columns"]},
+    )
+
+
+def run_survey_profile(df: pd.DataFrame) -> AnalysisResult:
+    """Recognise and profile questionnaire-style data without modifying it."""
+    profile = profile_survey_dataframe(df)
+    status = "success" if profile["is_survey_like"] else "needs_input"
+    findings = [
+        (
+            "Questionnaire-style response structure detected "
+            f"({profile['confidence']} confidence)."
+            if profile["is_survey_like"]
+            else "The dataset does not yet show enough evidence of questionnaire-style structure."
+        ),
+        f"{profile['respondents']:,} records and {profile.get('variable_count', 0):,} variables inspected.",
+        f"{profile['question_count']:,} response-like variables identified.",
+    ]
+    if profile.get("identifier_candidates"):
+        findings.append(
+            "Possible respondent or record identifiers: "
+            + ", ".join(profile["identifier_candidates"])
+            + ". Confirm these against the data dictionary."
+        )
+    return AnalysisResult(
+        title="Survey data recognition and profile",
+        method="Heuristic questionnaire recognition and deterministic response profiling",
+        status=status,
+        tables={"response_variable_profile": pd.DataFrame(profile["columns"])},
+        findings=findings,
+        limitations=profile["warnings"],
+        metadata={
+            "is_survey_like": profile["is_survey_like"],
+            "confidence": profile["confidence"],
+            "recognition_score": profile.get("recognition_score", 0),
+            "respondents": profile["respondents"],
+            "variable_count": profile.get("variable_count", 0),
+            "question_count": profile["question_count"],
+            "identifier_candidates": profile.get("identifier_candidates", []),
+            "response_type_counts": profile.get("response_type_counts", {}),
+        },
     )
 
 
