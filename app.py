@@ -37,6 +37,7 @@ from timan_intelligence.administration.user_admin_ui import render_user_administ
 from timan_intelligence.services.analysis_service import (
     run_survey_profile,
     run_categorical_comparison,
+    run_numeric_group_comparison_service,
 )
 from timan_intelligence.entitlements.subscriptions import process_due_subscriptions
 from timan_intelligence.entitlements.service import (
@@ -1139,6 +1140,161 @@ def render_categorical_comparison(df):
         st.markdown("#### Assumptions and limitations")
         for warning in result.limitations:
             st.warning(warning)
+
+def render_numeric_group_comparison(df):
+    """Render guided comparison of a numeric outcome across independent groups."""
+    st.subheader("Compare a numeric outcome across groups")
+    st.write(
+        "Compare a measured numeric outcome, such as income, age, expenditure "
+        "or test score, across categories such as location, sex or programme. "
+        "TimanStat selects Welch's t-test for two groups or Welch's one-way "
+        "ANOVA for three or more groups when the data support inference."
+    )
+
+    group_candidates = []
+    for column in df.columns:
+        series = df[column]
+        unique_count = int(series.nunique(dropna=True))
+        if not 2 <= unique_count <= 50:
+            continue
+        is_text_or_category = (
+            pd.api.types.is_object_dtype(series.dtype)
+            or pd.api.types.is_string_dtype(series.dtype)
+            or pd.api.types.is_bool_dtype(series.dtype)
+            or isinstance(series.dtype, pd.CategoricalDtype)
+        )
+        is_low_cardinality_integer = (
+            pd.api.types.is_integer_dtype(series.dtype)
+            and unique_count <= 10
+        )
+        if is_text_or_category or is_low_cardinality_integer:
+            group_candidates.append(column)
+
+    numeric_candidates = [
+        column for column in df.select_dtypes(include="number").columns
+        if not pd.api.types.is_bool_dtype(df[column].dtype)
+    ]
+
+    if not group_candidates or not numeric_candidates:
+        st.info(
+            "This comparison needs at least one categorical grouping variable "
+            "and one numeric outcome variable. Numeric text columns are not "
+            "automatically converted; check the imported variable types."
+        )
+        return
+
+    left, right = st.columns(2)
+    group_variable = left.selectbox(
+        "Grouping variable",
+        group_candidates,
+        key="numeric_comparison_group",
+        help="A category defining independent groups, such as location or programme.",
+    )
+    outcome_variable = right.selectbox(
+        "Numeric outcome",
+        numeric_candidates,
+        key="numeric_comparison_outcome",
+        help="A measured numeric variable whose distribution or mean you want to compare.",
+    )
+
+    st.caption(
+        "Blank group labels and missing or non-finite outcome values are "
+        "excluded and reported. Group codes should be checked against the "
+        "dataset's data dictionary. The analysis is unweighted and does not "
+        "adjust for complex survey sampling."
+    )
+
+    dataset_key = _dataset_analysis_key(df)
+    result_key = f"timanstat_numeric_group_comparison_{dataset_key}"
+    if st.button(
+        "Run numeric group comparison",
+        type="primary",
+        key="run_numeric_group_comparison",
+    ):
+        try:
+            comparison = run_numeric_group_comparison_service(
+                df,
+                str(group_variable),
+                str(outcome_variable),
+            )
+        except (TypeError, ValueError) as exc:
+            st.error(str(exc))
+        except Exception:
+            st.error(
+                "The numeric comparison could not be completed. "
+                "No inferential result has been reported."
+            )
+        else:
+            st.session_state[result_key] = {
+                "group_variable": group_variable,
+                "outcome_variable": outcome_variable,
+                "result": comparison,
+            }
+
+    saved = st.session_state.get(result_key)
+    if not saved:
+        st.info("Choose the grouping and outcome variables, then run the comparison.")
+        return
+    if (
+        saved["group_variable"] != group_variable
+        or saved["outcome_variable"] != outcome_variable
+    ):
+        st.info("Run the comparison again to apply the changed variable selection.")
+        return
+
+    result = saved["result"]
+    metadata = result.metadata
+    st.markdown("#### Comparison summary")
+    metrics = st.columns(4)
+    metrics[0].metric("Valid records", f"{metadata['valid_n']:,}")
+    metrics[1].metric("Excluded records", f"{metadata['excluded_n']:,}")
+    metrics[2].metric("Selected test", metadata["test"])
+    metrics[3].metric(
+        "P-value",
+        f"{metadata['p_value']:.4g}"
+        if metadata.get("p_value") is not None else "Not calculated",
+    )
+
+    st.dataframe(result.tables["group_summaries"], use_container_width=True)
+    st.caption(
+        "Group summaries include sample size, mean, standard deviation, "
+        "median, quartiles and observed range."
+    )
+
+    if metadata.get("mean_difference") is not None:
+        ci = metadata.get("confidence_interval_95")
+        if ci is not None:
+            st.caption(
+                f"Mean difference ({metadata['group_labels'][1]} minus "
+                f"{metadata['group_labels'][0]}): "
+                f"{metadata['mean_difference']:.3g}; 95% confidence interval "
+                f"[{ci[0]:.3g}, {ci[1]:.3g}]."
+            )
+    elif metadata.get("degrees_freedom"):
+        df_values = metadata["degrees_freedom"]
+        st.caption(
+            "Welch ANOVA degrees of freedom: "
+            f"{df_values['numerator']:.3g} (numerator), "
+            f"{df_values['denominator']:.3g} (denominator)."
+        )
+
+    st.markdown("#### Interpretation")
+    for finding in result.findings:
+        st.write(f"• {finding}")
+    if metadata.get("test") == "Welch's one-way ANOVA":
+        st.info(
+            "Welch ANOVA is an omnibus test. A statistically significant result "
+            "indicates that not all group means are equal; it does not identify "
+            "which groups differ. Post-hoc pairwise comparisons are not yet available."
+        )
+    st.caption(
+        "A p-value is not a measure of the size or practical importance of a difference."
+    )
+    if result.limitations:
+        st.markdown("#### Assumptions and limitations")
+        for warning in result.limitations:
+            st.warning(warning)
+
 
 def show_under_development(page, purpose):
     """Display an honest status page for an unfinished module."""
@@ -2422,6 +2578,8 @@ elif page == "Descriptive Statistics":
                 # ============================================================
             st.divider()
             render_categorical_comparison(df)
+            st.divider()
+            render_numeric_group_comparison(df)
 
 
 # VISUALISATIONS
