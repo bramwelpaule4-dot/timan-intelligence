@@ -38,6 +38,7 @@ from timan_intelligence.services.analysis_service import (
     run_survey_profile,
     run_categorical_comparison,
     run_numeric_group_comparison_service,
+    run_numeric_association_service,
 )
 from timan_intelligence.entitlements.subscriptions import process_due_subscriptions
 from timan_intelligence.entitlements.service import (
@@ -1289,6 +1290,133 @@ def render_numeric_group_comparison(df):
         )
     st.caption(
         "A p-value is not a measure of the size or practical importance of a difference."
+    )
+    if result.limitations:
+        st.markdown("#### Assumptions and limitations")
+        for warning in result.limitations:
+            st.warning(warning)
+
+
+
+def render_numeric_association(df):
+    """Render guided correlation analysis for two numeric variables."""
+    st.subheader("Explore the relationship between two numeric variables")
+    st.write(
+        "Examine whether two measured variables move together, for example "
+        "household income and expenditure, training hours and assessment score, "
+        "or age and service utilisation. TimanStat reports both Pearson and "
+        "Spearman correlations so users do not need to select a coefficient "
+        "without first understanding the difference."
+    )
+    numeric_candidates = [
+        column for column in df.select_dtypes(include="number").columns
+        if not pd.api.types.is_bool_dtype(df[column].dtype)
+    ]
+    if len(numeric_candidates) < 2:
+        st.info(
+            "This analysis requires at least two numeric variables. "
+            "Check whether numeric values were imported as text."
+        )
+        return
+
+    left, right = st.columns(2)
+    first_variable = left.selectbox(
+        "First numeric variable",
+        numeric_candidates,
+        key="numeric_association_first",
+        help="Select the first measured variable.",
+    )
+    second_options = [item for item in numeric_candidates if item != first_variable]
+    second_variable = right.selectbox(
+        "Second numeric variable",
+        second_options,
+        key="numeric_association_second",
+        help="Select a different measured variable.",
+    )
+    st.caption(
+        "At least three complete finite pairs are required. Missing and "
+        "non-finite pairs are excluded and counted. Text-coded numbers must "
+        "be converted during data preparation; TimanStat will not guess their meaning."
+    )
+
+    dataset_key = _dataset_analysis_key(df)
+    result_key = f"timanstat_numeric_association_{dataset_key}"
+    if st.button(
+        "Analyse numeric relationship",
+        type="primary",
+        key="run_numeric_association",
+    ):
+        try:
+            association = run_numeric_association_service(
+                df,
+                str(first_variable),
+                str(second_variable),
+            )
+        except (TypeError, ValueError) as exc:
+            st.error(str(exc))
+        except Exception:
+            st.error(
+                "The numeric association could not be completed. "
+                "No correlation result has been reported."
+            )
+        else:
+            st.session_state[result_key] = {
+                "first_variable": first_variable,
+                "second_variable": second_variable,
+                "result": association,
+            }
+
+    saved = st.session_state.get(result_key)
+    if not saved:
+        st.info("Select two numeric variables, then analyse their relationship.")
+        return
+    if (
+        saved["first_variable"] != first_variable
+        or saved["second_variable"] != second_variable
+    ):
+        st.info("Run the analysis again to apply the changed variable selection.")
+        return
+
+    result = saved["result"]
+    metadata = result.metadata
+    st.markdown("#### Correlation results")
+    metrics = st.columns(4)
+    metrics[0].metric("Complete pairs", f"{metadata['valid_n']:,}")
+    metrics[1].metric("Excluded records", f"{metadata['excluded_n']:,}")
+    metrics[2].metric("Pearson's r", f"{metadata['pearson_r']:.4f}")
+    metrics[3].metric("Spearman's rho", f"{metadata['spearman_rho']:.4f}")
+
+    pcols = st.columns(2)
+    pcols[0].metric("Pearson p-value", f"{metadata['pearson_p_value']:.4g}")
+    pcols[1].metric("Spearman p-value", f"{metadata['spearman_p_value']:.4g}")
+    ci = metadata.get("pearson_confidence_interval_95")
+    if ci is not None:
+        st.caption(
+            f"Pearson's r 95% confidence interval: [{ci[0]:.4f}, {ci[1]:.4f}]."
+        )
+
+    st.markdown("#### Scatterplot")
+    chart_data = result.tables["paired_observations"]
+    st.scatter_chart(
+        chart_data,
+        x=first_variable,
+        y=second_variable,
+        use_container_width=True,
+    )
+    st.caption(
+        "Inspect the point pattern for curvature, outliers, clusters and "
+        "restricted ranges. Correlation coefficients alone do not reveal these features."
+    )
+
+    st.markdown("#### Descriptive summary")
+    st.dataframe(result.tables["descriptive_summary"], use_container_width=True)
+    st.markdown("#### Interpretation")
+    for finding in result.findings:
+        st.write(f"• {finding}")
+    st.info(
+        "Pearson's r summarises linear association. Spearman's rho summarises "
+        "monotonic association based on ranks. A low p-value is not proof of "
+        "a strong or important relationship, and neither coefficient implies causation."
     )
     if result.limitations:
         st.markdown("#### Assumptions and limitations")
@@ -2580,6 +2708,8 @@ elif page == "Descriptive Statistics":
             render_categorical_comparison(df)
             st.divider()
             render_numeric_group_comparison(df)
+            st.divider()
+            render_numeric_association(df)
 
 
 # VISUALISATIONS
