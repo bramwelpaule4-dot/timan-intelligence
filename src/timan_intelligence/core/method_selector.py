@@ -499,6 +499,29 @@ def assess_preferred_method(
             catalogue=_catalogue_metadata(method),
         )
 
+    # Reject a known design incompatibility before requesting variable
+    # roles. Missing metadata must not mask a definitive group-count failure.
+    if (
+        method in {"Independent-samples t-test", "Mann–Whitney U test"}
+        and objective_type == "comparison"
+        and group_count is not None
+        and independent_groups is not None
+        and (group_count != 2 or independent_groups is not True)
+    ):
+        return MethodAssessment(
+            preferred_method=method,
+            eligibility=INELIGIBLE,
+            rationale=(
+                "This method requires two independent groups. The supplied "
+                "design does not meet that requirement."
+            ),
+            alternatives=select_methods(
+                objective_type, outcome_type, predictor_type, group_count,
+                independent_groups, study_design, available_variable_roles,
+            ),
+            catalogue=_catalogue_metadata(method),
+        )
+
     missing_roles = _missing_required_roles(
         _catalogue_metadata(method),
         available_variable_roles,
