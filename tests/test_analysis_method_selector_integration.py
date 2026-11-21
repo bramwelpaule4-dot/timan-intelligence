@@ -402,3 +402,34 @@ def test_planner_does_not_accept_variable_roles_mapped_to_missing_columns():
 
     assert preferred["status"] == "insufficient_information"
     assert "paired_measurement_before" in preferred["reason"]
+
+def test_planner_rejects_paired_measurement_role_with_non_numeric_column():
+    df = pd.DataFrame({
+        "participant_id": [1, 2, 3, 4],
+        "before": [10, 12, 9, 15],
+        "after": [8, 10, 7, 12],
+        "period": ["Before", "Before", "After", "After"],
+    })
+    request = AnalysisRequest(
+        question="Does the score differ between the two measurements?",
+        selected_variables=["after", "period"],
+        options={
+            "independent_groups": False,
+            "study_design": "paired",
+            "preferred_method": "Paired-samples t-test",
+            "variable_roles": {
+                "paired_measurement_before": "period",
+                "paired_measurement_after": "after",
+                "pair_identifier": "participant_id",
+            },
+        },
+    )
+
+    plan = plan_analysis(df, request)
+    preferred = next(
+        item for item in plan.recommendations
+        if item.get("is_preferred") is True
+    )
+
+    assert preferred["status"] == "insufficient_information"
+    assert "paired_measurement_before" in preferred["reason"]
