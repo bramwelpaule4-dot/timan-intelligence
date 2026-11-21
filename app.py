@@ -41,6 +41,7 @@ from timan_intelligence.services.analysis_service import (
     run_numeric_association_service,
     run_simple_linear_regression_service,
     run_multiple_linear_regression_service,
+    run_binary_logistic_regression_service,
     run_regression_diagnostics_service,
 )
 from timan_intelligence.entitlements.subscriptions import process_due_subscriptions
@@ -1741,6 +1742,155 @@ def render_multiple_linear_regression(df):
             st.warning(warning)
 
 
+
+def render_binary_logistic_regression(df):
+    """Render guided binary logistic regression for a two-category outcome."""
+    st.subheader("Estimate the probability of a binary outcome")
+    st.write(
+        "Binary logistic regression estimates the probability of an event, "
+        "such as completing training, accessing a service or remaining in "
+        "business. Choose the event category explicitly so odds ratios and "
+        "predicted probabilities have an unambiguous interpretation."
+    )
+    numeric_predictors = [
+        column for column in df.select_dtypes(include="number").columns
+        if not pd.api.types.is_bool_dtype(df[column].dtype)
+    ]
+    binary_outcomes = [
+        column for column in df.columns
+        if df[column].dropna().nunique() == 2
+    ]
+    if not binary_outcomes:
+        st.info("No variable with exactly two observed outcome categories was detected.")
+        return
+    if not numeric_predictors:
+        st.info("At least one numeric predictor is required in this guided version.")
+        return
+
+    outcome_variable = st.selectbox(
+        "Binary outcome variable",
+        binary_outcomes,
+        key="binary_logistic_outcome",
+    )
+    categories = list(pd.unique(df[outcome_variable].dropna()))
+    positive_default = next(
+        (i for i, value in enumerate(categories) if value == 1 or value is True),
+        1,
+    )
+    positive_class = st.selectbox(
+        "Which category represents the event (positive outcome)?",
+        categories,
+        index=positive_default,
+        key="binary_logistic_positive_class",
+        format_func=lambda value: str(value),
+        help="Odds ratios above 1 indicate higher odds of this selected event.",
+    )
+    predictor_options = [
+        column for column in numeric_predictors if column != outcome_variable
+    ]
+    if not predictor_options:
+        st.info("Choose an outcome that leaves at least one numeric predictor available.")
+        return
+    predictors = st.multiselect(
+        "Numeric predictor variables",
+        predictor_options,
+        key="binary_logistic_predictors",
+        help="Select variables that may be associated with the event.",
+        max_selections=20,
+    )
+    st.caption(
+        "Categorical predictors and survey-design adjustments are not yet "
+        "included in this guided version. Do not encode categories as arbitrary "
+        "numbers and treat them as continuous predictors."
+    )
+    if not predictors:
+        st.info("Select at least one numeric predictor to run logistic regression.")
+        return
+
+    dataset_key = _dataset_analysis_key(df)
+    result_key = f"timanstat_binary_logistic_{dataset_key}"
+    if st.button("Run binary logistic regression", type="primary", key="run_binary_logistic"):
+        try:
+            model = run_binary_logistic_regression_service(
+                df, list(predictors), str(outcome_variable), positive_class
+            )
+        except (TypeError, ValueError) as exc:
+            st.error(str(exc))
+        except Exception:
+            st.error(
+                "The logistic regression model could not be estimated. "
+                "No model results have been reported."
+            )
+        else:
+            st.session_state[result_key] = {
+                "predictors": list(predictors),
+                "outcome": outcome_variable,
+                "positive_class": positive_class,
+                "result": model,
+            }
+
+    saved = st.session_state.get(result_key)
+    if not saved:
+        st.info("Choose the outcome, event category and predictors, then run the model.")
+        return
+    if (
+        saved["predictors"] != list(predictors)
+        or saved["outcome"] != outcome_variable
+        or saved["positive_class"] != positive_class
+    ):
+        st.info("Run the model again to apply the changed variable selection.")
+        return
+
+    result = saved["result"]
+    metadata = result.metadata
+    st.markdown("#### Model results")
+    metrics = st.columns(4)
+    metrics[0].metric("Complete records", f"{metadata['valid_n']:,}")
+    metrics[1].metric("Events", f"{metadata['event_n']:,}")
+    metrics[2].metric("McFadden pseudo-R²", f"{metadata['mcfadden_pseudo_r_squared']:.4f}")
+    metrics[3].metric("Brier score", f"{metadata['brier_score']:.4f}")
+    st.caption(
+        f"Event: {metadata['positive_class']}; non-event: "
+        f"{metadata['negative_class']}. Overall likelihood-ratio "
+        f"chi-square({metadata['predictor_count']}) = "
+        f"{metadata['likelihood_ratio_chi_square']:.4g}; "
+        f"p-value = {metadata['model_p_value']:.4g}; AIC = {metadata['aic']:.4g}."
+    )
+    st.markdown("#### Adjusted odds ratios")
+    st.dataframe(result.tables["coefficients"], hide_index=True, use_container_width=True)
+    st.caption(
+        "An odds ratio above 1 indicates higher odds of the selected event "
+        "per one-unit increase in a predictor; below 1 indicates lower odds. "
+        "Interpret each estimate while holding the other included predictors constant."
+    )
+    fitted = result.tables["fitted_data"]
+    st.markdown("#### Observed outcomes and predicted probabilities")
+    st.scatter_chart(
+        fitted[["Predicted probability", "Observed event"]],
+        x="Predicted probability",
+        y="Observed event",
+        use_container_width=True,
+    )
+    st.dataframe(
+        fitted[[outcome_variable, "Predicted probability", "Predicted class (0.5 threshold)"]].head(100),
+        hide_index=True,
+        use_container_width=True,
+    )
+    st.caption("The table shows up to the first 100 complete records. Classification uses a 0.5 threshold for illustration, not as a universal decision threshold.")
+    st.markdown("#### Interpretation")
+    for finding in result.findings:
+        st.write(f"• {finding}")
+    st.info(
+        "Predicted probabilities describe model-based estimates, not guarantees. "
+        "Odds ratios are adjusted associations, not causal effects. Assess "
+        "calibration and predictive performance on data not used to fit the model."
+    )
+    if result.limitations:
+        st.markdown("#### Assumptions and limitations")
+        for warning in result.limitations:
+            st.warning(warning)
+
+
 def show_under_development(page, purpose):
     """Display an honest status page for an unfinished module."""
     st.title(page)
@@ -3031,6 +3181,8 @@ elif page == "Descriptive Statistics":
             render_simple_linear_regression(df)
             st.divider()
             render_multiple_linear_regression(df)
+            st.divider()
+            render_binary_logistic_regression(df)
 
 
 # VISUALISATIONS
