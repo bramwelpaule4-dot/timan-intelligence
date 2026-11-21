@@ -36,6 +36,7 @@ class AnalysisPlan:
     objective_type: str = "unknown"
     objective_confidence: str = "low"
     objective_explanation: str = ""
+    design_context: dict[str, Any] = field(default_factory=dict)
 
 
 def _infer_variable_type(series: pd.Series) -> str:
@@ -276,6 +277,148 @@ def _available_variable_roles(
             mapped_columns.update(values)
 
     return roles
+
+
+
+def _normalise_design_label(value: Any) -> str | None:
+    """Normalise an explicitly supplied study or sampling design label."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    label = "_".join(value.strip().casefold().replace("-", " ").replace("/", " ").split())
+    aliases = {
+        "repeated": "repeated_measures",
+        "repeated_measure": "repeated_measures",
+        "repeated_measurements": "repeated_measures",
+        "paired_measurements": "paired",
+        "complex_sampling": "complex_survey",
+        "cluster_sampling": "cluster",
+        "stratified_sampling": "stratified",
+        "multi_stage": "multistage",
+        "simple_random_sampling": "simple_random",
+    }
+    return aliases.get(label, label)
+
+
+def _assess_design_context(
+    plan: AnalysisPlan,
+    df: pd.DataFrame,
+    options: dict[str, Any],
+) -> dict[str, Any]:
+    """Record declared design information without inferring it from data shape."""
+    study_design_values = {
+        "cross_sectional", "independent", "paired", "repeated_measures",
+        "longitudinal", "clustered", "complex_survey", "time_series",
+        "case_control", "cohort", "experimental", "quasi_experimental",
+        "observational",
+    }
+    sampling_design_values = {
+        "simple_random", "stratified", "cluster", "multistage",
+        "systematic", "convenience", "census", "unknown",
+    }
+
+    raw_study_design = options.get("study_design")
+    study_design = _normalise_design_label(raw_study_design)
+    raw_sampling_design = options.get("sampling_design")
+    sampling_design = _normalise_design_label(raw_sampling_design)
+
+    if study_design is not None and study_design not in study_design_values:
+        _add_information_needed(
+            plan,
+            f"The supplied study design '{raw_study_design}' is not recognised. "
+            "Clarify the design before relying on inferential recommendations."
+        )
+        study_design = None
+
+    if sampling_design is not None and sampling_design not in sampling_design_values:
+        _add_information_needed(
+            plan,
+            f"The supplied sampling design '{raw_sampling_design}' is not recognised. "
+            "Clarify how units were selected."
+        )
+        sampling_design = None
+
+    column_options = {
+        "sampling_weight_variable": "sampling_weight",
+        "cluster_variable": "cluster_identifier",
+        "stratum_variable": "stratum_identifier",
+        "subject_variable": "subject_identifier",
+        "time_variable": "time_index",
+    }
+    mapped_columns: dict[str, str | None] = {}
+    for option_name, role in column_options.items():
+        column = options.get(option_name)
+        if column is None:
+            mapped_columns[role] = None
+        elif isinstance(column, str) and column in df.columns:
+            mapped_columns[role] = column
+        else:
+            mapped_columns[role] = None
+            _add_information_needed(
+                plan,
+                f"The configured {option_name.replace('_', ' ')} "
+                f"{column!r} was not found in the dataset. Select a valid column."
+            )
+
+    design_needs_confirmation = study_design is None or sampling_design is None
+    if study_design in {"clustered", "complex_survey"} or sampling_design in {
+        "cluster", "stratified", "multistage"
+    }:
+        _add_warning(
+            plan,
+            "The declared sampling structure may affect standard errors and "
+            "population estimates. Ordinary methods must not be interpreted "
+            "as design-adjusted unless the analysis explicitly accounts for "
+            "weights, strata and clusters as applicable."
+        )
+        if mapped_columns["cluster_identifier"] is None and (
+            study_design == "clustered" or sampling_design in {"cluster", "multistage"}
+        ):
+            _add_information_needed(
+                plan,
+                "Identify the cluster or primary sampling unit column, if the "
+                "sample was selected in clusters."
+            )
+        if mapped_columns["stratum_identifier"] is None and sampling_design in {
+            "stratified", "multistage"
+        }:
+            _add_information_needed(
+                plan,
+                "Identify the stratum column, if stratification was used."
+            )
+        if mapped_columns["sampling_weight"] is None and study_design == "complex_survey":
+            _add_information_needed(
+                plan,
+                "Confirm whether sampling weights are available and identify "
+                "the weight column before estimating population indicators."
+            )
+
+    if study_design in {"paired", "repeated_measures", "longitudinal"}:
+        if mapped_columns["subject_identifier"] is None:
+            _add_information_needed(
+                plan,
+                "Identify the participant or unit identifier linking repeated "
+                "observations across measurements or time."
+            )
+        if study_design in {"longitudinal", "repeated_measures"} and mapped_columns["time_index"] is None:
+            _add_information_needed(
+                plan,
+                "Identify the measurement occasion or time variable for the "
+                "repeated or longitudinal observations."
+            )
+
+    if study_design == "time_series" and mapped_columns["time_index"] is None:
+        _add_information_needed(
+            plan,
+            "Identify the time index and observation frequency for the time series."
+        )
+
+    return {
+        "study_design": study_design,
+        "sampling_design": sampling_design,
+        "design_confirmation_required": design_needs_confirmation,
+        "design_was_inferred": False,
+        **mapped_columns,
+    }
 
 
 def _add_method_recommendations(
@@ -601,6 +744,7 @@ def plan_analysis(
         return plan
 
     variables = selected if selected else list(df.columns)
+    plan.design_context = _assess_design_context(plan, df, request.options or {})
 
     if not variables:
         _add_information_needed(
@@ -644,6 +788,13 @@ def plan_analysis(
         "Confirm the study design, sampling approach and intended "
         "interpretation before conducting an inferential analysis."
     )
+
+    for recommendation in plan.recommendations:
+        recommendation["study_design"] = plan.design_context.get("study_design")
+        recommendation["sampling_design"] = plan.design_context.get("sampling_design")
+        recommendation["design_confirmation_required"] = plan.design_context.get(
+            "design_confirmation_required", True
+        )
 
     if plan.recommendations:
         plan.status = "review_required"
