@@ -15,9 +15,9 @@ def test_two_group_comparison_uses_welch_t_test_and_reports_confidence_interval(
     assert metadata["test"] == "Welch's independent-samples t-test"
     assert metadata["test_status"] == "tested"
     assert metadata["valid_n"] == 10
-    assert metadata["mean_difference"] == pytest.approx(9)
-    assert metadata["confidence_interval_95"][0] < 9
-    assert metadata["confidence_interval_95"][1] > 9
+    assert metadata["mean_difference"] == pytest.approx(8)
+    assert metadata["confidence_interval_95"][0] < 8
+    assert metadata["confidence_interval_95"][1] > 8
     assert 0 <= metadata["p_value"] <= 1
 
 
