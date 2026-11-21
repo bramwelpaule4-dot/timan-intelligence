@@ -83,21 +83,6 @@ def _validate_design_compatibility(
             "time-series designs."
         )
 
-    # Validate any explicitly supplied role-to-column mappings before execution.
-    mapping_keys = (
-        "sampling_weight", "cluster_identifier", "stratum_identifier",
-        "subject_identifier", "time_index",
-    )
-    for key in mapping_keys:
-        column = context.get(key)
-        if column is not None and (
-            not isinstance(column, str) or column not in recommendation.get(
-                "_dataset_columns", []
-            )
-        ):
-            # The caller injects the actual dataset columns immediately below.
-            continue
-
     return context
 
 
