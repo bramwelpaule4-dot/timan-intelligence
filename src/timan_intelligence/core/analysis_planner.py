@@ -174,8 +174,15 @@ def _add_descriptive_recommendations(
                     "Inspect the distribution and potential outliers.",
                     "Consider whether the numeric coding represents a "
                     "quantity or a categorical code.",
+                    "These summaries describe the observed dataset. Do not "
+                    "interpret them as population estimates without an "
+                    "appropriate weighting and sampling-design procedure.",
                 ],
-                catalogue=catalogue_metadata_for_method("Descriptive statistics"),
+                catalogue={
+                    **catalogue_metadata_for_method("Descriptive statistics"),
+                    "estimate_scope": "observed_dataset",
+                    "population_representative": False,
+                },
             )
         else:
             _add_candidate(
@@ -190,8 +197,15 @@ def _add_descriptive_recommendations(
                     "Review category labels for inconsistent spelling or coding.",
                     "Confirm whether survey weights are required.",
                     "Review missing and invalid category values.",
+                    "These frequencies describe the observed dataset. Do not "
+                    "interpret them as population proportions without an "
+                    "appropriate weighting and sampling-design procedure.",
                 ],
-                catalogue=catalogue_metadata_for_method("Frequency distribution"),
+                catalogue={
+                    **catalogue_metadata_for_method("Frequency distribution"),
+                    "estimate_scope": "observed_dataset",
+                    "population_representative": False,
+                },
             )
 
 
@@ -799,6 +813,8 @@ def plan_analysis(
         recommendation["design_confirmation_required"] = plan.design_context.get(
             "design_confirmation_required", True
         )
+        # Preserve role-to-column mappings for downstream validation and execution.
+        recommendation["design_context"] = dict(plan.design_context)
 
     if plan.recommendations:
         plan.status = "review_required"
