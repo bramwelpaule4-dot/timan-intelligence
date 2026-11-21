@@ -41,7 +41,7 @@ def test_multiple_response_counts_each_option_once_per_respondent():
 
 
 def test_multiple_response_handles_pipe_and_newline_delimiters():
-    df = pd.DataFrame({"Q3": ["A|B", "B\\nC"]})
+    df = pd.DataFrame({"Q3": ["A|B", "B\nC"]})
     table = multiple_response_table(df, "Q3").set_index("option")
 
     assert table.loc["A", "respondent_count"] == 1
