@@ -41,6 +41,7 @@ from timan_intelligence.services.analysis_service import (
     run_numeric_association_service,
     run_simple_linear_regression_service,
     run_multiple_linear_regression_service,
+    run_regression_diagnostics_service,
 )
 from timan_intelligence.entitlements.subscriptions import process_due_subscriptions
 from timan_intelligence.entitlements.service import (
@@ -1427,6 +1428,32 @@ def render_numeric_association(df):
 
 
 
+def render_regression_diagnostics(fitted_data, predictor_variables, outcome_variable):
+    """Display shared OLS diagnostics alongside either regression workflow."""
+    st.markdown("#### Model diagnostics")
+    try:
+        diagnostics = run_regression_diagnostics_service(
+            fitted_data, list(predictor_variables), str(outcome_variable)
+        )
+    except (TypeError, ValueError) as exc:
+        st.warning(f"Diagnostics could not be completed: {exc}")
+        return
+    except Exception:
+        st.warning("Diagnostics could not be completed for this fitted model.")
+        return
+    st.dataframe(diagnostics.tables["diagnostics"], hide_index=True, use_container_width=True)
+    plot_data = diagnostics.tables["residual_plot_data"]
+    st.caption("Residuals should generally be scattered around zero without a clear curve, funnel shape or systematic pattern.")
+    st.scatter_chart(plot_data[["Fitted outcome", "Residual"]], x="Fitted outcome", y="Residual", use_container_width=True)
+    st.markdown("##### Records for influence review")
+    st.dataframe(diagnostics.tables["influential_observations"], hide_index=True, use_container_width=True)
+    with st.expander("Diagnostic interpretation and cautions"):
+        for finding in diagnostics.findings:
+            st.write(f"• {finding}")
+        for warning in diagnostics.limitations:
+            st.warning(warning)
+
+
 def render_simple_linear_regression(df):
     """Render guided one-predictor linear regression."""
     st.subheader("Estimate an outcome using one numeric predictor")
@@ -1550,10 +1577,12 @@ def render_simple_linear_regression(df):
         y="Residual",
         use_container_width=True,
     )
+    render_regression_diagnostics(fitted, list(predictor_variables), outcome_variable)
     st.caption(
         "Residuals are observed minus fitted outcomes. Look for curvature, "
         "changing spread, clusters and unusually large residuals."
     )
+    render_regression_diagnostics(fitted, [predictor_variable], outcome_variable)
 
     st.markdown("#### Interpretation")
     for finding in result.findings:
