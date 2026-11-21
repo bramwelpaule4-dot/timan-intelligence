@@ -44,7 +44,7 @@ def _is_delimited_multi_response(series: pd.Series) -> bool:
     if len(values) < 2:
         return False
     text = values.astype(str)
-    delimiter_rows = text.str.contains(r"[;,|\\r\\n]", regex=True)
+    delimiter_rows = text.str.contains(r"[;,|\r\n]", regex=True)
     return bool(delimiter_rows.mean() >= 0.25 and text[delimiter_rows].nunique() >= 1)
 
 
@@ -208,7 +208,7 @@ def multiple_response_table(df: pd.DataFrame, column: str) -> pd.DataFrame:
         if not str(value).strip():
             continue
         options = [
-            option.strip() for option in re.split(r"[;,|\\n]+", str(value))
+            option.strip() for option in re.split(r"[;,|\r\n]+", str(value))
             if option.strip()
         ]
         if options:
