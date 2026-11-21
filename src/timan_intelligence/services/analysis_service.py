@@ -182,6 +182,9 @@ def run_numeric_association_service(
         status="success",
         tables={
             "descriptive_summary": pd.DataFrame(output["descriptive_summary"]).T,
+            "paired_observations": output["paired_data"].rename(
+                columns={"first": first_variable, "second": second_variable}
+            ),
         },
         findings=list(output["findings"]),
         assumptions=[
