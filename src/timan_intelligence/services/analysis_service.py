@@ -9,6 +9,7 @@ from timan_intelligence.core.numeric_comparison import run_numeric_group_compari
 from timan_intelligence.core.numeric_association import run_numeric_association
 from timan_intelligence.core.simple_regression import run_simple_linear_regression
 from timan_intelligence.core.multiple_regression import run_multiple_linear_regression
+from timan_intelligence.core.binary_logistic_regression import run_binary_logistic_regression
 from timan_intelligence.core.regression_diagnostics import run_regression_diagnostics
 from timan_intelligence.core.survey_profiler import (
     profile_survey_dataframe,
@@ -281,6 +282,39 @@ def run_multiple_linear_regression_service(
     )
 
 
+
+
+def run_binary_logistic_regression_service(
+    df: pd.DataFrame,
+    predictor_variables: list[str],
+    outcome_variable: str,
+    positive_class=None,
+) -> AnalysisResult:
+    """Run a shared binary logistic regression model."""
+    output = run_binary_logistic_regression(
+        df,
+        predictor_variables,
+        outcome_variable,
+        positive_class,
+    )
+    metadata = output["metadata"]
+    return AnalysisResult(
+        title=f"Binary logistic regression: {outcome_variable}",
+        method="Maximum-likelihood binary logistic regression",
+        status="success",
+        tables={
+            "coefficients": output["coefficients"],
+            "fitted_data": output["fitted_data"],
+        },
+        findings=list(output["findings"]),
+        assumptions=[
+            "The outcome has exactly two categories and the selected positive event is correctly identified.",
+            "Observations are independent and continuous predictors have an approximately linear relationship with the log-odds of the outcome.",
+            "The model is correctly specified and does not contain perfect or quasi-perfect separation.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata=metadata,
+    )
 
 def run_regression_diagnostics_service(
     fitted_data: pd.DataFrame,
