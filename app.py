@@ -874,21 +874,24 @@ navigation_options = [
     name
     for name in MODULES
     if (
-        not PUBLIC_ACCESS_MODE
-        or name not in {
-            "Subscription Administration",
-            "User Administration",
-            "Subscription",
-            "Account & Security",
-        }
-    )
-    and (
-        not PUBLIC_ACCESS_MODE
-        or PUBLIC_DATABASE_AVAILABLE
-        or name != "Project Status"
-    and (
-        name != "User Administration"
-        or current_role in {"admin", "super_admin"}
+        (
+            not PUBLIC_ACCESS_MODE
+            or name not in {
+                "Subscription Administration",
+                "User Administration",
+                "Subscription",
+                "Account & Security",
+            }
+        )
+        and (
+            not PUBLIC_ACCESS_MODE
+            or PUBLIC_DATABASE_AVAILABLE
+            or name != "Project Status"
+        )
+        and (
+            name != "User Administration"
+            or current_role in {"admin", "super_admin"}
+        )
     )
 ]
 if st.session_state.get("navigation_page") not in navigation_options:
