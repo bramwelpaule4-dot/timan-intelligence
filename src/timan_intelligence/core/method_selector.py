@@ -76,6 +76,11 @@ def _catalogue_metadata(label: str) -> dict[str, object]:
     }
 
 
+def catalogue_metadata_for_method(label: str) -> dict[str, object]:
+    """Public planner helper for attaching authoritative catalogue metadata."""
+    return _catalogue_metadata(label)
+
+
 def _attach_catalogue_metadata(candidates: list[MethodCandidate]) -> list[MethodCandidate]:
     """Keep only catalogue-defined candidates and attach their lifecycle data."""
     registered = []
