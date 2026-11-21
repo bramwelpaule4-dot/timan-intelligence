@@ -50,6 +50,7 @@ def test_database_check_uses_read_only_queries(monkeypatch):
 
     assert success is True
     assert "identity table is present" in message
+    assert "Backend:" in message
     assert statements == [
         "SELECT 1",
         "SELECT id FROM users LIMIT 0",
@@ -116,3 +117,62 @@ def test_controlled_email_test_uses_only_configured_sender(monkeypatch):
     assert len(sent) == 1
     assert sent[0].recipient == "configured@example.com"
     assert sent[0].subject == "TimanStat development email-delivery test"
+
+
+
+def test_database_configuration_summary_identifies_implicit_sqlite_fallback(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setattr(
+        diagnostics,
+        "get_database_url",
+        lambda: "",
+    )
+    monkeypatch.setattr(
+        diagnostics,
+        "get_database_type",
+        lambda: "sqlite",
+    )
+
+    summary = diagnostics._database_configuration_summary()
+
+    assert "Backend: sqlite" in summary
+    assert "implicit SQLite fallback" in summary
+
+
+def test_database_configuration_summary_identifies_streamlit_secret(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setattr(
+        diagnostics,
+        "get_database_url",
+        lambda: "postgresql://redacted",
+    )
+    monkeypatch.setattr(
+        diagnostics,
+        "get_database_type",
+        lambda: "postgresql",
+    )
+
+    summary = diagnostics._database_configuration_summary()
+
+    assert "Backend: postgresql" in summary
+    assert "Streamlit Secrets database.url" in summary
+    assert "redacted" not in summary
+
+
+def test_database_configuration_summary_prioritises_environment_variable(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://not-displayed")
+    monkeypatch.setattr(
+        diagnostics,
+        "get_database_url",
+        lambda: "postgresql://not-displayed",
+    )
+    monkeypatch.setattr(
+        diagnostics,
+        "get_database_type",
+        lambda: "postgresql",
+    )
+
+    summary = diagnostics._database_configuration_summary()
+
+    assert "environment variable DATABASE_URL" in summary
+    assert "not-displayed" not in summary
