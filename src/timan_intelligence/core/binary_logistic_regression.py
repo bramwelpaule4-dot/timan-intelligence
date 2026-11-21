@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from scipy import optimize, stats
+from scipy import stats
 from scipy.special import expit
 
 
@@ -106,17 +106,34 @@ def run_binary_logistic_regression(
         probabilities = expit(design @ beta)
         return design.T @ (probabilities - y)
 
-    fitted = optimize.minimize(
-        negative_log_likelihood,
-        initial,
-        jac=gradient,
-        method="BFGS",
-        options={"gtol": 1e-8, "maxiter": 3000},
-    )
-    beta = np.asarray(fitted.x, dtype=float)
+    beta = initial.copy()
+    converged = False
+    for _ in range(200):
+        probabilities = expit(design @ beta)
+        score = gradient(beta)
+        weights_iter = probabilities * (1.0 - probabilities)
+        information_iter = design.T @ (weights_iter[:, None] * design)
+        try:
+            step = np.linalg.solve(information_iter, score)
+        except np.linalg.LinAlgError:
+            break
+        current_nll = negative_log_likelihood(beta)
+        scale = 1.0
+        candidate = beta + step
+        while scale > 1e-8:
+            candidate = beta + scale * step
+            if negative_log_likelihood(candidate) <= current_nll + 1e-12:
+                break
+            scale *= 0.5
+        if scale <= 1e-8:
+            break
+        beta = candidate
+        if np.max(np.abs(scale * step)) <= 1e-8 and np.max(np.abs(gradient(beta))) <= 1e-6:
+            converged = True
+            break
     probabilities = expit(design @ beta)
     if (
-        not fitted.success
+        not converged
         or not np.isfinite(beta).all()
         or not np.isfinite(probabilities).all()
         or np.max(np.abs(beta)) > 20
