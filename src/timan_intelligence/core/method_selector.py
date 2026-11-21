@@ -92,10 +92,20 @@ def catalogue_metadata_for_method(label: str) -> dict[str, object]:
 
 def _design_incompatibility_reason(metadata, study_design, sampling_design):
     """Return a reason when the method cannot handle the declared design."""
+    if (
+        study_design in {"clustered", "complex_survey"}
+        or sampling_design in {"cluster", "stratified", "multistage"}
+    ) and not metadata.get("sampling_design_aware", False):
+        return (
+            "The declared sampling structure requires design-aware estimation "
+            "or variance adjustment. This method is not registered as "
+            "sampling-design-aware."
+        )
+
     compatible = metadata.get("compatible_study_designs", [])
     if study_design in {
         "paired", "repeated_measure", "repeated_measures",
-        "longitudinal", "time_series", "clustered", "complex_survey",
+        "longitudinal", "time_series",
     }:
         normalised = {
             "repeated_measures" if item == "repeated_measure" else item
@@ -111,16 +121,6 @@ def _design_incompatibility_reason(metadata, study_design, sampling_design):
                 f"The method is not registered as compatible with the "
                 f"declared '{study_design}' study design."
             )
-
-    if (
-        study_design in {"clustered", "complex_survey"}
-        or sampling_design in {"cluster", "stratified", "multistage"}
-    ) and not metadata.get("sampling_design_aware", False):
-        return (
-            "The declared sampling structure requires design-aware estimation "
-            "or variance adjustment. This method is not registered as "
-            "sampling-design-aware."
-        )
     return None
 
 
