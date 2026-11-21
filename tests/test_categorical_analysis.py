@@ -12,7 +12,7 @@ def test_crosstab_reports_counts_row_and_column_percentages():
     result = run_categorical_association(df, "group", "outcome")
     assert result["counts"].loc["A", "Yes"] == 2
     assert result["row_percentages"].loc["A", "Yes"] == pytest.approx(66.67)
-    assert result["column_percentages"].loc["Yes", "A"] == pytest.approx(66.67)
+    assert result["column_percentages"].loc["A", "Yes"] == pytest.approx(66.67)
     assert result["metadata"]["valid_n"] == 6
     assert result["metadata"]["test_status"] == "tested"
 
