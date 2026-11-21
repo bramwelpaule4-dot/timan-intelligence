@@ -24,3 +24,22 @@ __all__ = [
     "validate_registry",
 ]
 
+from .method_catalogue import (
+    CATALOGUE_VERSION,
+    IMPLEMENTED_METHODS,
+    create_statistical_method_repository,
+    get_statistical_method,
+    get_statistical_method_summary,
+    get_statistical_methods,
+    validate_statistical_method_catalogue,
+)
+
+__all__ += [
+    "CATALOGUE_VERSION",
+    "IMPLEMENTED_METHODS",
+    "create_statistical_method_repository",
+    "get_statistical_method",
+    "get_statistical_method_summary",
+    "get_statistical_methods",
+    "validate_statistical_method_catalogue",
+]
