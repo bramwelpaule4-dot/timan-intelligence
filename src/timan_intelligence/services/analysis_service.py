@@ -4,7 +4,11 @@ import pandas as pd
 
 from timan_intelligence.core.contracts import AnalysisResult, AnalysisRequest
 from timan_intelligence.core.data_quality import profile_dataframe
-from timan_intelligence.core.survey_profiler import (\n    profile_survey_dataframe,\n    question_frequency_table,\n    multiple_response_table,\n)
+from timan_intelligence.core.survey_profiler import (
+    profile_survey_dataframe,
+    question_frequency_table,
+    multiple_response_table,
+)
 from timan_intelligence.modules.descriptive import numeric_summary, frequency_table
 
 
