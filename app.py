@@ -149,6 +149,55 @@ st.markdown(
         border-radius: 12px;
     }
 
+    /* Compact, consistent navigation hierarchy */
+    section[data-testid="stSidebar"] [data-testid="stExpander"] {
+        border: 1px solid rgba(255,255,255,.13);
+        border-radius: 10px;
+        background: rgba(255,255,255,.035);
+        margin: 0 0 8px 0;
+    }
+    section[data-testid="stSidebar"] [data-testid="stExpander"] summary {
+        color: #DCEAF7;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: .105em;
+    }
+    section[data-testid="stSidebar"] [data-testid="stExpander"] details {
+        border: 0;
+    }
+    section[data-testid="stSidebar"] .stButton > button {
+        min-height: 2.25rem;
+        padding: .38rem .65rem;
+        border-radius: 7px;
+        border: 1px solid transparent;
+        background: transparent;
+        color: #E7F0F8;
+        font-size: .84rem;
+        font-weight: 550;
+        text-align: left;
+        justify-content: flex-start;
+        box-shadow: none;
+    }
+    section[data-testid="stSidebar"] .stButton > button:hover {
+        background: rgba(255,255,255,.10);
+        border-color: rgba(255,255,255,.12);
+        color: #FFFFFF;
+    }
+    section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
+        background: rgba(37,134,199,.30);
+        border-color: rgba(117,196,242,.35);
+        border-left: 3px solid #F2B544;
+        color: #FFFFFF;
+        font-weight: 750;
+    }
+    section[data-testid="stSidebar"] .stButton > button[kind="primary"]:hover {
+        background: rgba(37,134,199,.40);
+        color: #FFFFFF;
+    }
+    section[data-testid="stSidebar"] [data-testid="stExpander"] summary p {
+        color: #BFD3E6;
+    }
+
     /* Buttons and interactive controls */
     .stButton > button, .stDownloadButton > button {
         border-radius: 9px;
@@ -1112,11 +1161,79 @@ navigation_options = [
 if st.session_state.get("navigation_page") not in navigation_options:
     st.session_state.navigation_page = "Home"
 
-page = st.sidebar.radio(
-    "NAVIGATION",
-    navigation_options,
-    key="navigation_page",
+def _select_navigation_page(selected_page):
+    """Set the active page from the grouped sidebar navigation."""
+    st.session_state.navigation_page = selected_page
+
+
+def _render_navigation_item(label):
+    """Render a consistent, full-width navigation item."""
+    is_active = st.session_state.get("navigation_page") == label
+    st.sidebar.button(
+        label,
+        key=f"nav_{label.lower().replace(' ', '_').replace('&', 'and')}",
+        type="primary" if is_active else "secondary",
+        use_container_width=True,
+        on_click=_select_navigation_page,
+        args=(label,),
+    )
+
+
+# Navigation is organised around the user's workflow rather than a flat
+# list of every module. The registry remains the single source of truth.
+st.sidebar.markdown("#### WORKSPACE")
+_render_navigation_item("Home")
+
+navigation_groups = (
+    (
+        "DATA WORKSPACE",
+        ("Data Management", "Data Quality"),
+        True,
+    ),
+    (
+        "STATISTICAL ANALYSIS",
+        (
+            "Descriptive Statistics",
+            "Statistical Inference",
+            "Survey Analysis",
+            "Research & Modelling",
+        ),
+        True,
+    ),
+    (
+        "INTELLIGENCE & MODELLING",
+        (
+            "MEAL Intelligence",
+            "Business Intelligence",
+            "Forecasting & Prediction",
+            "Optimisation & Scenarios",
+            "AI Analyst",
+        ),
+        False,
+    ),
+    (
+        "VISUALISATION & OUTPUTS",
+        ("Visualisations", "Reports & Exports"),
+        False,
+    ),
+    (
+        "PLATFORM",
+        ("Developer Dashboard", "About"),
+        False,
+    ),
 )
+
+for group_label, group_pages, expanded in navigation_groups:
+    available_pages = [
+        name for name in group_pages if name in navigation_options
+    ]
+    if not available_pages:
+        continue
+    with st.sidebar.expander(group_label, expanded=expanded):
+        for module_name in available_pages:
+            _render_navigation_item(module_name)
+
+page = st.session_state.navigation_page
 
 if not PUBLIC_ACCESS_MODE and st.sidebar.button("Sign out", use_container_width=True):
     logout()
