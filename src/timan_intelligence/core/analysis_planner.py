@@ -552,6 +552,7 @@ def _add_method_recommendations(
             independent_groups=independent_groups,
             study_design=study_design,
             available_variable_roles=available_variable_roles,
+            sampling_design=plan.design_context.get("sampling_design"),
         )
 
         plan.recommendations.append(
@@ -626,6 +627,7 @@ def _add_method_recommendations(
                 independent_groups=True,
                 study_design=study_design,
                 available_variable_roles=available_variable_roles,
+                sampling_design=plan.design_context.get("sampling_design"),
             )
 
         elif objective_type == "association":
@@ -634,6 +636,7 @@ def _add_method_recommendations(
                 outcome_type=outcome_type,
                 predictor_type=predictor_type,
                 study_design=study_design,
+                sampling_design=plan.design_context.get("sampling_design"),
             )
 
         else:
