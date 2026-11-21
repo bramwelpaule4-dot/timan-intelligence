@@ -132,6 +132,22 @@ def test_execution_blocks_inferential_method_for_clustered_sampling_even_if_appr
         execute_recommendation(df, recommendation, approved=True)
 
 
+def test_execution_blocks_inferential_method_when_sampling_weights_are_declared():
+    df = pd.DataFrame({
+        "score": [1, 2, 3, 5, 6, 7],
+        "group": ["A", "A", "A", "B", "B", "B"],
+    })
+    recommendation = {
+        "method": "Independent-samples t-test",
+        "variables": ["score", "group"],
+        "status": "review_required",
+        "design_context": {"sampling_design": "simple_random", "sampling_weight": "w"},
+    }
+
+    with pytest.raises(AnalysisExecutionError, match="not validated"):
+        execute_recommendation(df, recommendation, approved=True)
+
+
 def test_execution_blocks_inferential_method_for_stratified_sampling():
     df = pd.DataFrame({
         "score": [1, 2, 3, 5, 6, 7],
