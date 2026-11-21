@@ -23,6 +23,9 @@ from timan_intelligence.security.auth_ui import render_authentication
 from timan_intelligence.security.developer_diagnostics import (
     render_development_diagnostics,
 )
+from timan_intelligence.security.developer_diagnostics import (
+    render_developer_dashboard_access,
+)
 from timan_intelligence.security.federated_login import process_federated_login_callback
 from timan_intelligence.security.password_change_ui import render_password_change
 from timan_intelligence.security.contact_methods_ui import render_contact_methods
@@ -443,9 +446,9 @@ MODULES = {
         "Account authentication and role-based access are implemented; "
         "tenant administration and audit controls remain under development.",
     ),
-    "Project Status": (
-        "Available — implementation monitoring",
-        "Monitor feature implementation, verification and project progress.",
+    "Developer Dashboard": (
+        "Developer only",
+        "Monitor module availability, implementation, verification and project progress.",
     ),
     "About": (
         "Available",
@@ -870,6 +873,12 @@ else:
     except Exception:
         st.sidebar.caption("Subscription and usage information is temporarily unavailable.")
 
+developer_dashboard_unlocked = (
+    render_developer_dashboard_access()
+    if PUBLIC_ACCESS_MODE
+    else current_role in {"admin", "super_admin"}
+)
+
 navigation_options = [
     name
     for name in MODULES
@@ -891,6 +900,10 @@ navigation_options = [
         and (
             name != "User Administration"
             or current_role in {"admin", "super_admin"}
+        )
+        and (
+            name != "Developer Dashboard"
+            or developer_dashboard_unlocked
         )
     )
 ]
@@ -959,7 +972,7 @@ if page == "Home":
 
         a.metric("Dataset status", "Not loaded")
         b.metric("Available formats", "CSV / Excel")
-        c.metric("Navigation modules", len(MODULES))
+        c.metric("Workspace", "Browser session")
 
         st.info(
             "To begin, select Data Management from the left "
@@ -991,22 +1004,6 @@ if page == "Home":
         st.caption(
             f"Current dataset: {st.session_state.dataset_name}"
         )
-    st.subheader("Module availability")
-
-    status_rows = [
-        {
-            "Module": name,
-            "Status": status,
-            "Purpose": purpose,
-        }
-        for name, (status, purpose) in MODULES.items()
-    ]
-
-    st.dataframe(
-        pd.DataFrame(status_rows),
-        hide_index=True,
-        use_container_width=True,
-    )
     # ============================================================
 # DATA MANAGEMENT
 # ============================================================
@@ -1971,7 +1968,8 @@ elif page == "Reports & Exports":
 # PROJECT STATUS
 # ============================================================
 
-elif page == "Project Status":
+elif page == "Developer Dashboard":
+    st.caption("Restricted developer view. Public visitors cannot access this dashboard.")
     render_project_status_dashboard()
 
 
