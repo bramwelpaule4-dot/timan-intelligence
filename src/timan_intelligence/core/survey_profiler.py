@@ -170,3 +170,62 @@ def profile_survey_dataframe(df: pd.DataFrame) -> dict[str, Any]:
         "columns": columns,
         "warnings": warnings,
     }
+
+
+def question_frequency_table(df: pd.DataFrame, column: str) -> pd.DataFrame:
+    """Return unweighted response frequencies, including nonresponse explicitly."""
+    if column not in df.columns:
+        raise KeyError(f"Column '{column}' was not found.")
+    values = df[column]
+    cleaned = values.astype("object").where(values.notna(), pd.NA)
+    cleaned = cleaned.map(
+        lambda value: value.strip() if isinstance(value, str) else value
+    )
+    cleaned = cleaned.replace("", pd.NA)
+    counts = cleaned.value_counts(dropna=False)
+    denominator = int(len(df))
+    result = counts.rename_axis("response").reset_index(name="count")
+    result["percent_of_records"] = (
+        (result["count"] / denominator * 100).round(2) if denominator else 0.0
+    )
+    result["response"] = result["response"].map(
+        lambda value: "No response" if pd.isna(value) else str(value)
+    )
+    return result
+
+
+def multiple_response_table(df: pd.DataFrame, column: str) -> pd.DataFrame:
+    """Count delimited selections; percentages use respondents with >=1 selection.
+
+    A respondent selecting multiple options contributes once to each selected
+    option. Therefore option percentages can sum to more than 100 percent.
+    """
+    if column not in df.columns:
+        raise KeyError(f"Column '{column}' was not found.")
+    selections = []
+    respondents_with_selection = 0
+    for value in df[column].dropna():
+        if not str(value).strip():
+            continue
+        options = [
+            option.strip() for option in re.split(r"[;,|\\n]+", str(value))
+            if option.strip()
+        ]
+        if options:
+            respondents_with_selection += 1
+            selections.extend(dict.fromkeys(options))
+
+    if not selections:
+        return pd.DataFrame(
+            columns=["option", "respondent_count", "percent_of_respondents"]
+        )
+
+    counts = pd.Series(selections, dtype="object").value_counts()
+    result = counts.rename_axis("option").reset_index(name="respondent_count")
+    result["percent_of_respondents"] = (
+        (result["respondent_count"] / respondents_with_selection * 100).round(2)
+        if respondents_with_selection else 0.0
+    )
+    result.attrs["respondents_with_selection"] = respondents_with_selection
+    result.attrs["total_records"] = int(len(df))
+    return result
