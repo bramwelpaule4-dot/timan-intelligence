@@ -243,68 +243,112 @@ st.markdown(
 
 
 # ============================================================
-# DATABASE INITIALISATION AND AUTHENTICATION GATE
+# PUBLIC DEVELOPMENT MODE
 # ============================================================
 
-try:
-    initialise_database()
-    process_due_subscriptions()
-except Exception:
-    st.error(
-        "TimanStat could not connect to its database. "
-        "Please try again later or contact the platform administrator."
-    )
-    # Allow authorised developers to inspect database connectivity even
-    # when initialisation fails and the normal authentication screen cannot load.
-    render_development_diagnostics()
-    st.stop()
+# Authentication is intentionally paused while core statistical modules
+# are developed. Re-enable this switch only after identity and account
+# recovery have been re-tested end-to-end.
+PUBLIC_ACCESS_MODE = True
+PUBLIC_PLAN_LIMITS = {
+    "max_dataset_rows": 10_000,
+    "max_upload_size_mb": 25,
+    "monthly_analyses": 100,
+    "monthly_exports": 10,
+}
 
-# Convert a completed OIDC callback into a database-backed TimanStat session.
-# A pending TimanStat TOTP challenge must not be replaced by another login.
-if st.session_state.get("pending_authentication") is not True:
-    process_federated_login_callback()
 
-# Process one-time email verification links before showing sign-in.
-verification_token = st.query_params.get("verify_email")
+def consume_public_usage(metric: str) -> int:
+    """Apply provisional per-browser-session limits in public preview mode."""
+    if metric not in {"monthly_analyses", "monthly_exports"}:
+        raise ValueError("Unsupported public preview usage metric.")
+    key = f"timanstat_public_usage_{metric}"
+    used = int(st.session_state.get(key, 0))
+    limit = PUBLIC_PLAN_LIMITS[metric]
+    if used >= limit:
+        raise UsageLimitExceeded(
+            f"The public preview allows {limit} {metric.replace('_', ' ')} "
+            "per browser session."
+        )
+    used += 1
+    st.session_state[key] = used
+    return used
 
-if verification_token is not None:
+
+def validate_current_dataset_limits(
+    *, file_size_bytes: int | None = None, row_count: int | None = None
+) -> None:
+    """Apply Free-plan-sized upload safeguards without requiring an account."""
+    if not PUBLIC_ACCESS_MODE:
+        user_id = st.session_state.get("user_id")
+        if not isinstance(user_id, str) or not user_id.strip():
+            raise RuntimeError(
+                "Your authenticated account could not be verified. Please sign in again."
+            )
+        validate_dataset_limits(
+            user_id=user_id,
+            file_size_bytes=file_size_bytes,
+            row_count=row_count,
+            organisation_id=st.session_state.get("active_organisation_id"),
+        )
+        return
+
+    if file_size_bytes is not None:
+        if file_size_bytes > PUBLIC_PLAN_LIMITS["max_upload_size_mb"] * 1024 * 1024:
+            raise DatasetLimitExceeded(
+                "The public preview allows uploads up to 25 MB."
+            )
+    if row_count is not None and row_count > PUBLIC_PLAN_LIMITS["max_dataset_rows"]:
+        raise DatasetLimitExceeded(
+            "The public preview allows datasets up to 10,000 rows."
+        )
+
+
+# Core statistical tools are session-based and do not require the identity
+# database. Authentication, registration, subscriptions and account security
+# remain in the repository but are not exposed in this public preview.
+if not PUBLIC_ACCESS_MODE:
     try:
-        verification_succeeded = verify_email_token(
-            verification_token
-        )
+        initialise_database()
+        process_due_subscriptions()
     except Exception:
-        verification_succeeded = False
-
-    if verification_succeeded:
-        st.success(
-            "Your email address has been verified. "
-            "You can now sign in to TimanStat."
-        )
-    else:
         st.error(
-            "This verification link is invalid, expired or has already "
-            "been used. Please request assistance from the platform "
-            "administrator."
+            "TimanStat could not connect to its database. "
+            "Please try again later or contact the platform administrator."
         )
+        render_development_diagnostics()
+        st.stop()
 
-    if "verify_email" in st.query_params:
-        del st.query_params["verify_email"]
+    if st.session_state.get("pending_authentication") is not True:
+        process_federated_login_callback()
 
-# A password-reset link must remain usable even when it is opened
-# in a browser that already has an authenticated TimanStat session.
-password_reset_requested = bool(
-    st.query_params.get("reset_password")
-)
+    verification_token = st.query_params.get("verify_email")
+    if verification_token is not None:
+        try:
+            verification_succeeded = verify_email_token(verification_token)
+        except Exception:
+            verification_succeeded = False
+        if verification_succeeded:
+            st.success(
+                "Your email address has been verified. "
+                "You can now sign in to TimanStat."
+            )
+        else:
+            st.error(
+                "This verification link is invalid, expired or has already "
+                "been used. Please request assistance from the platform administrator."
+            )
+        if "verify_email" in st.query_params:
+            del st.query_params["verify_email"]
 
-if password_reset_requested and is_authenticated():
-    logout()
-
-# No statistical module or dataset functionality is rendered unless
-# the current session has passed the authentication checks. A valid
-# password-reset URL is the only public exception to the normal gate.
-if not is_authenticated() or password_reset_requested:
-    render_authentication()
-    st.stop()
+    password_reset_requested = bool(st.query_params.get("reset_password"))
+    if password_reset_requested and is_authenticated():
+        logout()
+    if not is_authenticated() or password_reset_requested:
+        render_authentication()
+        st.stop()
+else:
+    password_reset_requested = False
 
 
 # ============================================================
@@ -620,22 +664,26 @@ def quota_download_button(label, **kwargs):
     prepare_key = f"timanstat_prepare_export_{export_key}"
 
     if st.button(f"Prepare export: {label}", key=prepare_key):
-        user_id = st.session_state.get("user_id")
-        if not isinstance(user_id, str) or not user_id.strip():
-            st.error("Your authenticated account could not be verified. Please sign in again.")
-        else:
-            try:
+        try:
+            if PUBLIC_ACCESS_MODE:
+                consume_public_usage("monthly_exports")
+            else:
+                user_id = st.session_state.get("user_id")
+                if not isinstance(user_id, str) or not user_id.strip():
+                    raise RuntimeError(
+                        "Your authenticated account could not be verified. Please sign in again."
+                    )
                 consume_monthly_usage(
                     "monthly_exports",
                     user_id=user_id,
                     organisation_id=get_active_organisation_id(),
                 )
-            except UsageLimitExceeded as exc:
-                st.error(str(exc))
-            except Exception:
-                st.error("The export allowance could not be verified. No export was prepared.")
-            else:
-                st.session_state[ready_key] = True
+        except (UsageLimitExceeded, RuntimeError) as exc:
+            st.error(str(exc))
+        except Exception:
+            st.error("The export allowance could not be verified. No export was prepared.")
+        else:
+            st.session_state[ready_key] = True
 
     if st.session_state.get(ready_key):
         downloaded = st.download_button(label, **kwargs)
@@ -726,85 +774,108 @@ st.sidebar.markdown(
 
 st.sidebar.divider()
 
-# Select the account or organisation whose subscription and usage limits
-# should govern uploads, analyses and exports in this session.
-current_user_id = st.session_state.get("user_id")
-try:
-    user_organisations = list_user_organisations(current_user_id)
-except Exception:
-    st.sidebar.error("Workspace access could not be verified.")
-    st.error(
-        "TimanStat could not verify your organisation access. "
-        "Please refresh the page or sign in again."
+# Public preview sessions do not have accounts, organisation workspaces or
+# persistent subscription records. Uploaded data remains in the visitor's
+# Streamlit session and is not shared with other visitors.
+current_user_id = st.session_state.get("user_id") if not PUBLIC_ACCESS_MODE else None
+current_role = st.session_state.get("role") if not PUBLIC_ACCESS_MODE else None
+
+if PUBLIC_ACCESS_MODE:
+    st.sidebar.info(
+        "PUBLIC PREVIEW\n\n"
+        "No account is required. Datasets remain in this browser session. "
+        "Do not upload confidential or personally identifiable data."
     )
-    st.stop()
-
-organisation_names = {
-    item["organisation_id"]: item["organisation_name"]
-    for item in user_organisations
-}
-organisation_options = [None, *organisation_names.keys()]
-if st.session_state.get("active_organisation_id") not in organisation_options:
-    st.session_state.active_organisation_id = None
-
-st.sidebar.selectbox(
-    "WORKSPACE / BILLING CONTEXT",
-    options=organisation_options,
-    format_func=lambda value: (
-        "Personal account" if value is None else organisation_names[value]
-    ),
-    key="active_organisation_id",
-    help=(
-        "Upload limits and monthly analysis/export allowances are applied "
-        "to the selected account or organisation."
-    ),
-)
-
-# Display the effective subscription and live monthly usage for this context.
-try:
-    active_organisation_id = st.session_state.get("active_organisation_id")
-    effective_entitlements = get_effective_entitlements(
-        user_id=current_user_id,
-        organisation_id=active_organisation_id,
-    )
-    usage_owner = (
-        {"organisation_id": active_organisation_id}
-        if active_organisation_id
-        else {"user_id": current_user_id}
-    )
-    analysis_used = get_monthly_usage("monthly_analyses", **usage_owner)
-    export_used = get_monthly_usage("monthly_exports", **usage_owner)
-    plan_limits = effective_entitlements["limits"]
-
-    def _usage_label(used, limit):
-        return f"{used:,} used · Unlimited" if limit is None else f"{used:,} / {limit:,}"
-
-    st.sidebar.divider()
-    st.sidebar.caption("SUBSCRIPTION & USAGE")
-    st.sidebar.markdown(f"**{effective_entitlements['plan_name']} plan**")
     st.sidebar.caption(
-        f"Monthly analyses: {_usage_label(analysis_used, plan_limits['monthly_analyses'])}"
+        "Preview limits: 25 MB per upload · 10,000 rows · "
+        "100 analyses · 10 exports per browser session."
     )
-    if plan_limits["monthly_analyses"] is not None:
-        st.sidebar.progress(
-            min(analysis_used / plan_limits["monthly_analyses"], 1.0)
+else:
+    try:
+        user_organisations = list_user_organisations(current_user_id)
+    except Exception:
+        st.sidebar.error("Workspace access could not be verified.")
+        st.error(
+            "TimanStat could not verify your organisation access. "
+            "Please refresh the page or sign in again."
         )
-    st.sidebar.caption(
-        f"Monthly exports: {_usage_label(export_used, plan_limits['monthly_exports'])}"
-    )
-    if plan_limits["monthly_exports"] is not None:
-        st.sidebar.progress(
-            min(export_used / plan_limits["monthly_exports"], 1.0)
-        )
-except Exception:
-    st.sidebar.caption("Subscription and usage information is temporarily unavailable.")
+        st.stop()
 
-current_role = st.session_state.get("role")
+    organisation_names = {
+        item["organisation_id"]: item["organisation_name"]
+        for item in user_organisations
+    }
+    organisation_options = [None, *organisation_names.keys()]
+    if st.session_state.get("active_organisation_id") not in organisation_options:
+        st.session_state.active_organisation_id = None
+
+    st.sidebar.selectbox(
+        "WORKSPACE / BILLING CONTEXT",
+        options=organisation_options,
+        format_func=lambda value: (
+            "Personal account" if value is None else organisation_names[value]
+        ),
+        key="active_organisation_id",
+        help=(
+            "Upload limits and monthly analysis/export allowances are applied "
+            "to the selected account or organisation."
+        ),
+    )
+
+    try:
+        active_organisation_id = st.session_state.get("active_organisation_id")
+        effective_entitlements = get_effective_entitlements(
+            user_id=current_user_id,
+            organisation_id=active_organisation_id,
+        )
+        usage_owner = (
+            {"organisation_id": active_organisation_id}
+            if active_organisation_id
+            else {"user_id": current_user_id}
+        )
+        analysis_used = get_monthly_usage("monthly_analyses", **usage_owner)
+        export_used = get_monthly_usage("monthly_exports", **usage_owner)
+        plan_limits = effective_entitlements["limits"]
+
+        def _usage_label(used, limit):
+            return f"{used:,} used · Unlimited" if limit is None else f"{used:,} / {limit:,}"
+
+        st.sidebar.divider()
+        st.sidebar.caption("SUBSCRIPTION & USAGE")
+        st.sidebar.markdown(f"**{effective_entitlements['plan_name']} plan**")
+        st.sidebar.caption(
+            f"Monthly analyses: {_usage_label(analysis_used, plan_limits['monthly_analyses'])}"
+        )
+        if plan_limits["monthly_analyses"] is not None:
+            st.sidebar.progress(
+                min(analysis_used / plan_limits["monthly_analyses"], 1.0)
+            )
+        st.sidebar.caption(
+            f"Monthly exports: {_usage_label(export_used, plan_limits['monthly_exports'])}"
+        )
+        if plan_limits["monthly_exports"] is not None:
+            st.sidebar.progress(
+                min(export_used / plan_limits["monthly_exports"], 1.0)
+            )
+    except Exception:
+        st.sidebar.caption("Subscription and usage information is temporarily unavailable.")
+
 navigation_options = [
     name
     for name in MODULES
-    if name != "User Administration"
-    or current_role in {"admin", "super_admin"}
+    if (
+        not PUBLIC_ACCESS_MODE
+        or name not in {
+            "Subscription Administration",
+            "User Administration",
+            "Subscription",
+            "Account & Security",
+        }
+    )
+    and (
+        name != "User Administration"
+        or current_role in {"admin", "super_admin"}
+    )
 ]
 if st.session_state.get("navigation_page") not in navigation_options:
     st.session_state.navigation_page = "Home"
@@ -815,7 +886,7 @@ page = st.sidebar.radio(
     key="navigation_page",
 )
 
-if st.sidebar.button("Sign out", use_container_width=True):
+if not PUBLIC_ACCESS_MODE and st.sidebar.button("Sign out", use_container_width=True):
     logout()
     oidc_user = getattr(st, "user", None)
     if oidc_user is not None and getattr(oidc_user, "is_logged_in", False):
@@ -950,12 +1021,8 @@ elif page == "Data Management":
         file_name = uploaded_file.name.lower()
         current_user_id = st.session_state.get("user_id")
         try:
-            if not isinstance(current_user_id, str) or not current_user_id.strip():
-                raise RuntimeError("Your authenticated account could not be verified. Please sign in again.")
-            validate_dataset_limits(
-                user_id=current_user_id,
+            validate_current_dataset_limits(
                 file_size_bytes=len(uploaded_file.getvalue()),
-                organisation_id=st.session_state.get("active_organisation_id"),
             )
         except (DatasetLimitExceeded, RuntimeError) as exc:
             st.error(str(exc))
@@ -972,11 +1039,7 @@ elif page == "Data Management":
             ):
                 try:
                     imported = load_uploaded_file(uploaded_file)
-                    validate_dataset_limits(
-                        user_id=current_user_id,
-                        row_count=len(imported),
-                        organisation_id=st.session_state.get("active_organisation_id"),
-                    )
+                    validate_current_dataset_limits(row_count=len(imported))
 
                     st.session_state.dataset = imported
                     st.session_state.dataset_name = uploaded_file.name
@@ -1049,9 +1112,7 @@ elif page == "Data Management":
                             uploaded_file,
                             sheet_name=selected_sheet,
                         )
-                        validate_dataset_limits(
-                            user_id=current_user_id, row_count=len(imported)
-                        )
+                        validate_current_dataset_limits(row_count=len(imported))
 
                         st.session_state.dataset = imported
                         st.session_state.dataset_name = (
@@ -1358,22 +1419,26 @@ elif page == "Descriptive Statistics":
             type="primary",
             key="run_descriptive_analysis",
         ):
-            user_id = st.session_state.get("user_id")
-            if not isinstance(user_id, str) or not user_id.strip():
-                st.error("Your authenticated account could not be verified. Please sign in again.")
-            else:
-                try:
+            try:
+                if PUBLIC_ACCESS_MODE:
+                    consume_public_usage("monthly_analyses")
+                else:
+                    user_id = st.session_state.get("user_id")
+                    if not isinstance(user_id, str) or not user_id.strip():
+                        raise RuntimeError(
+                            "Your authenticated account could not be verified. Please sign in again."
+                        )
                     consume_monthly_usage(
                         "monthly_analyses",
                         user_id=user_id,
                         organisation_id=get_active_organisation_id(),
                     )
-                except UsageLimitExceeded as exc:
-                    st.error(str(exc))
-                except Exception:
-                    st.error("Your monthly analysis allowance could not be verified. No analysis was run.")
-                else:
-                    st.session_state["timanstat_descriptive_analysis_key"] = analysis_key
+            except (UsageLimitExceeded, RuntimeError) as exc:
+                st.error(str(exc))
+            except Exception:
+                st.error("Your monthly analysis allowance could not be verified. No analysis was run.")
+            else:
+                st.session_state["timanstat_descriptive_analysis_key"] = analysis_key
 
         if st.session_state.get("timanstat_descriptive_analysis_key") != analysis_key:
             st.info(
