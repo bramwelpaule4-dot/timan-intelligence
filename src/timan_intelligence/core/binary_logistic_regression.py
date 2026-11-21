@@ -119,9 +119,9 @@ def run_binary_logistic_regression(
             break
         current_nll = negative_log_likelihood(beta)
         scale = 1.0
-        candidate = beta + step
+        candidate = beta - step
         while scale > 1e-8:
-            candidate = beta + scale * step
+            candidate = beta - scale * step
             if negative_log_likelihood(candidate) <= current_nll + 1e-12:
                 break
             scale *= 0.5
