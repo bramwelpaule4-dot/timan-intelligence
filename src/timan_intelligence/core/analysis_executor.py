@@ -10,6 +10,8 @@ from typing import Any
 
 import pandas as pd
 
+from timan_intelligence.registry.method_catalogue import get_statistical_methods
+
 from timan_intelligence.core.contracts import AnalysisResult
 from timan_intelligence.core.statistical_engine import (
     run_descriptive_statistics,
@@ -22,17 +24,33 @@ class AnalysisExecutionError(ValueError):
     """A recommendation cannot safely be executed."""
 
 
-_EXECUTORS = {
-    "Descriptive statistics": "descriptive",
-    "Welch's independent-samples t-test": "welch_t",
-    "Independent-samples t-test": "welch_t",
-    "One-way ANOVA": "anova",
+_EXECUTOR_BY_METHOD_ID = {
+    "method.descriptive.numeric.summary": "descriptive",
+    "method.inference.comparison.t_test.independent.welch": "welch_t",
+    "method.inference.comparison.anova.one_way": "anova",
 }
 
 
+def _resolve_registered_method(label: str):
+    """Resolve a method label or alias using the authoritative catalogue."""
+    normalised = " ".join(label.casefold().split())
+    for record in get_statistical_methods():
+        labels = [record.name, *record.aliases]
+        if any(" ".join(item.casefold().split()) == normalised for item in labels):
+            return record
+    return None
+
+
 def available_execution_methods() -> tuple[str, ...]:
-    """Return the exact recommendation labels currently executable."""
-    return tuple(_EXECUTORS)
+    """Return labels only for catalogue methods with validated executors."""
+    labels = []
+    for record in get_statistical_methods(implementation_status="implemented"):
+        if (
+            record.entity_id in _EXECUTOR_BY_METHOD_ID
+            and record.execution_eligibility in {"eligible", "conditional"}
+        ):
+            labels.extend([record.name, *record.aliases])
+    return tuple(dict.fromkeys(labels))
 
 
 def execute_recommendation(
@@ -62,10 +80,26 @@ def execute_recommendation(
         )
 
     method = recommendation.get("method")
-    executor = _EXECUTORS.get(method)
+    if not isinstance(method, str):
+        raise AnalysisExecutionError("The recommendation does not identify a valid method.")
+
+    registry_record = _resolve_registered_method(method)
+    executor = (
+        _EXECUTOR_BY_METHOD_ID.get(registry_record.entity_id)
+        if registry_record is not None
+        and registry_record.implementation_status == "implemented"
+        and registry_record.execution_eligibility in {"eligible", "conditional"}
+        else None
+    )
     if executor is None:
         raise AnalysisExecutionError(
             f"The recommended method '{method}' does not yet have a validated execution implementation."
+        )
+
+    supplied_method_id = recommendation.get("method_id")
+    if supplied_method_id and supplied_method_id != registry_record.entity_id:
+        raise AnalysisExecutionError(
+            "The recommendation method identifier does not match the statistical catalogue."
         )
 
     status = recommendation.get("status")
@@ -116,6 +150,13 @@ def execute_recommendation(
             "recommendation_status": status or "unspecified",
             "user_approved": True,
             "execution_registry": "controlled",
+            "method_id": registry_record.entity_id,
+            "catalogue_version": registry_record.metadata.get("catalogue_version"),
+            "sampling_design_aware": bool(
+                (registry_record.statistical_specification or {}).get(
+                    "sampling_design_aware", False
+                )
+            ),
         }
     )
     return result
