@@ -794,35 +794,33 @@ def show_under_development(page, purpose):
 # SIDEBAR: LOGO AND NAVIGATION
 # ============================================================
 
-# Prefer the transparent PNG brand asset; use the committed JPEG logo
-# when the PNG variant is not present in this deployment.
-logo_candidates = (
+# The corporate logo belongs to Timan Analytics, the parent company.
+# It is deliberately kept separate from the TimanStat product wordmark.
+corporate_logo_candidates = (
     Path(__file__).parent / "timan_analytics_logo.png",
     Path(__file__).parent / "Timan Analytics logo.jpeg",
 )
-logo_path = next((candidate for candidate in logo_candidates if candidate.is_file()), None)
-
-if logo_path is not None:
-    st.sidebar.image(str(logo_path), use_container_width=True)
-else:
-    st.sidebar.markdown(
-        '<div class="brand" style="text-align:center; color:#FFFFFF; padding:18px 4px 8px;">Timan Analytics</div>',
-        unsafe_allow_html=True,
-    )
+corporate_logo_path = next(
+    (candidate for candidate in corporate_logo_candidates if candidate.is_file()),
+    None,
+)
 
 st.sidebar.markdown(
     f"""
-    <div style="text-align:center; padding:4px 4px 8px;">
-        <div style="font-size:25px; font-weight:800; color:#174a7e; margin-top:4px;">
-            {APP_NAME}
+    <div style="text-align:center; padding:22px 4px 18px;">
+        <div style="font-size:29px; font-weight:850; letter-spacing:-1px; color:#FFFFFF;">
+            Timan<span style="color:#65B8ED;">Stat</span>
         </div>
-        <div style="font-size:11px; font-weight:700; letter-spacing:.6px; color:#526579; margin-top:3px;">
+        <div style="font-size:10px; font-weight:750; letter-spacing:1.1px; color:#D7E6F4; margin-top:5px;">
             {PLATFORM_LABEL}
         </div>
-        <div style="font-size:12px; color:#526579; margin-top:7px;">
-            by {APP_ORGANISATION}
+        <div style="font-size:11px; color:#C2D3E5; margin-top:9px;">
+            A product of {APP_ORGANISATION}
         </div>
     </div>
+    """,
+    unsafe_allow_html=True,
+)
     """,
     unsafe_allow_html=True,
 )
@@ -992,22 +990,13 @@ else:
 # ============================================================
 
 if page == "Home":
-    hero_left, hero_right = st.columns([1.05, 4.2], vertical_alignment="center")
-    with hero_left:
-        if logo_path is not None:
-            st.image(str(logo_path), use_container_width=True)
-        else:
-            st.markdown(
-                '<div style="font-size:1.35rem;font-weight:850;color:#173B67;">TIMAN<br/>ANALYTICS</div>',
-                unsafe_allow_html=True,
-            )
-    with hero_right:
-        st.markdown(
-            f'<div class="home-hero"><div class="home-eyebrow">{PLATFORM_LABEL} · BY {APP_ORGANISATION.upper()}</div>'
-            f'<div class="home-heading">{APP_NAME}</div>'
-            f'<p class="home-tagline">{APP_TAGLINE}</p></div>',
-            unsafe_allow_html=True,
-        )
+    st.markdown(
+        f'<div class="home-hero"><div class="home-eyebrow">{PLATFORM_LABEL}</div>'
+        f'<div class="home-heading">TimanStat</div>'
+        f'<p class="home-tagline">{APP_TAGLINE}</p>'
+        f'<div style="color:#64758B;font-size:.82rem;margin-top:.55rem;">A product of {APP_ORGANISATION}</div></div>',
+        unsafe_allow_html=True,
+    )
 
     st.markdown(
         f'<div class="home-description">{APP_DESCRIPTION}</div>',
@@ -2033,8 +2022,12 @@ elif page == "About":
 
     st.write(SHORT_DESCRIPTION)
     st.write(APP_DESCRIPTION)
-    st.write(f"**Organisation:** {APP_ORGANISATION}")
-    st.write(f"**Tagline:** {APP_TAGLINE}")
+    st.markdown("### Product ownership")
+    st.write(f"**TimanStat** is a product of **{APP_ORGANISATION}**. The two names represent separate identities: TimanStat is the software product, while Timan Analytics is the company that owns it.")
+    if corporate_logo_path is not None:
+        st.image(str(corporate_logo_path), width=230)
+        st.caption(f"{APP_ORGANISATION} — parent company")
+    st.write(f"**Product tagline:** {APP_TAGLINE}")
     st.write(f"**Version:** {APP_VERSION}")
 
     st.write(
