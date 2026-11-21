@@ -4,7 +4,7 @@ import pandas as pd
 
 from timan_intelligence.core.contracts import AnalysisResult, AnalysisRequest
 from timan_intelligence.core.data_quality import profile_dataframe
-from timan_intelligence.core.survey_profiler import profile_survey_dataframe
+from timan_intelligence.core.survey_profiler import (\n    profile_survey_dataframe,\n    question_frequency_table,\n    multiple_response_table,\n)
 from timan_intelligence.modules.descriptive import numeric_summary, frequency_table
 
 
@@ -44,11 +44,27 @@ def run_survey_profile(df: pd.DataFrame) -> AnalysisResult:
             + ", ".join(profile["identifier_candidates"])
             + ". Confirm these against the data dictionary."
         )
+    tables = {"response_variable_profile": pd.DataFrame(profile["columns"])}
+    frequency_columns = [
+        item["column"] for item in profile["columns"]
+        if item["type"] in {
+            "categorical", "binary", "likert_item", "possible_likert_numeric"
+        } and not item["identifier_name_hint"]
+    ]
+    multiple_response_columns = [
+        item["column"] for item in profile["columns"]
+        if item["type"] == "multiple_response"
+    ]
+    for column in frequency_columns:
+        tables[f"frequency::{column}"] = question_frequency_table(df, column)
+    for column in multiple_response_columns:
+        tables[f"multiple_response::{column}"] = multiple_response_table(df, column)
+
     return AnalysisResult(
         title="Survey data recognition and profile",
         method="Heuristic questionnaire recognition and deterministic response profiling",
         status=status,
-        tables={"response_variable_profile": pd.DataFrame(profile["columns"])},
+        tables=tables,
         findings=findings,
         limitations=profile["warnings"],
         metadata={
@@ -60,6 +76,8 @@ def run_survey_profile(df: pd.DataFrame) -> AnalysisResult:
             "question_count": profile["question_count"],
             "identifier_candidates": profile.get("identifier_candidates", []),
             "response_type_counts": profile.get("response_type_counts", {}),
+            "frequency_columns": frequency_columns,
+            "multiple_response_columns": multiple_response_columns,
         },
     )
 
