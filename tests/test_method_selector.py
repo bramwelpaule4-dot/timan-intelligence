@@ -287,3 +287,45 @@ def test_preferred_method_is_rejected_when_confirmed_design_conflicts_with_catal
 
     assert result.eligibility == INELIGIBLE
     assert "not catalogued" in result.rationale.lower()
+
+def test_candidate_is_filtered_when_catalogue_required_roles_are_missing():
+    methods = select_methods(
+        objective_type="comparison",
+        outcome_type="numeric",
+        group_count=2,
+        independent_groups=True,
+        available_variable_roles={"numeric_outcome"},
+    )
+
+    assert methods == []
+
+
+def test_candidate_is_retained_when_all_catalogue_required_roles_are_present():
+    methods = select_methods(
+        objective_type="comparison",
+        outcome_type="numeric",
+        group_count=2,
+        independent_groups=True,
+        available_variable_roles={"numeric_outcome", "two_group_factor", "outcome"},
+    )
+
+    assert {item.method for item in methods} == {
+        "Independent-samples t-test",
+        "Mann–Whitney U test",
+    }
+
+
+def test_preferred_method_requests_missing_required_variable_roles():
+    result = assess_preferred_method(
+        preferred_method="Paired-samples t-test",
+        objective_type="comparison",
+        outcome_type="numeric",
+        group_count=2,
+        independent_groups=False,
+        study_design="paired",
+        available_variable_roles={"numeric_outcome", "grouping_factor"},
+    )
+
+    assert result.eligibility == INSUFFICIENT_INFORMATION
+    assert "paired_measurement_before" in result.rationale
+    assert result.clarification_questions
