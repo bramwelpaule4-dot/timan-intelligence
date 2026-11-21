@@ -66,6 +66,47 @@ def _configured_access_key() -> str:
     return _configuration_value("TIMAN_DEV_DIAGNOSTICS_KEY")
 
 
+def render_developer_dashboard_access() -> bool:
+    """Unlock the developer dashboard only on the configured development deployment."""
+    if not diagnostics_enabled():
+        return False
+
+    access_key = _configured_access_key()
+    if len(access_key) < MINIMUM_KEY_LENGTH:
+        return False
+
+    if st.session_state.get(DIAGNOSTIC_SESSION_KEY) is True:
+        if st.sidebar.button("Lock developer dashboard", key="lock_developer_dashboard"):
+            st.session_state.pop(DIAGNOSTIC_SESSION_KEY, None)
+            st.rerun()
+        return True
+
+    with st.sidebar.expander("Developer access"):
+        attempts = st.session_state.get(DIAGNOSTIC_ATTEMPTS_KEY, 0)
+        if attempts >= 5:
+            st.error("The developer access limit has been reached for this session.")
+            return False
+
+        with st.form("timanstat_developer_dashboard_unlock"):
+            supplied_key = st.text_input(
+                "Developer access key",
+                type="password",
+                max_chars=256,
+            )
+            submitted = st.form_submit_button("Open developer dashboard")
+
+        if submitted:
+            if hmac.compare_digest(supplied_key, access_key):
+                st.session_state[DIAGNOSTIC_SESSION_KEY] = True
+                st.session_state.pop(DIAGNOSTIC_ATTEMPTS_KEY, None)
+                st.rerun()
+            else:
+                st.session_state[DIAGNOSTIC_ATTEMPTS_KEY] = attempts + 1
+                st.error("The developer access key is not valid.")
+
+    return False
+
+
 def _database_configuration_summary() -> str:
     """Describe the selected backend and configuration source without secrets."""
     database_url = get_database_url()
