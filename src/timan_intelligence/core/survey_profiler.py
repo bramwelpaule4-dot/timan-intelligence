@@ -229,3 +229,119 @@ def multiple_response_table(df: pd.DataFrame, column: str) -> pd.DataFrame:
     result.attrs["respondents_with_selection"] = respondents_with_selection
     result.attrs["total_records"] = int(len(df))
     return result
+
+
+LIKERT_RESPONSE_ORDERS = (
+    ("strongly disagree", "disagree", "neutral", "agree", "strongly agree"),
+    ("very dissatisfied", "dissatisfied", "satisfied", "very satisfied"),
+    ("never", "rarely", "sometimes", "often", "always"),
+)
+
+
+def likert_item_table(
+    df: pd.DataFrame,
+    column: str,
+    response_order: list[Any] | tuple[Any, ...] | None = None,
+) -> pd.DataFrame:
+    """Summarise one ordinal Likert item without assuming a positive direction.
+
+    Text labels are ordered only when they match a recognised response scale.
+    Numeric or custom-coded responses require an explicit ordered list supplied
+    from the questionnaire/codebook. Percentages among valid responses and
+    among all imported records are both reported.
+    """
+    if column not in df.columns:
+        raise KeyError(f"Column '{column}' was not found.")
+
+    raw = df[column]
+    cleaned = raw.astype("object").where(raw.notna(), pd.NA)
+    cleaned = cleaned.map(
+        lambda value: value.strip() if isinstance(value, str) else value
+    )
+    cleaned = cleaned.replace("", pd.NA)
+    observed = list(pd.unique(cleaned.dropna()))
+
+    if response_order is None:
+        if not observed or not all(isinstance(value, str) for value in observed):
+            raise ValueError(
+                "Numeric or custom-coded Likert responses require an explicit "
+                "response_order from the questionnaire or codebook."
+            )
+        observed_normalised = {str(value).casefold() for value in observed}
+        matching_orders = [
+            order for order in LIKERT_RESPONSE_ORDERS
+            if observed_normalised.issubset(set(order))
+        ]
+        if not matching_orders:
+            raise ValueError(
+                "The response labels do not match a recognised ordered scale. "
+                "Supply response_order from the questionnaire or codebook."
+            )
+        order = list(min(matching_orders, key=len))
+        label_lookup = {label.casefold(): label for label in order}
+        cleaned = cleaned.map(
+            lambda value: label_lookup.get(value.casefold(), value)
+            if isinstance(value, str) else value
+        )
+    else:
+        order = list(response_order)
+        if not order or len(order) != len(set(order)):
+            raise ValueError("response_order must contain unique ordered values.")
+        unexpected = [value for value in observed if value not in order]
+        if unexpected:
+            raise ValueError(
+                "Observed responses fall outside the confirmed response_order: "
+                + ", ".join(map(str, unexpected[:10]))
+            )
+
+    valid = cleaned.dropna()
+    valid_n = int(len(valid))
+    total_n = int(len(df))
+    counts = valid.value_counts().to_dict()
+    records = []
+    cumulative = 0.0
+    for response in order:
+        count = int(counts.get(response, 0))
+        percent_valid = round(count / valid_n * 100, 2) if valid_n else 0.0
+        cumulative = round(cumulative + percent_valid, 2)
+        records.append({
+            "response": response,
+            "count": count,
+            "percent_valid": percent_valid,
+            "percent_of_records": round(count / total_n * 100, 2) if total_n else 0.0,
+            "cumulative_percent_valid": cumulative,
+        })
+
+    missing_n = total_n - valid_n
+    if missing_n:
+        records.append({
+            "response": "No response",
+            "count": missing_n,
+            "percent_valid": 0.0,
+            "percent_of_records": round(missing_n / total_n * 100, 2) if total_n else 0.0,
+            "cumulative_percent_valid": cumulative,
+        })
+
+    table = pd.DataFrame(records)
+    ranked = valid.map({value: index for index, value in enumerate(order)})
+    median_response = None
+    mode_responses = []
+    if valid_n:
+        median_rank = float(ranked.median())
+        median_index = int(median_rank // 1)
+        if median_rank % 1:
+            median_index = int(round(median_rank))
+        median_response = order[median_index]
+        max_count = max(counts.values())
+        mode_responses = [value for value in order if counts.get(value, 0) == max_count]
+
+    table.attrs.update({
+        "valid_n": valid_n,
+        "missing_n": missing_n,
+        "total_records": total_n,
+        "median_response": median_response,
+        "mode_responses": mode_responses,
+        "response_order": order,
+        "scale_direction_assumed": False,
+    })
+    return table
