@@ -254,10 +254,26 @@ def _available_variable_roles(
     # must be explicitly mapped by the user to real dataset columns.
     configured_roles = options.get("variable_roles", {})
     if isinstance(configured_roles, dict):
+        mapped_columns = set()
         for role, columns in configured_roles.items():
             values = columns if isinstance(columns, (list, tuple)) else [columns]
-            if values and all(isinstance(name, str) and name in df.columns for name in values):
-                roles.add(str(role))
+            if not values or not all(
+                isinstance(name, str) and name in df.columns for name in values
+            ):
+                continue
+            if len(set(values)) != len(values) or mapped_columns.intersection(values):
+                continue
+            role_name = str(role)
+            if (
+                "numeric" in role_name
+                or role_name.startswith("paired_measurement_")
+            ) and any(
+                _infer_variable_type(df[name]) != "numeric"
+                for name in values
+            ):
+                continue
+            roles.add(role_name)
+            mapped_columns.update(values)
 
     return roles
 
