@@ -433,3 +433,80 @@ def test_planner_rejects_paired_measurement_role_with_non_numeric_column():
 
     assert preferred["status"] == "insufficient_information"
     assert "paired_measurement_before" in preferred["reason"]
+
+
+
+def test_planner_records_unconfirmed_design_without_inferring_from_dataset_shape():
+    df = pd.DataFrame({
+        "income": [10, 20, 30, 40],
+        "group": ["A", "A", "B", "B"],
+    })
+    request = AnalysisRequest(
+        question="Does income differ between the two groups?",
+        selected_variables=["income", "group"],
+        options={"independent_groups": True},
+    )
+
+    plan = plan_analysis(df, request)
+
+    assert plan.design_context["study_design"] is None
+    assert plan.design_context["sampling_design"] is None
+    assert plan.design_context["design_confirmation_required"] is True
+    assert plan.design_context["design_was_inferred"] is False
+    assert all(
+        item["design_confirmation_required"]
+        for item in plan.recommendations
+    )
+
+
+def test_planner_requests_cluster_and_weight_details_for_complex_survey():
+    df = pd.DataFrame({
+        "outcome": [0, 1, 0, 1],
+        "cluster": [1, 1, 2, 2],
+        "stratum": ["A", "A", "B", "B"],
+        "weight": [1.2, 1.1, 0.9, 1.0],
+    })
+    request = AnalysisRequest(
+        question="Is the outcome associated with the groups?",
+        selected_variables=["outcome", "cluster"],
+        options={
+            "study_design": "complex survey",
+            "sampling_design": "multistage",
+            "cluster_variable": "cluster",
+            "stratum_variable": "stratum",
+            "sampling_weight_variable": "weight",
+        },
+    )
+
+    plan = plan_analysis(df, request)
+
+    assert plan.design_context["study_design"] == "complex_survey"
+    assert plan.design_context["sampling_design"] == "multistage"
+    assert any("design-adjusted" in warning.lower() for warning in plan.warnings)
+    assert not any(
+        "sampling weights are available" in question.lower()
+        for question in plan.information_needed
+    )
+
+
+def test_planner_rejects_unrecognised_study_design_label():
+    df = pd.DataFrame({
+        "income": [10, 20, 30, 40],
+        "group": ["A", "A", "B", "B"],
+    })
+    request = AnalysisRequest(
+        question="Does income differ between the two groups?",
+        selected_variables=["income", "group"],
+        options={
+            "independent_groups": True,
+            "study_design": "maybe experimental",
+        },
+    )
+
+    plan = plan_analysis(df, request)
+
+    assert plan.design_context["study_design"] is None
+    assert any(
+        "not recognised" in question.lower()
+        for question in plan.information_needed
+    )
