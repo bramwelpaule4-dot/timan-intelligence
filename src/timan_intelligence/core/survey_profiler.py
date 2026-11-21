@@ -327,10 +327,7 @@ def likert_item_table(
     median_response = None
     mode_responses = []
     if valid_n:
-        median_rank = float(ranked.median())
-        median_index = int(median_rank // 1)
-        if median_rank % 1:
-            median_index = int(round(median_rank))
+        median_index = int(ranked.sort_values().iloc[(valid_n - 1) // 2])
         median_response = order[median_index]
         max_count = max(counts.values())
         mode_responses = [value for value in order if counts.get(value, 0) == max_count]
