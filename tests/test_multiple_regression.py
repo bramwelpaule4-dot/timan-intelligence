@@ -8,7 +8,7 @@ from timan_intelligence.core.multiple_regression import run_multiple_linear_regr
 def test_multiple_regression_estimates_adjusted_coefficients_and_fit():
     df = pd.DataFrame({
         "training_hours": [1, 2, 3, 4, 5, 6, 7, 8],
-        "attendance_rate": [70, 75, 80, 85, 90, 95, 100, 105],
+        "attendance_rate": [70, 92, 75, 98, 81, 105, 88, 96],
     })
     df["score"] = 5 + 2 * df["training_hours"] + 0.5 * df["attendance_rate"]
     result = run_multiple_linear_regression(
