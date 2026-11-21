@@ -18,7 +18,7 @@ def test_numeric_association_reports_pearson_and_spearman():
     assert metadata["spearman_rho"] == pytest.approx(1.0)
     assert metadata["pearson_p_value"] <= 1
     assert metadata["spearman_p_value"] <= 1
-    assert metadata["pearson_confidence_interval_95"] == [1.0, 1.0]
+    assert metadata["pearson_confidence_interval_95"] == pytest.approx([1.0, 1.0])
 
 
 def test_numeric_association_excludes_missing_and_non_finite_pairs():
