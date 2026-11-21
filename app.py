@@ -34,6 +34,7 @@ from timan_intelligence.organisations.service import list_user_organisations
 from timan_intelligence.entitlements.subscription_ui import render_subscription_page
 from timan_intelligence.entitlements.subscription_admin_ui import render_subscription_administration
 from timan_intelligence.administration.user_admin_ui import render_user_administration
+from timan_intelligence.services.analysis_service import run_survey_profile
 from timan_intelligence.entitlements.subscriptions import process_due_subscriptions
 from timan_intelligence.entitlements.service import (
     DatasetLimitExceeded,
@@ -652,8 +653,8 @@ MODULES = {
         "Calculate numeric summaries and categorical frequencies.",
     ),
     "Survey Analysis": (
-        "Under development",
-        "Questionnaire analysis, survey design, weights and response patterns.",
+        "Available — recognition and profiling",
+        "Recognise questionnaire structures and inspect response patterns.",
     ),
     "Statistical Inference": (
         "Under development",
@@ -1783,6 +1784,84 @@ elif page == "Data Quality":
             "checks require context and validation rules for the dataset."
         )
         # ============================================================
+# SURVEY ANALYSIS
+# ============================================================
+
+elif page == "Survey Analysis":
+    st.title("Survey Analysis")
+    st.caption(status_text(MODULES[page][0]))
+    st.write(
+        "TimanStat first inspects the imported dataset for questionnaire-style "
+        "structure, respondent records, response types and missing-response "
+        "patterns. Recognition is advisory; confirm the findings against the "
+        "questionnaire and codebook before proceeding."
+    )
+
+    df = get_dataset()
+
+    if df is not None:
+        result = run_survey_profile(df)
+        metadata = result.metadata
+
+        if metadata["is_survey_like"]:
+            st.success(
+                f"Questionnaire-style structure detected "
+                f"({metadata['confidence']} confidence)."
+            )
+        else:
+            st.warning(
+                "The dataset has not yet been confidently recognised as "
+                "questionnaire-style data. You can still inspect the profile "
+                "and confirm its structure."
+            )
+
+        metric_columns = st.columns(3)
+        metric_columns[0].metric("Respondent records", f"{metadata['respondents']:,}")
+        metric_columns[1].metric("Variables", f"{metadata['variable_count']:,}")
+        metric_columns[2].metric("Response-like variables", f"{metadata['question_count']:,}")
+
+        st.subheader("Response variable profile")
+        profile_table = result.tables["response_variable_profile"]
+        if profile_table.empty:
+            st.info("No variables are available to profile.")
+        else:
+            st.dataframe(profile_table, hide_index=True, use_container_width=True)
+
+        response_counts = metadata.get("response_type_counts", {})
+        if response_counts:
+            st.subheader("Detected response structures")
+            st.dataframe(
+                pd.DataFrame(
+                    [{"Response structure": key, "Variables": value}
+                     for key, value in response_counts.items()]
+                ),
+                hide_index=True,
+                use_container_width=True,
+            )
+
+        if metadata.get("identifier_candidates"):
+            st.caption(
+                "Possible record identifiers: "
+                + ", ".join(metadata["identifier_candidates"])
+                + ". These are name-based suggestions, not verified unique IDs."
+            )
+
+        st.subheader("Interpretation and safeguards")
+        for finding in result.findings:
+            st.write(f"• {finding}")
+        for warning in result.limitations:
+            st.warning(warning)
+
+        st.info(
+            "This first release recognises and profiles survey-like data. "
+            "It does not yet calculate multiple-response option totals, "
+            "weighted population estimates, or design-adjusted standard errors."
+        )
+    else:
+        st.info("Upload and import a survey dataset in Data Management to begin.")
+
+
+# ============================================================
 # DESCRIPTIVE STATISTICS
 # ============================================================
 
