@@ -310,3 +310,28 @@ def test_planner_exposes_registry_metadata_for_descriptive_recommendations():
     assert recommendations["Frequency distribution"]["method_id"] == (
         "method.descriptive.categorical.frequency"
     )
+
+def test_planner_passes_confirmed_study_design_to_catalogue_assessment():
+    df = pd.DataFrame({
+        "income": [10, 20, 30, 40],
+        "group": ["A", "A", "B", "B"],
+    })
+    request = AnalysisRequest(
+        question="Does income differ between the two groups?",
+        selected_variables=["income", "group"],
+        options={
+            "independent_groups": True,
+            "study_design": "independent",
+            "preferred_method": "Paired-samples t-test",
+        },
+    )
+
+    plan = plan_analysis(df, request)
+    preferred = next(
+        item
+        for item in plan.recommendations
+        if item.get("is_preferred") is True
+    )
+
+    assert preferred["status"] == "ineligible"
+    assert "not catalogued" in preferred["reason"].lower()
