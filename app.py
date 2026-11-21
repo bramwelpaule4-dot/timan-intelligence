@@ -278,10 +278,178 @@ st.markdown(
         font-weight: 800;
         letter-spacing: .12em;
         text-transform: uppercase;
-        margin-bottom: .35rem;
+        margin-bottom: .55rem;
+    }
+    .home-hero {
+        padding: 1.8rem 2rem 1.65rem;
+        border-left: 0;
+        border-top: 4px solid var(--timan-blue);
+        margin-bottom: 1.65rem;
+    }
+    .product-lockup {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+    }
+    .product-symbol, .sidebar-symbol {
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        gap: 3px;
+        width: 43px;
+        height: 43px;
+        padding: 8px;
+        border: 1px solid rgba(37,134,199,.22);
+        border-radius: 11px;
+        background: #FFFFFF;
+    }
+    .product-symbol span, .sidebar-symbol span {
+        display: block;
+        width: 6px;
+        border-radius: 3px 3px 1px 1px;
+        background: #2586C7;
+    }
+    .product-symbol span:nth-child(1), .sidebar-symbol span:nth-child(1) {
+        height: 12px;
+        background: #2586C7;
+    }
+    .product-symbol span:nth-child(2), .sidebar-symbol span:nth-child(2) {
+        height: 21px;
+        background: #169B78;
+    }
+    .product-symbol span:nth-child(3), .sidebar-symbol span:nth-child(3) {
+        height: 16px;
+        background: #B24D9A;
+    }
+    .home-heading {
+        font-size: 1.65rem;
+        line-height: 1;
+        margin: 0 0 .3rem;
+        letter-spacing: -.035em;
+    }
+    .wordmark-accent {
+        color: var(--timan-blue);
+    }
+    .home-eyebrow {
+        margin: 0;
+        font-size: 9px;
+        letter-spacing: .15em;
+    }
+    .product-byline {
+        color: var(--timan-muted);
+        font-size: .78rem;
+        margin-top: .22rem;
+    }
+    .hero-divider {
+        height: 1px;
+        background: var(--timan-border);
+        margin: 1.25rem 0 1.15rem;
+    }
+    .hero-statement {
+        color: var(--timan-navy);
+        font-size: clamp(1.75rem, 3.4vw, 2.55rem);
+        line-height: 1.12;
+        font-weight: 800;
+        letter-spacing: -.045em;
+        margin: 0 0 .65rem;
+        border: 0;
+        padding: 0;
+    }
+    .home-description {
+        color: var(--timan-muted);
+        font-size: 1rem;
+        line-height: 1.65;
+        max-width: 57rem;
+        margin: 0;
+    }
+    .feature-card {
+        min-height: 170px;
+        height: 100%;
+        box-sizing: border-box;
+        padding: 1.05rem 1rem 1.1rem;
+        background: #FFFFFF;
+        border: 1px solid var(--timan-border);
+        border-top: 3px solid var(--timan-blue);
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(23,59,103,.045);
+    }
+    .feature-blue { border-top-color: #2586C7; }
+    .feature-teal { border-top-color: #169B78; }
+    .feature-gold { border-top-color: #D9A02F; }
+    .feature-red { border-top-color: #B24D75; }
+    .feature-card-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1rem;
+    }
+    .feature-symbol {
+        color: var(--timan-blue);
+        font-size: 1.45rem;
+        font-weight: 750;
+        line-height: 1;
+    }
+    .feature-number {
+        color: #91A2B5;
+        font-size: .7rem;
+        font-weight: 750;
+        letter-spacing: .1em;
+    }
+    .feature-title {
+        color: var(--timan-navy);
+        font-size: .98rem;
+        font-weight: 750;
+        line-height: 1.25;
+        margin-bottom: .45rem;
+    }
+    .feature-description {
+        color: var(--timan-muted);
+        font-size: .83rem;
+        line-height: 1.5;
+    }
+    .workspace-kicker {
+        margin-top: 1.8rem;
+    }
+    .sidebar-brand {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        padding: 20px 4px 18px;
+    }
+    .sidebar-symbol {
+        width: 38px;
+        height: 38px;
+        margin-bottom: 10px;
+        background: rgba(255,255,255,.98);
+    }
+    .sidebar-wordmark {
+        color: #FFFFFF;
+        font-size: 25px;
+        font-weight: 850;
+        letter-spacing: -.045em;
+        line-height: 1.1;
+    }
+    .sidebar-wordmark span {
+        color: #75C4F2 !important;
+    }
+    .sidebar-platform-label {
+        color: #D7E6F4;
+        font-size: 9px;
+        font-weight: 750;
+        letter-spacing: .11em;
+        margin-top: 7px;
+    }
+    .sidebar-byline {
+        color: #C2D3E5;
+        font-size: 11px;
+        margin-top: 7px;
     }
 
     @media (max-width: 768px) {
+        .home-hero { padding: 1.35rem 1.2rem; }
+        .feature-card { min-height: 145px; }
+        .block-container {
         .block-container {
             padding-top: 1.2rem;
             padding-left: 1rem;
@@ -806,17 +974,14 @@ corporate_logo_path = next(
 )
 
 st.sidebar.markdown(
-    f"""
-    <div style="text-align:center; padding:22px 4px 18px;">
-        <div style="font-size:29px; font-weight:850; letter-spacing:-1px; color:#FFFFFF;">
-            Timan<span style="color:#65B8ED;">Stat</span>
+    """
+    <div class="sidebar-brand">
+        <div class="sidebar-symbol" aria-hidden="true">
+            <span></span><span></span><span></span>
         </div>
-        <div style="font-size:10px; font-weight:750; letter-spacing:1.1px; color:#D7E6F4; margin-top:5px;">
-            {PLATFORM_LABEL}
-        </div>
-        <div style="font-size:11px; color:#C2D3E5; margin-top:9px;">
-            A product of {APP_ORGANISATION}
-        </div>
+        <div class="sidebar-wordmark">TIMAN<span>STAT</span></div>
+        <div class="sidebar-platform-label">STATISTICAL SUPPORT PLATFORM</div>
+        <div class="sidebar-byline">by Timan Analytics</div>
     </div>
     """,
     unsafe_allow_html=True,
@@ -988,58 +1153,112 @@ else:
 
 if page == "Home":
     st.markdown(
-        f'<div class="home-hero"><div class="home-eyebrow">{PLATFORM_LABEL}</div>'
-        f'<div class="home-heading">TimanStat</div>'
-        f'<p class="home-tagline">{APP_TAGLINE}</p>'
-        f'<div style="color:#64758B;font-size:.82rem;margin-top:.55rem;">A product of {APP_ORGANISATION}</div></div>',
+        """
+        <div class="home-hero">
+            <div class="product-lockup">
+                <div class="product-symbol" aria-hidden="true">
+                    <span></span><span></span><span></span>
+                </div>
+                <div>
+                    <div class="home-heading">TIMAN<span class="wordmark-accent">STAT</span></div>
+                    <div class="home-eyebrow">STATISTICAL SUPPORT PLATFORM</div>
+                    <div class="product-byline">by Timan Analytics</div>
+                </div>
+            </div>
+            <div class="hero-divider"></div>
+            <h1 class="hero-statement">Turning data into meaningful insights.</h1>
+            <p class="home-description">
+                A professional platform for data management, statistical analysis,
+                research and evidence-based decision-making.
+            </p>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
 
     st.markdown(
-        f'<div class="home-description">{APP_DESCRIPTION}</div>',
+        '<div class="section-kicker">Explore the platform</div>',
         unsafe_allow_html=True,
     )
-    st.markdown('<div class="section-kicker">Your analytical workspace</div>', unsafe_allow_html=True)
+    feature_columns = st.columns(4, gap="medium")
+    feature_cards = [
+        (
+            "01",
+            "Data Management",
+            "Import and organise datasets.",
+            "feature-blue",
+            "▤",
+        ),
+        (
+            "02",
+            "Statistical Analysis",
+            "Explore data and calculate statistical summaries.",
+            "feature-teal",
+            "∑",
+        ),
+        (
+            "03",
+            "Survey Analysis",
+            "Examine survey findings and response patterns.",
+            "feature-gold",
+            "▥",
+        ),
+        (
+            "04",
+            "Reporting",
+            "Communicate results clearly.",
+            "feature-red",
+            "▧",
+        ),
+    ]
+    for column, (number, title, description, accent, symbol) in zip(
+        feature_columns, feature_cards
+    ):
+        with column:
+            st.markdown(
+                f"""
+                <div class="feature-card {accent}">
+                    <div class="feature-card-top">
+                        <span class="feature-symbol" aria-hidden="true">{symbol}</span>
+                        <span class="feature-number">{number}</span>
+                    </div>
+                    <div class="feature-title">{title}</div>
+                    <div class="feature-description">{description}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
+    st.markdown(
+        '<div class="section-kicker workspace-kicker">Your analytical workspace</div>',
+        unsafe_allow_html=True,
+    )
     df = st.session_state.dataset
 
     if df is None:
         a, b, c = st.columns(3)
-
         a.metric("Dataset status", "Not loaded")
         b.metric("Available formats", "CSV / Excel")
         c.metric("Workspace", "Browser session")
 
         st.info(
-            "To begin, select Data Management from the left "
-            "navigation and upload a CSV or Excel file."
+            "Start by uploading a dataset. Your data will remain available "
+            "as you move between the platform's analytical modules in this session."
         )
-
         st.button(
             "Go to Data Management",
             type="primary",
             on_click=go_to_data_management,
         )
-
     else:
         a, b, c = st.columns(3)
-
         a.metric("Rows", f"{df.shape[0]:,}")
         b.metric("Columns", f"{df.shape[1]:,}")
-        c.metric(
-            "Missing cells",
-            f"{int(df.isna().sum().sum()):,}",
-        )
+        c.metric("Missing cells", f"{int(df.isna().sum().sum()):,}")
 
         st.subheader("Dataset preview")
-        st.dataframe(
-            df.head(10),
-            use_container_width=True,
-        )
-
-        st.caption(
-            f"Current dataset: {st.session_state.dataset_name}"
-        )
+        st.dataframe(df.head(10), use_container_width=True)
+        st.caption(f"Current dataset: {st.session_state.dataset_name}")
     # ============================================================
 # DATA MANAGEMENT
 # ============================================================
