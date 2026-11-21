@@ -224,3 +224,38 @@ def test_assessment_discloses_unverified_assumptions():
         or "inspect" in check.lower()
         for check in result.checks
     )
+
+def test_candidates_include_authoritative_catalogue_lifecycle_metadata():
+    methods = select_methods(
+        objective_type="comparison",
+        outcome_type="numeric",
+        group_count=2,
+        independent_groups=True,
+    )
+    by_name = {item.method: item for item in methods}
+
+    welch = by_name["Independent-samples t-test"]
+    mann_whitney = by_name["Mann–Whitney U test"]
+
+    assert welch.catalogue["method_id"] == (
+        "method.inference.comparison.t_test.independent.welch"
+    )
+    assert welch.catalogue["implementation_status"] == "implemented"
+    assert welch.catalogue["execution_eligibility"] == "conditional"
+    assert mann_whitney.catalogue["implementation_status"] == "planned"
+    assert mann_whitney.catalogue["execution_eligibility"] == "not_assessed"
+    assert mann_whitney.catalogue["sampling_design_aware"] is False
+
+
+def test_catalogued_method_without_assessment_rules_is_not_declared_eligible():
+    result = assess_preferred_method(
+        preferred_method="Confidence interval for a mean",
+        objective_type="description",
+        outcome_type="numeric",
+    )
+
+    assert result.eligibility == INSUFFICIENT_INFORMATION
+    assert result.catalogue["method_id"] == (
+        "method.inference.confidence_interval.mean"
+    )
+    assert "not yet been added" in result.rationale
