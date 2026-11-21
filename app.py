@@ -34,7 +34,10 @@ from timan_intelligence.organisations.service import list_user_organisations
 from timan_intelligence.entitlements.subscription_ui import render_subscription_page
 from timan_intelligence.entitlements.subscription_admin_ui import render_subscription_administration
 from timan_intelligence.administration.user_admin_ui import render_user_administration
-from timan_intelligence.services.analysis_service import run_survey_profile
+from timan_intelligence.services.analysis_service import (
+    run_survey_profile,
+    run_categorical_comparison,
+)
 from timan_intelligence.entitlements.subscriptions import process_due_subscriptions
 from timan_intelligence.entitlements.service import (
     DatasetLimitExceeded,
@@ -996,6 +999,146 @@ def get_dataset():
 
     return df
 
+
+
+def render_categorical_comparison(df):
+    """Render guided cross-tabulation and association analysis."""
+    st.subheader("Compare categorical variables")
+    st.write(
+        "Examine how the distribution of one categorical variable differs "
+        "across groups. TimanStat selects an appropriate association test "
+        "when the data support one; you do not need to choose the test."
+    )
+
+    candidates = []
+    for column in df.columns:
+        series = df[column]
+        unique_count = int(series.nunique(dropna=True))
+        if 2 <= unique_count <= 50:
+            is_text = (
+                pd.api.types.is_object_dtype(series.dtype)
+                or pd.api.types.is_string_dtype(series.dtype)
+                or pd.api.types.is_bool_dtype(series.dtype)
+                or isinstance(series.dtype, pd.CategoricalDtype)
+            )
+            is_low_cardinality_integer = (
+                pd.api.types.is_integer_dtype(series.dtype)
+                and unique_count <= 10
+            )
+            if is_text or is_low_cardinality_integer:
+                candidates.append(column)
+
+    if len(candidates) < 2:
+        st.info(
+            "At least two suitable categorical variables are needed. "
+            "Text/category variables and low-cardinality integer codes are "
+            "considered. Confirm any numeric codes against the data dictionary."
+        )
+        return
+
+    left, right = st.columns(2)
+    row_variable = left.selectbox(
+        "Grouping variable (rows)",
+        candidates,
+        key="categorical_comparison_row",
+        help="The groups you want to compare, such as sex, location or programme.",
+    )
+    outcome_options = [column for column in candidates if column != row_variable]
+    column_variable = right.selectbox(
+        "Outcome variable (columns)",
+        outcome_options,
+        key="categorical_comparison_column",
+        help="The categorical response or characteristic to compare between groups.",
+    )
+
+    st.caption(
+        "The analysis uses records with valid values for both variables. "
+        "Blank and missing values are excluded and reported. Variables with "
+        "more than 50 categories are not offered because they may be IDs or free text."
+    )
+
+    dataset_key = _dataset_analysis_key(df)
+    result_key = f"timanstat_categorical_comparison_{dataset_key}"
+    if st.button(
+        "Run categorical comparison",
+        type="primary",
+        key="run_categorical_comparison",
+    ):
+        try:
+            comparison = run_categorical_comparison(
+                df,
+                str(row_variable),
+                str(column_variable),
+            )
+        except (TypeError, ValueError) as exc:
+            st.error(str(exc))
+        except Exception:
+            st.error(
+                "The comparison could not be completed. No inferential result "
+                "has been reported."
+            )
+        else:
+            st.session_state[result_key] = {
+                "row_variable": row_variable,
+                "column_variable": column_variable,
+                "result": comparison,
+            }
+
+    saved = st.session_state.get(result_key)
+    if not saved:
+        st.info("Choose the two variables, then run the comparison to view results.")
+        return
+    if saved["row_variable"] != row_variable or saved["column_variable"] != column_variable:
+        st.info("Run the comparison again to apply the changed variable selection.")
+        return
+
+    result = saved["result"]
+    metadata = result.metadata
+    st.markdown("#### Comparison summary")
+    metrics = st.columns(4)
+    metrics[0].metric("Valid records", f"{metadata['valid_n']:,}")
+    metrics[1].metric("Excluded records", f"{metadata['excluded_n']:,}")
+    metrics[2].metric("Association test", metadata["test"])
+    metrics[3].metric(
+        "P-value",
+        f"{metadata['p_value']:.4g}" if metadata.get("p_value") is not None else "Not calculated",
+    )
+
+    if metadata.get("cramers_v") is not None:
+        st.caption(f"Cramér's V (effect-size estimate): {metadata['cramers_v']:.3f}")
+    if metadata.get("minimum_expected_count") is not None:
+        st.caption(
+            "Minimum expected cell count: "
+            f"{metadata['minimum_expected_count']:.2f} · "
+            f"Expected cells below 5: {metadata['expected_cells_below_5']}"
+        )
+
+    counts_tab, row_tab, column_tab = st.tabs(
+        ["Observed counts", "Row percentages", "Column percentages"]
+    )
+    with counts_tab:
+        st.dataframe(result.tables["observed_counts"], use_container_width=True)
+        st.caption("Counts show complete records in each group/outcome combination.")
+    with row_tab:
+        st.dataframe(result.tables["row_percentages"], use_container_width=True)
+        st.caption(
+            "Row percentages use each grouping-variable category as the denominator. "
+            "Each row totals 100%."
+        )
+    with column_tab:
+        st.dataframe(result.tables["column_percentages"], use_container_width=True)
+        st.caption(
+            "Column percentages use each outcome category as the denominator. "
+            "Each outcome column totals 100%."
+        )
+
+    st.markdown("#### Interpretation")
+    for finding in result.findings:
+        st.write(f"• {finding}")
+    if result.limitations:
+        st.markdown("#### Assumptions and limitations")
+        for warning in result.limitations:
+            st.warning(warning)
 
 def show_under_development(page, purpose):
     """Display an honest status page for an unfinished module."""
@@ -2277,6 +2420,10 @@ elif page == "Descriptive Statistics":
                     "A correlation matrix requires at least two numeric variables."
                 )
                 # ============================================================
+            st.divider()
+            render_categorical_comparison(df)
+
+
 # VISUALISATIONS
 # ============================================================
 
