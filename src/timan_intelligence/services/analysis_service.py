@@ -9,6 +9,7 @@ from timan_intelligence.core.numeric_comparison import run_numeric_group_compari
 from timan_intelligence.core.numeric_association import run_numeric_association
 from timan_intelligence.core.simple_regression import run_simple_linear_regression
 from timan_intelligence.core.multiple_regression import run_multiple_linear_regression
+from timan_intelligence.core.regression_diagnostics import run_regression_diagnostics
 from timan_intelligence.core.survey_profiler import (
     profile_survey_dataframe,
     question_frequency_table,
@@ -279,6 +280,40 @@ def run_multiple_linear_regression_service(
         metadata=metadata,
     )
 
+
+
+def run_regression_diagnostics_service(
+    fitted_data: pd.DataFrame,
+    predictor_variables: list[str],
+    outcome_variable: str,
+) -> AnalysisResult:
+    """Assess residual and influence diagnostics for a fitted OLS model."""
+    output = run_regression_diagnostics(
+        fitted_data,
+        predictor_variables,
+        outcome_variable,
+    )
+    return AnalysisResult(
+        title="Linear regression diagnostics",
+        method="Residual, heteroscedasticity, collinearity and influence diagnostics",
+        status="success",
+        tables={
+            "diagnostics": output["diagnostics"],
+            "influential_observations": output["influential_observations"],
+            "residual_plot_data": output["residual_plot_data"],
+        },
+        findings=[
+            f"Diagnostics assessed {output['metadata']['valid_n']:,} complete fitted records.",
+            f"Maximum Cook's distance was {output['metadata']['maximum_cooks_distance']:.4g}.",
+            f"Maximum leverage was {output['metadata']['maximum_leverage']:.4g}.",
+        ],
+        assumptions=[
+            "The supplied fitted values and residuals come from the intended ordinary least-squares model.",
+            "The row order and record positions correspond to the fitted dataset supplied to this diagnostic routine.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata=output["metadata"],
+    )
 
 
 def run_numeric_summary(df: pd.DataFrame, request: AnalysisRequest | None = None) -> AnalysisResult:
