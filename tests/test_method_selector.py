@@ -329,3 +329,69 @@ def test_preferred_method_requests_missing_required_variable_roles():
     assert result.eligibility == INSUFFICIENT_INFORMATION
     assert "paired_measurement_before" in result.rationale
     assert result.clarification_questions
+
+
+def test_complex_survey_design_filters_non_design_aware_methods():
+    methods = select_methods(
+        objective_type="comparison",
+        outcome_type="numeric",
+        group_count=2,
+        independent_groups=True,
+        study_design="complex_survey",
+        sampling_design="multistage",
+    )
+    assert methods == []
+
+
+def test_clustered_sampling_design_filters_ordinary_correlation_methods():
+    methods = select_methods(
+        objective_type="association",
+        outcome_type="numeric",
+        predictor_type="numeric",
+        sampling_design="cluster",
+    )
+    assert methods == []
+
+
+def test_paired_study_design_does_not_recommend_independent_group_methods():
+    methods = select_methods(
+        objective_type="comparison",
+        outcome_type="numeric",
+        group_count=2,
+        independent_groups=True,
+        study_design="paired",
+    )
+    assert methods == []
+
+
+def test_preferred_ordinary_test_is_held_for_complex_survey_design():
+    result = assess_preferred_method(
+        preferred_method="Independent-samples t-test",
+        objective_type="comparison",
+        outcome_type="numeric",
+        group_count=2,
+        independent_groups=True,
+        study_design="complex_survey",
+        sampling_design="multistage",
+    )
+    assert result.eligibility == INSUFFICIENT_INFORMATION
+    assert "design-aware" in result.rationale.lower()
+    assert result.clarification_questions
+    assert result.alternatives == []
+
+
+def test_preferred_paired_test_remains_compatible_with_paired_design():
+    result = assess_preferred_method(
+        preferred_method="Paired-samples t-test",
+        objective_type="comparison",
+        outcome_type="numeric",
+        group_count=2,
+        independent_groups=False,
+        study_design="paired",
+        available_variable_roles={
+            "paired_measurement_before",
+            "paired_measurement_after",
+            "pair_identifier",
+        },
+    )
+    assert result.eligibility == CONDITIONALLY_ELIGIBLE
