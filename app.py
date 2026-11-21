@@ -40,6 +40,7 @@ from timan_intelligence.services.analysis_service import (
     run_numeric_group_comparison_service,
     run_numeric_association_service,
     run_simple_linear_regression_service,
+    run_multiple_linear_regression_service,
 )
 from timan_intelligence.entitlements.subscriptions import process_due_subscriptions
 from timan_intelligence.entitlements.service import (
@@ -1569,6 +1570,148 @@ def render_simple_linear_regression(df):
             st.warning(warning)
 
 
+
+def render_multiple_linear_regression(df):
+    """Render guided regression with multiple numeric predictors."""
+    st.subheader("Estimate an outcome using several numeric predictors")
+    st.write(
+        "Multiple linear regression estimates the association between a "
+        "numeric outcome and two or more predictors at the same time. Each "
+        "coefficient describes the association with the outcome while holding "
+        "the other selected predictors constant."
+    )
+    numeric_candidates = [
+        column for column in df.select_dtypes(include="number").columns
+        if not pd.api.types.is_bool_dtype(df[column].dtype)
+    ]
+    if len(numeric_candidates) < 3:
+        st.info(
+            "This analysis requires at least three numeric variables: "
+            "one outcome and at least two predictors."
+        )
+        return
+
+    outcome_variable = st.selectbox(
+        "Outcome variable (Y)",
+        numeric_candidates,
+        key="multiple_regression_outcome",
+        help="The numeric variable the model will estimate.",
+    )
+    predictor_options = [
+        item for item in numeric_candidates if item != outcome_variable
+    ]
+    predictor_variables = st.multiselect(
+        "Predictor variables (X)",
+        predictor_options,
+        key="multiple_regression_predictors",
+        help="Select at least two variables that may help explain variation in the outcome.",
+        max_selections=20,
+    )
+    st.caption(
+        "TimanStat checks for insufficient records and perfectly or near-perfectly "
+        "collinear predictors. Select predictors based on the research question, "
+        "not only on statistical significance."
+    )
+    if len(predictor_variables) < 2:
+        st.info("Select at least two predictors to run multiple regression.")
+        return
+
+    dataset_key = _dataset_analysis_key(df)
+    result_key = f"timanstat_multiple_regression_{dataset_key}"
+    if st.button(
+        "Run multiple regression",
+        type="primary",
+        key="run_multiple_linear_regression",
+    ):
+        try:
+            regression = run_multiple_linear_regression_service(
+                df,
+                list(predictor_variables),
+                str(outcome_variable),
+            )
+        except (TypeError, ValueError) as exc:
+            st.error(str(exc))
+        except Exception:
+            st.error(
+                "The multiple regression model could not be estimated. "
+                "No model results have been reported."
+            )
+        else:
+            st.session_state[result_key] = {
+                "predictors": list(predictor_variables),
+                "outcome": outcome_variable,
+                "result": regression,
+            }
+
+    saved = st.session_state.get(result_key)
+    if not saved:
+        st.info("Choose the outcome and at least two predictors, then run the model.")
+        return
+    if (
+        saved["predictors"] != list(predictor_variables)
+        or saved["outcome"] != outcome_variable
+    ):
+        st.info("Run the model again to apply the changed variable selection.")
+        return
+
+    result = saved["result"]
+    metadata = result.metadata
+    st.markdown("#### Model results")
+    metrics = st.columns(4)
+    metrics[0].metric("Complete records", f"{metadata['valid_n']:,}")
+    metrics[1].metric("R²", f"{metadata['r_squared']:.4f}")
+    metrics[2].metric("Adjusted R²", f"{metadata['adjusted_r_squared']:.4f}")
+    metrics[3].metric("RMSE", f"{metadata['rmse']:.4g}")
+    st.caption(
+        f"Overall model F-statistic: {metadata['model_f_statistic']:.4g}; "
+        f"p-value: {metadata['model_p_value']:.4g}. "
+        "The overall test evaluates whether the included predictors jointly "
+        "improve on an intercept-only model."
+    )
+
+    st.markdown("#### Adjusted coefficient estimates")
+    st.dataframe(result.tables["coefficients"], use_container_width=True)
+    st.caption(
+        "Each predictor coefficient is adjusted for the other predictors in "
+        "this model. Interpret units and confidence intervals in the context "
+        "of the variables and study design."
+    )
+
+    fitted = result.tables["fitted_data"]
+    st.markdown("#### Observed versus fitted outcomes")
+    st.scatter_chart(
+        fitted[[outcome_variable, "Fitted outcome"]],
+        x="Fitted outcome",
+        y=outcome_variable,
+        use_container_width=True,
+    )
+    st.markdown("#### Residual review")
+    st.scatter_chart(
+        fitted[["Fitted outcome", "Residual"]],
+        x="Fitted outcome",
+        y="Residual",
+        use_container_width=True,
+    )
+    st.caption(
+        "Residuals are observed minus fitted outcomes. Look for systematic "
+        "patterns, changing spread, clusters and unusually large residuals."
+    )
+
+    st.markdown("#### Interpretation")
+    for finding in result.findings:
+        st.write(f"• {finding}")
+    st.info(
+        "Adjusted coefficients are conditional associations, not causal "
+        "effects. R² is not proof of model validity, and a small p-value does "
+        "not establish practical importance. Predictor selection should be "
+        "guided by subject knowledge and the study objective."
+    )
+    if result.limitations:
+        st.markdown("#### Assumptions and limitations")
+        for warning in result.limitations:
+            st.warning(warning)
+
+
 def show_under_development(page, purpose):
     """Display an honest status page for an unfinished module."""
     st.title(page)
@@ -2857,6 +3000,8 @@ elif page == "Descriptive Statistics":
             render_numeric_association(df)
             st.divider()
             render_simple_linear_regression(df)
+            st.divider()
+            render_multiple_linear_regression(df)
 
 
 # VISUALISATIONS
