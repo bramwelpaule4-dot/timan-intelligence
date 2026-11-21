@@ -71,3 +71,84 @@ def test_logistic_regression_does_not_modify_input():
     original = df.copy(deep=True)
     run_binary_logistic_regression(df, ["exposure"], "outcome")
     pd.testing.assert_frame_equal(df, original)
+
+
+def test_meal_training_completion_with_realistic_predictor_scales():
+    """Exercise completion modelling with attendance, age, travel and binary access."""
+    rng = np.random.default_rng(20261121)
+    n = 700
+    age_years = rng.integers(18, 46, size=n)
+    attendance_percent = rng.uniform(35, 100, size=n)
+    travel_distance_km = rng.uniform(0.5, 65, size=n)
+    received_learning_support = rng.binomial(1, 0.55, size=n)
+
+    linear_predictor = (
+        -2.0
+        + 0.035 * (attendance_percent - 65)
+        - 0.025 * (travel_distance_km - 25)
+        + 0.55 * received_learning_support
+        - 0.012 * (age_years - 28)
+    )
+    completion_probability = 1 / (1 + np.exp(-linear_predictor))
+    completed = rng.binomial(1, completion_probability)
+    frame = pd.DataFrame({
+        "age_years": age_years,
+        "attendance_percent": attendance_percent,
+        "travel_distance_km": travel_distance_km,
+        "received_learning_support": received_learning_support,
+        "course_completed": completed,
+    })
+
+    result = run_binary_logistic_regression(
+        frame,
+        ["age_years", "attendance_percent", "travel_distance_km", "received_learning_support"],
+        "course_completed",
+    )
+
+    assert result["metadata"]["valid_n"] == n
+    assert result["metadata"]["event_n"] >= 5
+    assert result["metadata"]["non_event_n"] >= 5
+    assert result["coefficients"]["Odds ratio"].map(np.isfinite).all()
+    assert result["fitted_data"]["Predicted probability"].between(0, 1).all()
+    assert result["metadata"]["brier_score"] >= 0
+
+
+def test_meal_household_service_uptake_with_imbalanced_outcome():
+    """Exercise an uncommon MEAL outcome using household-level predictors."""
+    rng = np.random.default_rng(712)
+    n = 900
+    household_size = rng.integers(1, 11, size=n)
+    distance_to_service_km = rng.uniform(1, 55, size=n)
+    phone_access = rng.binomial(1, 0.48, size=n)
+    awareness_visit = rng.binomial(1, 0.30, size=n)
+
+    linear_predictor = (
+        -2.25
+        - 0.035 * (distance_to_service_km - 25)
+        - 0.08 * (household_size - 5)
+        + 0.65 * phone_access
+        + 0.85 * awareness_visit
+    )
+    uptake_probability = 1 / (1 + np.exp(-linear_predictor))
+    accessed_service = rng.binomial(1, uptake_probability)
+    frame = pd.DataFrame({
+        "household_size": household_size,
+        "distance_to_service_km": distance_to_service_km,
+        "phone_access": phone_access,
+        "awareness_visit": awareness_visit,
+        "accessed_service": accessed_service,
+    })
+
+    result = run_binary_logistic_regression(
+        frame,
+        ["household_size", "distance_to_service_km", "phone_access", "awareness_visit"],
+        "accessed_service",
+    )
+
+    assert result["metadata"]["valid_n"] == n
+    assert 0 < result["metadata"]["event_n"] < n
+    assert result["metadata"]["non_event_n"] > result["metadata"]["event_n"]
+    assert result["metadata"]["brier_score"] < 0.30
+    assert "The smaller outcome category is limited" in " ".join(result["warnings"]) or min(
+        result["metadata"]["event_n"], result["metadata"]["non_event_n"]
+    ) >= 20
