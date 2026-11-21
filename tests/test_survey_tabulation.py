@@ -89,7 +89,7 @@ def test_likert_item_uses_ordered_labels_and_reports_valid_and_record_percentage
         "strongly disagree", "disagree", "neutral", "agree", "strongly agree"
     ]
     assert rows.loc["agree", "count"] == 2
-    assert rows.loc["agree", "percent_valid"] == pytest.approx(33.33)
+    assert rows.loc["agree", "percent_valid"] == pytest.approx(40.0)
     assert rows.loc["agree", "percent_of_records"] == pytest.approx(28.57)
     assert rows.loc["No response", "count"] == 2
     assert table.attrs["valid_n"] == 5
