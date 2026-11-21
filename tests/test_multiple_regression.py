@@ -28,7 +28,7 @@ def test_multiple_regression_estimates_adjusted_coefficients_and_fit():
 def test_multiple_regression_excludes_incomplete_and_non_finite_records():
     df = pd.DataFrame({
         "x1": [1, 2, 3, 4, 5, 6],
-        "x2": [2, 3, 4, 5, np.nan, 7],
+        "x2": [2, 5, 3, 8, np.nan, 9],
         "y": [4, 7, 10, 13, 16, np.inf],
     })
     result = run_multiple_linear_regression(df, ["x1", "x2"], "y")
