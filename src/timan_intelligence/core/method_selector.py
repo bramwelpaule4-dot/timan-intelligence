@@ -73,6 +73,14 @@ def _catalogue_metadata(label: str) -> dict[str, object]:
         ),
         "catalogue_version": record.metadata.get("catalogue_version"),
         "release_priority": record.metadata.get("release_priority"),
+        "outcome_types": list(specification.get("outcome_types", [])),
+        "predictor_types": list(specification.get("predictor_types", [])),
+        "required_variable_roles": list(
+            specification.get("required_variable_roles", [])
+        ),
+        "compatible_study_designs": list(
+            specification.get("compatible_study_designs", [])
+        ),
     }
 
 
@@ -81,13 +89,35 @@ def catalogue_metadata_for_method(label: str) -> dict[str, object]:
     return _catalogue_metadata(label)
 
 
-def _attach_catalogue_metadata(candidates: list[MethodCandidate]) -> list[MethodCandidate]:
-    """Keep only catalogue-defined candidates and attach their lifecycle data."""
+def _attach_catalogue_metadata(
+    candidates: list[MethodCandidate],
+    outcome_type: str | None = None,
+    predictor_type: str | None = None,
+    study_design: str | None = None,
+) -> list[MethodCandidate]:
+    """Apply catalogue type/design constraints and attach authoritative metadata.
+
+    Empty catalogue constraints mean that the catalogue has not specified a
+    restriction; they are not interpreted as proof of universal compatibility.
+    """
     registered = []
     for candidate in candidates:
         metadata = _catalogue_metadata(candidate.method)
         if not metadata:
             continue
+
+        allowed_outcomes = metadata["outcome_types"]
+        if outcome_type is not None and allowed_outcomes and outcome_type not in allowed_outcomes:
+            continue
+
+        allowed_predictors = metadata["predictor_types"]
+        if predictor_type is not None and allowed_predictors and predictor_type not in allowed_predictors:
+            continue
+
+        allowed_designs = metadata["compatible_study_designs"]
+        if study_design is not None and allowed_designs and study_design not in allowed_designs:
+            continue
+
         candidate.catalogue = metadata
         registered.append(candidate)
     return registered
@@ -99,6 +129,7 @@ def select_methods(
     predictor_type: str | None = None,
     group_count: int | None = None,
     independent_groups: bool | None = None,
+    study_design: str | None = None,
 ) -> list[MethodCandidate]:
     """Return candidate methods from the supplied objective and data types.
 
@@ -330,7 +361,12 @@ def select_methods(
                 )
             )
 
-    return _attach_catalogue_metadata(candidates)
+    return _attach_catalogue_metadata(
+        candidates,
+        outcome_type=outcome_type,
+        predictor_type=predictor_type,
+        study_design=study_design,
+    )
 
 
 def assess_preferred_method(
