@@ -644,6 +644,7 @@ def _add_method_recommendations(
                 objective_type=objective_type,
                 outcome_type=outcome_type,
                 study_design=study_design,
+                sampling_design=plan.design_context.get("sampling_design"),
             )
 
         if not candidates:
