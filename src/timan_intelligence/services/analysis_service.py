@@ -6,6 +6,7 @@ from timan_intelligence.core.contracts import AnalysisResult, AnalysisRequest
 from timan_intelligence.core.data_quality import profile_dataframe
 from timan_intelligence.core.categorical_analysis import run_categorical_association
 from timan_intelligence.core.numeric_comparison import run_numeric_group_comparison
+from timan_intelligence.core.numeric_association import run_numeric_association
 from timan_intelligence.core.survey_profiler import (
     profile_survey_dataframe,
     question_frequency_table,
@@ -165,6 +166,32 @@ def run_numeric_group_comparison_service(
         limitations=output["warnings"],
         metadata=metadata,
     )
+
+
+def run_numeric_association_service(
+    df: pd.DataFrame,
+    first_variable: str,
+    second_variable: str,
+) -> AnalysisResult:
+    """Run shared Pearson and Spearman association analysis."""
+    output = run_numeric_association(df, first_variable, second_variable)
+    metadata = output["metadata"]
+    return AnalysisResult(
+        title=f"Numeric association: {first_variable} and {second_variable}",
+        method="Pearson product-moment and Spearman rank correlation",
+        status="success",
+        tables={
+            "descriptive_summary": pd.DataFrame(output["descriptive_summary"]).T,
+        },
+        findings=list(output["findings"]),
+        assumptions=[
+            "Each complete pair represents one independent observational unit.",
+            "Pearson correlation describes linear association; Spearman correlation describes monotonic rank association.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata=metadata,
+    )
+
 
 def run_numeric_summary(df: pd.DataFrame, request: AnalysisRequest | None = None) -> AnalysisResult:
     summary = numeric_summary(df)
