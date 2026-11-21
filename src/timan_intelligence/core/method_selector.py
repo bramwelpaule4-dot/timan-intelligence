@@ -89,6 +89,41 @@ def catalogue_metadata_for_method(label: str) -> dict[str, object]:
     return _catalogue_metadata(label)
 
 
+
+def _design_incompatibility_reason(metadata, study_design, sampling_design):
+    """Return a reason when the method cannot handle the declared design."""
+    compatible = metadata.get("compatible_study_designs", [])
+    if study_design in {
+        "paired", "repeated_measure", "repeated_measures",
+        "longitudinal", "time_series", "clustered", "complex_survey",
+    }:
+        normalised = {
+            "repeated_measures" if item == "repeated_measure" else item
+            for item in compatible
+        }
+        requested = (
+            "repeated_measures"
+            if study_design == "repeated_measure"
+            else study_design
+        )
+        if requested not in normalised:
+            return (
+                f"The method is not registered as compatible with the "
+                f"declared '{study_design}' study design."
+            )
+
+    if (
+        study_design in {"clustered", "complex_survey"}
+        or sampling_design in {"cluster", "stratified", "multistage"}
+    ) and not metadata.get("sampling_design_aware", False):
+        return (
+            "The declared sampling structure requires design-aware estimation "
+            "or variance adjustment. This method is not registered as "
+            "sampling-design-aware."
+        )
+    return None
+
+
 def _missing_required_roles(
     metadata: dict[str, object],
     available_variable_roles: set[str] | None,
@@ -106,6 +141,7 @@ def _attach_catalogue_metadata(
     predictor_type: str | None = None,
     study_design: str | None = None,
     available_variable_roles: set[str] | None = None,
+    sampling_design: str | None = None,
 ) -> list[MethodCandidate]:
     """Apply catalogue type/design constraints and attach authoritative metadata.
 
@@ -130,6 +166,9 @@ def _attach_catalogue_metadata(
         if study_design is not None and allowed_designs and study_design not in allowed_designs:
             continue
 
+        if _design_incompatibility_reason(metadata, study_design, sampling_design):
+            continue
+
         if _missing_required_roles(metadata, available_variable_roles):
             continue
 
@@ -146,6 +185,7 @@ def select_methods(
     independent_groups: bool | None = None,
     study_design: str | None = None,
     available_variable_roles: set[str] | None = None,
+    sampling_design: str | None = None,
 ) -> list[MethodCandidate]:
     """Return candidate methods from the supplied objective and data types.
 
@@ -383,6 +423,7 @@ def select_methods(
         predictor_type=predictor_type,
         study_design=study_design,
         available_variable_roles=available_variable_roles,
+        sampling_design=sampling_design,
     )
 
 
@@ -395,6 +436,7 @@ def assess_preferred_method(
     independent_groups: bool | None = None,
     study_design: str | None = None,
     available_variable_roles: set[str] | None = None,
+    sampling_design: str | None = None,
 ) -> MethodAssessment:
     """Assess a preferred method before suggesting alternatives.
 
@@ -423,6 +465,7 @@ def assess_preferred_method(
                 independent_groups,
                 study_design,
                 available_variable_roles,
+                sampling_design,
             ),
         )
 
@@ -446,7 +489,31 @@ def assess_preferred_method(
                 independent_groups,
                 study_design,
                 available_variable_roles,
+                sampling_design,
             ),
+        )
+
+
+    registered_metadata = _catalogue_metadata(method)
+    design_issue = _design_incompatibility_reason(
+        registered_metadata, study_design, sampling_design
+    )
+    if design_issue:
+        return MethodAssessment(
+            preferred_method=method,
+            eligibility=INSUFFICIENT_INFORMATION,
+            rationale=design_issue,
+            clarification_questions=[
+                "A design-aware method is required. Confirm the sampling "
+                "units, strata and weights, or provide a design compatible "
+                "with the selected method."
+            ],
+            alternatives=select_methods(
+                objective_type, outcome_type, predictor_type, group_count,
+                independent_groups, study_design, available_variable_roles,
+                sampling_design,
+            ),
+            catalogue=registered_metadata,
         )
 
     specification = registry_method.statistical_specification or {}
@@ -465,6 +532,7 @@ def assess_preferred_method(
             alternatives=select_methods(
                 objective_type, outcome_type, predictor_type, group_count,
                 independent_groups, study_design, available_variable_roles,
+                sampling_design,
             ),
             catalogue=_catalogue_metadata(method),
         )
@@ -480,6 +548,7 @@ def assess_preferred_method(
             alternatives=select_methods(
                 objective_type, outcome_type, predictor_type, group_count,
                 independent_groups, study_design, available_variable_roles,
+                sampling_design,
             ),
             catalogue=_catalogue_metadata(method),
         )
@@ -495,6 +564,7 @@ def assess_preferred_method(
             alternatives=select_methods(
                 objective_type, outcome_type, predictor_type, group_count,
                 independent_groups, study_design, available_variable_roles,
+                sampling_design,
             ),
             catalogue=_catalogue_metadata(method),
         )
@@ -518,6 +588,7 @@ def assess_preferred_method(
             alternatives=select_methods(
                 objective_type, outcome_type, predictor_type, group_count,
                 independent_groups, study_design, available_variable_roles,
+                sampling_design,
             ),
             catalogue=_catalogue_metadata(method),
         )
@@ -543,6 +614,7 @@ def assess_preferred_method(
             alternatives=select_methods(
                 objective_type, outcome_type, predictor_type, group_count,
                 independent_groups, study_design, available_variable_roles,
+                sampling_design,
             ),
             catalogue=_catalogue_metadata(method),
         )
@@ -581,6 +653,7 @@ def assess_preferred_method(
                 independent_groups,
                 study_design,
                 available_variable_roles,
+                sampling_design,
             ),
             catalogue=_catalogue_metadata(method),
         )
