@@ -10,6 +10,7 @@ from timan_intelligence.core.numeric_association import run_numeric_association
 from timan_intelligence.core.simple_regression import run_simple_linear_regression
 from timan_intelligence.core.multiple_regression import run_multiple_linear_regression
 from timan_intelligence.core.binary_logistic_regression import run_binary_logistic_regression
+from timan_intelligence.core.ordinal_logistic_regression import run_ordinal_logistic_regression
 from timan_intelligence.core.regression_diagnostics import run_regression_diagnostics
 from timan_intelligence.core.survey_profiler import (
     profile_survey_dataframe,
@@ -315,6 +316,38 @@ def run_binary_logistic_regression_service(
         limitations=list(output["warnings"]),
         metadata=metadata,
     )
+
+
+def run_ordinal_logistic_regression_service(
+    df: pd.DataFrame,
+    predictor_variables: list[str],
+    outcome_variable: str,
+    ordered_categories: list,
+) -> AnalysisResult:
+    """Run a shared proportional-odds ordinal logistic regression model."""
+    output = run_ordinal_logistic_regression(
+        df, predictor_variables, outcome_variable, ordered_categories
+    )
+    metadata = output["metadata"]
+    return AnalysisResult(
+        title=f"Ordinal logistic regression: {outcome_variable}",
+        method="Cumulative-logit proportional-odds ordinal logistic regression",
+        status="success",
+        tables={
+            "coefficients": output["coefficients"],
+            "fitted_data": output["fitted_data"],
+            "category_probabilities": output["category_probabilities"],
+        },
+        findings=list(output["findings"]),
+        assumptions=[
+            "The outcome categories have a meaningful order supplied by the analyst.",
+            "The proportional-odds assumption holds: predictor effects are common across cumulative category splits.",
+            "Observations are independent; predictors are appropriately specified and do not exhibit perfect multicollinearity.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata=metadata,
+    )
+
 
 def run_regression_diagnostics_service(
     fitted_data: pd.DataFrame,
