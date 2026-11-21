@@ -39,6 +39,7 @@ from timan_intelligence.services.analysis_service import (
     run_categorical_comparison,
     run_numeric_group_comparison_service,
     run_numeric_association_service,
+    run_simple_linear_regression_service,
 )
 from timan_intelligence.entitlements.subscriptions import process_due_subscriptions
 from timan_intelligence.entitlements.service import (
@@ -1424,6 +1425,150 @@ def render_numeric_association(df):
             st.warning(warning)
 
 
+
+def render_simple_linear_regression(df):
+    """Render guided one-predictor linear regression."""
+    st.subheader("Estimate an outcome using one numeric predictor")
+    st.write(
+        "Simple linear regression estimates how a numeric outcome changes "
+        "with one numeric predictor. For example, it can estimate the average "
+        "change in assessment score associated with an additional training hour, "
+        "or the change in expenditure associated with household income."
+    )
+    numeric_candidates = [
+        column for column in df.select_dtypes(include="number").columns
+        if not pd.api.types.is_bool_dtype(df[column].dtype)
+    ]
+    if len(numeric_candidates) < 2:
+        st.info(
+            "Regression requires at least two numeric variables: one predictor "
+            "and one outcome."
+        )
+        return
+
+    left, right = st.columns(2)
+    predictor_variable = left.selectbox(
+        "Predictor variable (X)",
+        numeric_candidates,
+        key="simple_regression_predictor",
+        help="The variable used to estimate or explain variation in the outcome.",
+    )
+    outcome_options = [item for item in numeric_candidates if item != predictor_variable]
+    outcome_variable = right.selectbox(
+        "Outcome variable (Y)",
+        outcome_options,
+        key="simple_regression_outcome",
+        help="The numeric variable the model will estimate.",
+    )
+    st.caption(
+        "The direction matters: predicting Y from X is not the same model as "
+        "predicting X from Y. At least three complete finite records are required."
+    )
+
+    dataset_key = _dataset_analysis_key(df)
+    result_key = f"timanstat_simple_regression_{dataset_key}"
+    if st.button(
+        "Run linear regression",
+        type="primary",
+        key="run_simple_linear_regression",
+    ):
+        try:
+            regression = run_simple_linear_regression_service(
+                df,
+                str(predictor_variable),
+                str(outcome_variable),
+            )
+        except (TypeError, ValueError) as exc:
+            st.error(str(exc))
+        except Exception:
+            st.error(
+                "The regression model could not be estimated. "
+                "No model results have been reported."
+            )
+        else:
+            st.session_state[result_key] = {
+                "predictor_variable": predictor_variable,
+                "outcome_variable": outcome_variable,
+                "result": regression,
+            }
+
+    saved = st.session_state.get(result_key)
+    if not saved:
+        st.info("Choose X and Y, then run the regression model.")
+        return
+    if (
+        saved["predictor_variable"] != predictor_variable
+        or saved["outcome_variable"] != outcome_variable
+    ):
+        st.info("Run the model again to apply the changed variable selection.")
+        return
+
+    result = saved["result"]
+    metadata = result.metadata
+    st.markdown("#### Model results")
+    metrics = st.columns(4)
+    metrics[0].metric("Complete records", f"{metadata['valid_n']:,}")
+    metrics[1].metric("R²", f"{metadata['r_squared']:.4f}")
+    metrics[2].metric("Adjusted R²", f"{metadata['adjusted_r_squared']:.4f}")
+    metrics[3].metric("RMSE", f"{metadata['rmse']:.4g}")
+
+    slope_ci = metadata["slope_confidence_interval_95"]
+    st.markdown("#### Estimated coefficients")
+    st.dataframe(result.tables["coefficients"], use_container_width=True)
+    st.caption(
+        f"Estimated equation: {outcome_variable} = "
+        f"{metadata['intercept']:.4g} + "
+        f"({metadata['slope']:.4g} × {predictor_variable}). "
+        f"Slope p-value: {metadata['slope_p_value']:.4g}; "
+        f"slope 95% confidence interval: [{slope_ci[0]:.4g}, {slope_ci[1]:.4g}]."
+    )
+
+    st.markdown("#### Observed values and fitted line")
+    fitted = result.tables["fitted_data"]
+    observed = fitted[[predictor_variable, outcome_variable]]
+    st.scatter_chart(
+        observed,
+        x=predictor_variable,
+        y=outcome_variable,
+        use_container_width=True,
+    )
+    fitted_line = fitted[[predictor_variable, "Fitted outcome"]].drop_duplicates(
+        subset=[predictor_variable]
+    ).set_index(predictor_variable)
+    st.line_chart(fitted_line, use_container_width=True)
+    st.caption(
+        "The scatterplot shows observed records. The fitted line shows model "
+        "estimates over the observed predictor range."
+    )
+
+    st.markdown("#### Residual review")
+    residuals = fitted[[predictor_variable, "Residual"]].copy()
+    st.scatter_chart(
+        residuals,
+        x=predictor_variable,
+        y="Residual",
+        use_container_width=True,
+    )
+    st.caption(
+        "Residuals are observed minus fitted outcomes. Look for curvature, "
+        "changing spread, clusters and unusually large residuals."
+    )
+
+    st.markdown("#### Interpretation")
+    for finding in result.findings:
+        st.write(f"• {finding}")
+    st.info(
+        "R² describes the proportion of observed outcome variation explained "
+        "by this fitted model; it does not show causation or prove that the "
+        "model is appropriate. A statistically significant slope is not "
+        "necessarily practically important."
+    )
+    if result.limitations:
+        st.markdown("#### Assumptions and limitations")
+        for warning in result.limitations:
+            st.warning(warning)
+
+
 def show_under_development(page, purpose):
     """Display an honest status page for an unfinished module."""
     st.title(page)
@@ -2710,6 +2855,8 @@ elif page == "Descriptive Statistics":
             render_numeric_group_comparison(df)
             st.divider()
             render_numeric_association(df)
+            st.divider()
+            render_simple_linear_regression(df)
 
 
 # VISUALISATIONS
