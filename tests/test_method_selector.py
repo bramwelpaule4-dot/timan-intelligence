@@ -259,3 +259,31 @@ def test_catalogued_method_without_assessment_rules_is_not_declared_eligible():
         "method.inference.confidence_interval.mean"
     )
     assert "not yet been added" in result.rationale
+
+def test_catalogue_metadata_exposes_variable_roles_and_design_constraints():
+    result = assess_preferred_method(
+        preferred_method="Paired-samples t-test",
+        objective_type="comparison",
+        outcome_type="numeric",
+    )
+
+    assert result.catalogue["outcome_types"] == ["numeric"]
+    assert "paired_measurement_before" in result.catalogue["required_variable_roles"]
+    assert result.catalogue["compatible_study_designs"] == [
+        "paired",
+        "repeated_measure",
+    ]
+
+
+def test_preferred_method_is_rejected_when_confirmed_design_conflicts_with_catalogue():
+    result = assess_preferred_method(
+        preferred_method="Paired-samples t-test",
+        objective_type="comparison",
+        outcome_type="numeric",
+        group_count=2,
+        independent_groups=True,
+        study_design="independent",
+    )
+
+    assert result.eligibility == INELIGIBLE
+    assert "not catalogued" in result.rationale.lower()
