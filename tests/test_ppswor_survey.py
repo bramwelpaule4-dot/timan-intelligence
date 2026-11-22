@@ -351,3 +351,82 @@ def test_ppswor_domain_total_service_returns_domain_metadata():
     assert result.metadata["domain_parameter"] == "total"
     assert result.metadata["domain_estimation"] is True
     assert len(result.tables["pairwise_variance"]) == 3
+
+
+
+def test_ppswor_domain_total_reports_precision_and_zero_value_diagnostics():
+    from timan_intelligence.core.ppswor_survey import estimate_ppswor_domain_total
+
+    df, joint = ppswor_fixture()
+    df["domain_total"] = [10.0, 0.0, 30.0]
+    result = estimate_ppswor_domain_total(
+        df, "Women", "domain_total", "psu", "pi", joint, "stratum",
+    )
+
+    diagnostics = result["diagnostics"].iloc[0]
+    assert diagnostics["sampled_psus"] == 3
+    assert diagnostics["psus_with_zero_domain_value"] == 1
+    assert diagnostics["zero_domain_value_percent"] == pytest.approx(100 / 3)
+    assert diagnostics["coefficient_of_variation_percent"] == pytest.approx(
+        result["standard_error"] / abs(result["estimate"]) * 100
+    )
+    assert result["strata"]["variance_share_percent"].sum() == pytest.approx(100)
+    assert result["pairwise_variance"]["variance_share_percent"].sum() == pytest.approx(100)
+    assert "precision_diagnostics" in result["metadata"]
+    assert any("zero" in warning.lower() for warning in result["warnings"])
+
+
+def test_ppswor_domain_ratio_reports_zero_denominators_and_linearised_variance_shares():
+    from timan_intelligence.core.ppswor_survey import estimate_ppswor_domain_ratio
+
+    df_a, joint_a = ppswor_fixture()
+    df_b, joint_b = ppswor_fixture()
+    df_a["domain_num"] = [2.0, 0.0, 8.0]
+    df_a["domain_den"] = [10.0, 0.0, 20.0]
+    df_b["stratum"] = "B"
+    df_b["psu"] = ["Q1", "Q2", "Q3"]
+    df_b["domain_num"] = [1.0, 3.0, 0.0]
+    df_b["domain_den"] = [5.0, 15.0, 0.0]
+    joint_b.index = ["Q1", "Q2", "Q3"]
+    joint_b.columns = ["Q1", "Q2", "Q3"]
+    combined = pd.concat([df_a, df_b], ignore_index=True)
+
+    result = estimate_ppswor_domain_ratio(
+        combined, "Youth", "domain_num", "domain_den", "psu", "pi",
+        {"A": joint_a, "B": joint_b}, "stratum", parameter="proportion",
+    )
+    diagnostics = result["diagnostics"].iloc[0]
+    assert diagnostics["psus_with_zero_domain_value"] == 2
+    assert diagnostics["sampled_psus"] == 6
+    assert result["strata"]["variance_share_percent"].sum() == pytest.approx(100)
+    assert result["pairwise_variance"]["variance_share_percent"].sum() == pytest.approx(100)
+    assert result["strata"]["estimated_ratio_variance"].sum() == pytest.approx(
+        result["variance"]
+    )
+    assert "precision_diagnostics" in result["metadata"]
+
+
+def test_ppswor_domain_total_zero_estimate_has_undefined_cv_not_infinite_value():
+    from timan_intelligence.core.ppswor_survey import estimate_ppswor_domain_total
+
+    df, joint = ppswor_fixture()
+    df["domain_total"] = [0.0, 0.0, 0.0]
+    result = estimate_ppswor_domain_total(
+        df, "Empty domain", "domain_total", "psu", "pi", joint, "stratum",
+    )
+    diagnostics = result["diagnostics"].iloc[0]
+    assert result["estimate"] == pytest.approx(0.0)
+    assert diagnostics["coefficient_of_variation_percent"] is None
+    assert diagnostics["relative_confidence_interval_half_width_percent"] is None
+
+
+def test_ppswor_domain_total_service_exposes_diagnostics_table():
+    from timan_intelligence.services.analysis_service import run_ppswor_domain_total_service
+
+    df, joint = ppswor_fixture()
+    df["domain_total"] = [10.0, 0.0, 30.0]
+    result = run_ppswor_domain_total_service(
+        df, "Women", "domain_total", "psu", "pi", joint, "stratum",
+    )
+    assert "diagnostics" in result.tables
+    assert result.tables["diagnostics"].iloc[0]["psus_with_zero_domain_value"] == 1
