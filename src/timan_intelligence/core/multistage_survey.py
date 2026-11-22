@@ -325,3 +325,151 @@ def estimate_two_stage_total(
             "variance_stage_2": float(sum(x["stage2_variance"] for x in strata_results)),
         },
     }
+
+
+def _estimate_two_stage_ratio(
+    df: pd.DataFrame,
+    numerator_variable: str,
+    denominator_variable: str,
+    psu_variable: str,
+    ssu_variable: str,
+    psu_population_count_variable: str,
+    ssu_population_count_variable: str,
+    strata_variable: str | None,
+    confidence_level: float,
+    require_proportion: bool = False,
+) -> dict[str, Any]:
+    """Taylor-linearised ratio estimator for two-stage SRSWOR samples.
+
+    Numerator and denominator columns must contain SSU-level totals/counts,
+    with one row per sampled SSU. The denominator is the number of eligible
+    population elements enumerated in each sampled SSU.
+    """
+    if numerator_variable == denominator_variable:
+        raise ValueError("Numerator and denominator variables must be different.")
+    required = [numerator_variable, denominator_variable]
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        raise KeyError(f"Variables not found: {', '.join(missing)}.")
+    numerator = pd.to_numeric(df[numerator_variable], errors="coerce")
+    denominator = pd.to_numeric(df[denominator_variable], errors="coerce")
+    if numerator.isna().any() or not np.isfinite(numerator.to_numpy(dtype=float)).all():
+        raise ValueError("Numerator SSU totals must be complete, numeric and finite.")
+    if denominator.isna().any() or not np.isfinite(denominator.to_numpy(dtype=float)).all():
+        raise ValueError("Denominator SSU counts must be complete, numeric and finite.")
+    if (denominator <= 0).any():
+        raise ValueError("Every sampled SSU must contain a positive eligible-element count.")
+    if require_proportion and ((numerator < 0).any() or (numerator > denominator).any()):
+        raise ValueError("For a proportion, successes in each SSU must be between zero and its eligible-element count.")
+
+    work = df.copy()
+    numerator_col = "__timanstat_ratio_numerator__"
+    denominator_col = "__timanstat_ratio_denominator__"
+    linearized_col = "__timanstat_ratio_linearized__"
+    reserved = {numerator_col, denominator_col, linearized_col}
+    if reserved.intersection(work.columns):
+        raise ValueError("Dataset contains reserved internal column names; rename those columns and retry.")
+    work[numerator_col] = numerator.astype(float)
+    work[denominator_col] = denominator.astype(float)
+
+    common = (
+        psu_variable, ssu_variable, psu_population_count_variable,
+        ssu_population_count_variable, strata_variable, confidence_level,
+    )
+    numerator_result = estimate_two_stage_total(
+        work, numerator_col, common[0], common[1], common[2], common[3], common[4], common[5]
+    )
+    denominator_result = estimate_two_stage_total(
+        work, denominator_col, common[0], common[1], common[2], common[3], common[4], common[5]
+    )
+    denominator_total = denominator_result["estimate"]
+    numerator_total = numerator_result["estimate"]
+    if not np.isfinite(denominator_total) or denominator_total <= 0:
+        raise ValueError("Estimated population denominator must be positive.")
+    ratio = numerator_total / denominator_total
+    work[linearized_col] = work[numerator_col] - ratio * work[denominator_col]
+    linearized_result = estimate_two_stage_total(
+        work, linearized_col, common[0], common[1], common[2], common[3], common[4], common[5]
+    )
+    variance = max(0.0, linearized_result["variance"] / (denominator_total ** 2))
+    standard_error = float(np.sqrt(variance))
+    df_design = int(linearized_result["degrees_of_freedom"])
+    critical = float(stats.t.ppf(0.5 + confidence_level / 2.0, df_design))
+    lower = ratio - critical * standard_error
+    upper = ratio + critical * standard_error
+    if require_proportion:
+        lower, upper = max(0.0, lower), min(1.0, upper)
+    kind = "proportion" if require_proportion else "mean"
+    return {
+        "estimate": float(ratio),
+        "numerator_total": float(numerator_total),
+        "denominator_total": float(denominator_total),
+        "variance": float(variance),
+        "standard_error": standard_error,
+        "confidence_interval": (float(lower), float(upper)),
+        "confidence_level": float(confidence_level),
+        "degrees_of_freedom": df_design,
+        "strata": linearized_result["strata"],
+        "psu_details": linearized_result["psu_details"],
+        "findings": [
+            f"Estimated population {kind}: {ratio:,.4g}.",
+            f"Estimated numerator total: {numerator_total:,.4g}; estimated denominator total: {denominator_total:,.4g}.",
+            f"Taylor-linearised standard error: {standard_error:,.4g}.",
+            f"{confidence_level:.0%} t confidence interval: [{lower:,.4g}, {upper:,.4g}].",
+        ],
+        "warnings": [
+            "Assumes independent SRSWOR of PSUs within strata and SRSWOR of SSUs within sampled PSUs.",
+            "Each row must be one sampled SSU; numerator and denominator values must be fully enumerated SSU-level totals.",
+            "The ratio variance uses first- and second-stage finite population corrections and Taylor linearisation of the ratio.",
+            "The confidence interval uses sum_h(n_h - 1) design degrees of freedom; coverage can be approximate with few PSUs.",
+            "No PPS, certainty-PSU treatment, respondent subsampling within SSUs, calibration, nonresponse adjustment, replicate weights or domain estimation.",
+        ],
+        "metadata": {
+            "estimator": f"Two-stage Taylor-linearised {kind} ratio estimator with stage-specific FPCs",
+            "number_of_strata": int(len(linearized_result["strata"])),
+            "number_of_psus": int(len(linearized_result["psu_details"])),
+            "number_of_ssus": int(len(work)),
+            "degrees_of_freedom": df_design,
+            "variance_method": "Taylor linearisation of y - R*x",
+            "variance_stage_1": float(linearized_result["metadata"]["variance_stage_1"] / denominator_total**2),
+            "variance_stage_2": float(linearized_result["metadata"]["variance_stage_2"] / denominator_total**2),
+        },
+    }
+
+
+def estimate_two_stage_mean(
+    df: pd.DataFrame,
+    outcome_total_variable: str,
+    element_count_variable: str,
+    psu_variable: str,
+    ssu_variable: str,
+    psu_population_count_variable: str,
+    ssu_population_count_variable: str,
+    strata_variable: str | None = None,
+    confidence_level: float = 0.95,
+) -> dict[str, Any]:
+    """Estimate a population element mean from SSU outcome totals and sizes."""
+    return _estimate_two_stage_ratio(
+        df, outcome_total_variable, element_count_variable, psu_variable,
+        ssu_variable, psu_population_count_variable, ssu_population_count_variable,
+        strata_variable, confidence_level, False,
+    )
+
+
+def estimate_two_stage_proportion(
+    df: pd.DataFrame,
+    successes_variable: str,
+    eligible_count_variable: str,
+    psu_variable: str,
+    ssu_variable: str,
+    psu_population_count_variable: str,
+    ssu_population_count_variable: str,
+    strata_variable: str | None = None,
+    confidence_level: float = 0.95,
+) -> dict[str, Any]:
+    """Estimate a population proportion from SSU successes and eligible counts."""
+    return _estimate_two_stage_ratio(
+        df, successes_variable, eligible_count_variable, psu_variable,
+        ssu_variable, psu_population_count_variable, ssu_population_count_variable,
+        strata_variable, confidence_level, True,
+    )
