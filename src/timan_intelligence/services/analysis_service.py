@@ -769,3 +769,43 @@ def run_cluster_weighted_frequency_service(
         limitations=list(output["warnings"]),
         metadata=output["metadata"],
     )
+
+
+def run_two_stage_survey_design_inspection_service(
+    df: pd.DataFrame,
+    psu_variable: str,
+    ssu_variable: str,
+    weight_variable: str,
+    strata_variable: str | None = None,
+    psu_population_count_variable: str | None = None,
+    ssu_population_count_variable: str | None = None,
+) -> AnalysisResult:
+    """Validate and describe a two-stage survey design without inferential claims."""
+    from timan_intelligence.core.multistage_survey import inspect_two_stage_design
+
+    output = inspect_two_stage_design(
+        df,
+        psu_variable,
+        ssu_variable,
+        weight_variable,
+        strata_variable,
+        psu_population_count_variable,
+        ssu_population_count_variable,
+    )
+    return AnalysisResult(
+        title="Two-stage survey design inspection",
+        method="Two-stage sample hierarchy and sampling-fraction validation",
+        status="success",
+        tables={
+            "psu_summary": output["psu_summary"],
+            "ssu_summary": output["ssu_summary"],
+        },
+        findings=list(output["findings"]),
+        assumptions=[
+            "Each sampled SSU identifier is unique within its stratum and belongs to one PSU.",
+            "Population-count fields, when supplied, describe the relevant stage-specific sampling frame.",
+            "The supplied positive weights are final analysis weights; this inspection does not reconstruct them.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata=output["metadata"],
+    )
