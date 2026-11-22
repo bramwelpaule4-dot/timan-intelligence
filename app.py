@@ -859,10 +859,10 @@ MODULES = {
         "domains; inspect weighting diagnostics and download technical PDF reports.",
     ),
     "Statistical Inference": (
-        "Under development — general-purpose inference",
-        "A general-purpose inference workspace for standalone confidence intervals, "
-        "hypothesis tests and association analyses is not yet operational. "
-        "Design-based inference for supported survey designs is available in Survey Analysis.",
+        "Partially available — initial independent-sample procedures",
+        "A model-based mean confidence interval, Welch's independent-samples t-test "
+        "and one-way ANOVA are available for independent observations. "
+        "Complex survey inference and other planned methods remain under development.",
     ),
     "Research & Modelling": (
         "Under development",
