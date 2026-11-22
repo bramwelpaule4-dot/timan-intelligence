@@ -511,6 +511,7 @@ def run_mann_whitney_u_test(
         f"Directional rank-biserial correlation is {rank_biserial:.3f}; positive values indicate higher ranks in group 1.",
     ]
     return AnalysisResult(
+        title=f"Mann–Whitney U test: {outcome_variable} by {group_variable}",
         status="success", method="Mann–Whitney U test", tables={"test": summary},
         findings=findings, assumptions=assumptions, limitations=limitations,
         metadata={

@@ -242,8 +242,8 @@ def test_candidates_include_authoritative_catalogue_lifecycle_metadata():
     )
     assert welch.catalogue["implementation_status"] == "implemented"
     assert welch.catalogue["execution_eligibility"] == "conditional"
-    assert mann_whitney.catalogue["implementation_status"] == "planned"
-    assert mann_whitney.catalogue["execution_eligibility"] == "not_assessed"
+    assert mann_whitney.catalogue["implementation_status"] == "implemented"
+    assert mann_whitney.catalogue["execution_eligibility"] == "conditional"
     assert mann_whitney.catalogue["sampling_design_aware"] is False
 
 

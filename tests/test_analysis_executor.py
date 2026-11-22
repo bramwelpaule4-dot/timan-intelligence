@@ -218,10 +218,9 @@ def test_execution_blocks_catalogued_but_unimplemented_method():
         "group": ["A", "A", "A", "B", "B", "B"],
     })
     recommendation = {
-        "method": "Mann–Whitney U test",
+        "method": "Kruskal–Wallis test",
         "variables": ["score", "group"],
         "status": "review_required",
-        "method_id": "method.inference.comparison.mann_whitney",
     }
 
     with pytest.raises(AnalysisExecutionError, match="does not yet"):

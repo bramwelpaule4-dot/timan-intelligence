@@ -290,8 +290,8 @@ def test_planner_exposes_registry_status_for_each_recommendation():
         "method.inference.comparison.t_test.independent.welch"
     )
     assert recommendations["Independent-samples t-test"]["implementation_status"] == "implemented"
-    assert recommendations["Mann–Whitney U test"]["implementation_status"] == "planned"
-    assert recommendations["Mann–Whitney U test"]["execution_eligibility"] == "not_assessed"
+    assert recommendations["Mann–Whitney U test"]["implementation_status"] == "implemented"
+    assert recommendations["Mann–Whitney U test"]["execution_eligibility"] == "conditional"
 
 
 def test_planner_exposes_registry_metadata_for_descriptive_recommendations():
