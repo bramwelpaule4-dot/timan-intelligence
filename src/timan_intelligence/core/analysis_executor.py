@@ -19,6 +19,7 @@ from timan_intelligence.core.statistical_engine import (
     run_mean_confidence_interval,
     run_proportion_confidence_interval,
     run_welch_mean_difference_confidence_interval,
+    run_paired_mean_difference_confidence_interval,
     run_one_way_anova,
 )
 
@@ -32,6 +33,7 @@ _EXECUTOR_BY_METHOD_ID = {
     "method.inference.confidence_interval.mean": "mean_ci",
     "method.inference.confidence_interval.proportion": "proportion_ci",
     "method.inference.confidence_interval.mean_difference.welch": "welch_mean_difference_ci",
+    "method.inference.confidence_interval.mean_difference.paired": "paired_mean_difference_ci",
     "method.inference.comparison.t_test.independent.welch": "welch_t",
     "method.inference.comparison.anova.one_way": "anova",
 }
@@ -83,7 +85,7 @@ def _validate_design_compatibility(
         "paired", "repeated_measure", "repeated_measures",
         "longitudinal", "time_series",
     }
-    if executor in {"welch_t", "anova"} and study_design in repeated_designs:
+    if executor in {"welch_t", "anova", "welch_mean_difference_ci"} and study_design in repeated_designs:
         raise AnalysisExecutionError(
             "Execution blocked: this executor assumes independent groups and "
             "is not validated for paired, repeated-measures, longitudinal or "
@@ -214,6 +216,17 @@ def execute_recommendation(
         )
         result = run_proportion_confidence_interval(
             df, variables[0], confidence_level=confidence_level
+        )
+    elif executor == "paired_mean_difference_ci":
+        if len(variables) != 2:
+            raise AnalysisExecutionError(
+                "A paired mean-change interval requires before and after measurement variables."
+            )
+        confidence_level = (recommendation.get("options") or {}).get(
+            "confidence_level", 0.95
+        )
+        result = run_paired_mean_difference_confidence_interval(
+            df, variables[0], variables[1], confidence_level=confidence_level
         )
     elif executor == "welch_mean_difference_ci":
         if len(variables) != 2:
