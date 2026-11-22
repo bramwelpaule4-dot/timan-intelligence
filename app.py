@@ -46,6 +46,9 @@ from timan_intelligence.services.analysis_service import (
     run_two_stage_survey_total_service,
     run_two_stage_survey_mean_service,
     run_two_stage_survey_proportion_service,
+    run_two_stage_survey_domain_total_service,
+    run_two_stage_survey_domain_mean_service,
+    run_two_stage_survey_domain_proportion_service,
     run_categorical_comparison,
     run_numeric_group_comparison_service,
     run_numeric_association_service,
@@ -4234,6 +4237,142 @@ elif page == "Survey Analysis":
                         st.info("Add a numeric eligible-element count for each sampled SSU to estimate a population proportion.")
                 else:
                     st.info("No eligible numeric SSU outcome variable is available.")
+
+        st.divider()
+        st.subheader("Two-stage survey domain estimation")
+        st.write(
+            "Estimate totals, means or proportions for an SSU-level subpopulation. "
+            "The estimator retains every sampled SSU—including those outside the "
+            "selected domain—when calculating design-based variance."
+        )
+        st.caption(
+            "Domain membership must be constant within each SSU in this version. "
+            "For person-level subgroups within mixed households or clusters, first "
+            "prepare SSU-level domain-specific outcome and eligible-count totals."
+        )
+        domain_excluded = {
+            ms_weight, ms_psu, ms_ssu, ms_strata,
+            ms_psu_population, ms_ssu_population,
+        }
+        domain_variable_options = [x for x in ms_cols if x not in domain_excluded]
+        if ms_psu_population is not None and ms_ssu_population is not None and domain_variable_options:
+            domain_variable = st.selectbox(
+                "Domain classification variable", domain_variable_options,
+                key="multistage_domain_variable",
+            )
+            domain_values = df[domain_variable].dropna().unique().tolist()
+            if domain_values:
+                domain_value = st.selectbox(
+                    "Subpopulation to estimate", domain_values,
+                    format_func=str, key="multistage_domain_value",
+                )
+                domain_kind = st.selectbox(
+                    "Domain parameter", ["Total", "Mean", "Proportion"],
+                    key="multistage_domain_kind",
+                )
+                domain_outcome_options = [
+                    x for x in ms_numeric
+                    if x not in domain_excluded and x != domain_variable
+                ]
+                if domain_outcome_options:
+                    domain_outcome = st.selectbox(
+                        "Domain outcome / numerator total", domain_outcome_options,
+                        key="multistage_domain_outcome",
+                    )
+                    domain_denominator_options = [
+                        x for x in domain_outcome_options if x != domain_outcome
+                    ]
+                    domain_denominator = None
+                    if domain_kind in ("Mean", "Proportion") and domain_denominator_options:
+                        domain_denominator = st.selectbox(
+                            "Domain eligible-element count", domain_denominator_options,
+                            key="multistage_domain_denominator",
+                        )
+                    elif domain_kind in ("Mean", "Proportion"):
+                        st.info("A separate numeric eligible-element count is required.")
+                    domain_key = (
+                        _dataset_analysis_key(df), domain_kind, domain_variable,
+                        str(domain_value), domain_outcome, domain_denominator,
+                        ms_psu, ms_ssu, ms_strata, ms_psu_population,
+                        ms_ssu_population, ms_confidence,
+                    )
+                    can_run_domain = domain_kind == "Total" or domain_denominator is not None
+                    if can_run_domain and st.button(
+                        f"Estimate two-stage domain {domain_kind.lower()}",
+                        type="primary", key="run_two_stage_domain",
+                    ):
+                        try:
+                            common_domain_args = (
+                                df, domain_outcome, domain_variable, domain_value,
+                                ms_psu, ms_ssu, ms_psu_population,
+                                ms_ssu_population, ms_strata, ms_confidence,
+                            )
+                            if domain_kind == "Total":
+                                domain_result = run_two_stage_survey_domain_total_service(
+                                    *common_domain_args
+                                )
+                            elif domain_kind == "Mean":
+                                domain_result = run_two_stage_survey_domain_mean_service(
+                                    df, domain_outcome, domain_denominator,
+                                    domain_variable, domain_value, ms_psu, ms_ssu,
+                                    ms_psu_population, ms_ssu_population,
+                                    ms_strata, ms_confidence,
+                                )
+                            else:
+                                domain_result = run_two_stage_survey_domain_proportion_service(
+                                    df, domain_outcome, domain_denominator,
+                                    domain_variable, domain_value, ms_psu, ms_ssu,
+                                    ms_psu_population, ms_ssu_population,
+                                    ms_strata, ms_confidence,
+                                )
+                            st.session_state["two_stage_domain_result"] = domain_result
+                            st.session_state["two_stage_domain_result_key"] = domain_key
+                        except (TypeError, ValueError, KeyError) as exc:
+                            st.error(str(exc))
+                    saved_domain = st.session_state.get("two_stage_domain_result")
+                    if (
+                        saved_domain is not None
+                        and st.session_state.get("two_stage_domain_result_key") == domain_key
+                    ):
+                        domain_estimate = saved_domain.metadata["estimate"]
+                        st.metric(
+                            f"Estimated domain {domain_kind.lower()}",
+                            f"{domain_estimate:.2%}" if domain_kind == "Proportion"
+                            else f"{domain_estimate:,.4g}",
+                        )
+                        st.metric(
+                            "Design-based standard error",
+                            f"{saved_domain.metadata['standard_error']:.4g}",
+                        )
+                        domain_ci = saved_domain.metadata["confidence_interval"]
+                        if domain_kind == "Proportion":
+                            st.write(
+                                f"{ms_confidence:.0%} confidence interval: "
+                                f"[{domain_ci[0]:.2%}, {domain_ci[1]:.2%}]"
+                            )
+                        else:
+                            st.write(
+                                f"{ms_confidence:.0%} confidence interval: "
+                                f"[{domain_ci[0]:,.4g}, {domain_ci[1]:,.4g}]"
+                            )
+                        st.dataframe(
+                            saved_domain.tables["stratum_estimates"],
+                            hide_index=True, use_container_width=True,
+                        )
+                        with st.expander("Domain PSU-level design details"):
+                            st.dataframe(
+                                saved_domain.tables["psu_details"],
+                                hide_index=True, use_container_width=True,
+                            )
+                        for warning in saved_domain.limitations:
+                            st.warning(warning)
+            else:
+                st.info("The selected domain variable has no observed non-missing values.")
+        else:
+            st.info(
+                "Domain estimation requires both stage population counts and "
+                "a domain classification variable."
+            )
 
         st.info(
             "Unweighted question-level frequencies above describe the imported "
