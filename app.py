@@ -44,6 +44,8 @@ from timan_intelligence.services.analysis_service import (
     run_cluster_weighted_frequency_service,
     run_two_stage_survey_design_inspection_service,
     run_two_stage_survey_total_service,
+    run_two_stage_survey_mean_service,
+    run_two_stage_survey_proportion_service,
     run_categorical_comparison,
     run_numeric_group_comparison_service,
     run_numeric_association_service,
@@ -3931,7 +3933,7 @@ elif page == "Survey Analysis":
             "Validate a two-stage sample hierarchy: respondents or sampled "
             "secondary units (SSUs) nested within primary sampling units (PSUs). "
             "This tool checks design metadata and optional stage sampling "
-            "fractions; it does not yet calculate multistage standard errors."
+            "fractions and design-based totals, means and proportions with Taylor-linearised standard errors."
         )
         ms_numeric = list(df.select_dtypes(include="number").columns)
         ms_cols = list(df.columns)
@@ -4116,6 +4118,112 @@ elif page == "Survey Analysis":
                             st.write(f"• {finding}")
                         for warning in saved_total.limitations:
                             st.warning(warning)
+
+                    st.divider()
+                    st.subheader("Two-stage population mean")
+                    st.write(
+                        "Estimate the mean per eligible population element. Supply an "
+                        "SSU-level outcome total and the number of eligible elements "
+                        "enumerated in each sampled SSU."
+                    )
+                    ratio_denominator_options = [
+                        x for x in ms_numeric
+                        if x not in (
+                            ms_weight, ms_psu_population, ms_ssu_population,
+                            ms_psu, ms_ssu, ms_strata,
+                        )
+                    ]
+                    if ratio_denominator_options:
+                        mean_denominator = st.selectbox(
+                            "Eligible element count in each SSU",
+                            ratio_denominator_options,
+                            key="multistage_mean_denominator",
+                        )
+                        mean_key = (
+                            _dataset_analysis_key(df), ms_outcome, mean_denominator,
+                            ms_psu, ms_ssu, ms_strata, ms_psu_population,
+                            ms_ssu_population, ms_confidence,
+                        )
+                        if st.button(
+                            "Estimate two-stage population mean",
+                            key="run_two_stage_mean",
+                        ):
+                            try:
+                                mean_result = run_two_stage_survey_mean_service(
+                                    df, ms_outcome, mean_denominator, ms_psu, ms_ssu,
+                                    ms_psu_population, ms_ssu_population,
+                                    ms_strata, ms_confidence,
+                                )
+                                st.session_state["two_stage_mean_result"] = mean_result
+                                st.session_state["two_stage_mean_result_key"] = mean_key
+                            except (TypeError, ValueError, KeyError) as exc:
+                                st.error(str(exc))
+                        saved_mean = st.session_state.get("two_stage_mean_result")
+                        if (
+                            saved_mean is not None
+                            and st.session_state.get("two_stage_mean_result_key") == mean_key
+                        ):
+                            st.metric("Estimated population mean", f"{saved_mean.metadata['estimate']:,.4g}")
+                            st.metric("Design-based standard error", f"{saved_mean.metadata['standard_error']:,.4g}")
+                            ci = saved_mean.metadata["confidence_interval"]
+                            st.write(f"{ms_confidence:.0%} confidence interval: [{ci[0]:,.4g}, {ci[1]:,.4g}]")
+                            st.dataframe(saved_mean.tables["stratum_estimates"], hide_index=True, use_container_width=True)
+                            for warning in saved_mean.limitations:
+                                st.warning(warning)
+                    else:
+                        st.info("Add a numeric eligible-element count for each sampled SSU to estimate a population mean.")
+
+                    st.divider()
+                    st.subheader("Two-stage population proportion")
+                    st.write(
+                        "Estimate a proportion from the number of successes and "
+                        "eligible elements enumerated in each sampled SSU. The "
+                        "success count cannot exceed the eligible count."
+                    )
+                    if ratio_denominator_options:
+                        proportion_successes = st.selectbox(
+                            "Number of successes in each SSU",
+                            outcome_options,
+                            key="multistage_proportion_successes",
+                        )
+                        proportion_denominator = st.selectbox(
+                            "Eligible population count in each SSU",
+                            ratio_denominator_options,
+                            key="multistage_proportion_denominator",
+                        )
+                        proportion_key = (
+                            _dataset_analysis_key(df), proportion_successes,
+                            proportion_denominator, ms_psu, ms_ssu, ms_strata,
+                            ms_psu_population, ms_ssu_population, ms_confidence,
+                        )
+                        if st.button(
+                            "Estimate two-stage population proportion",
+                            key="run_two_stage_proportion",
+                        ):
+                            try:
+                                proportion_result = run_two_stage_survey_proportion_service(
+                                    df, proportion_successes, proportion_denominator,
+                                    ms_psu, ms_ssu, ms_psu_population,
+                                    ms_ssu_population, ms_strata, ms_confidence,
+                                )
+                                st.session_state["two_stage_proportion_result"] = proportion_result
+                                st.session_state["two_stage_proportion_result_key"] = proportion_key
+                            except (TypeError, ValueError, KeyError) as exc:
+                                st.error(str(exc))
+                        saved_proportion = st.session_state.get("two_stage_proportion_result")
+                        if (
+                            saved_proportion is not None
+                            and st.session_state.get("two_stage_proportion_result_key") == proportion_key
+                        ):
+                            st.metric("Estimated population proportion", f"{saved_proportion.metadata['estimate']:.2%}")
+                            st.metric("Design-based standard error", f"{saved_proportion.metadata['standard_error']:.4f}")
+                            ci = saved_proportion.metadata["confidence_interval"]
+                            st.write(f"{ms_confidence:.0%} confidence interval: [{ci[0]:.2%}, {ci[1]:.2%}]")
+                            st.dataframe(saved_proportion.tables["stratum_estimates"], hide_index=True, use_container_width=True)
+                            for warning in saved_proportion.limitations:
+                                st.warning(warning)
+                    else:
+                        st.info("Add a numeric eligible-element count for each sampled SSU to estimate a population proportion.")
                 else:
                     st.info("No eligible numeric SSU outcome variable is available.")
 
