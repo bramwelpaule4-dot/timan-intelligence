@@ -88,12 +88,18 @@ def run_poisson_regression(
     eta = np.clip(offset + design @ beta, -30, 30)
     mu = np.exp(eta)
     information = design.T @ (mu[:, None] * design)
-    covariance = np.linalg.pinv(information)
+    covariance_std = np.linalg.pinv(information)
+    # Transform estimates and covariance back to original predictor units.
+    transform = np.eye(p + 1)
+    transform[0, 1:] = -means / scales
+    transform[1:, 1:] = np.diag(1.0 / scales)
+    beta_original = transform @ beta
+    covariance = transform @ covariance_std @ transform.T
     standard_errors = np.sqrt(np.maximum(np.diag(covariance), 0))
-    z_values = np.divide(beta, standard_errors, out=np.zeros_like(beta), where=standard_errors > 0)
+    z_values = np.divide(beta_original, standard_errors, out=np.zeros_like(beta_original), where=standard_errors > 0)
     p_values = 2 * stats.norm.sf(np.abs(z_values))
-    ci_low = beta - stats.norm.ppf(0.975) * standard_errors
-    ci_high = beta + stats.norm.ppf(0.975) * standard_errors
+    ci_low = beta_original - stats.norm.ppf(0.975) * standard_errors
+    ci_high = beta_original + stats.norm.ppf(0.975) * standard_errors
 
     null_rate = y.sum() / np.exp(offset).sum()
     null_mu = np.exp(offset) * null_rate
@@ -112,7 +118,7 @@ def run_poisson_regression(
     for index, name in enumerate(names):
         rows.append({
             "Variable": name,
-            "Coefficient": float(beta[index]),
+            "Coefficient": float(beta_original[index]),
             "Standard error": float(standard_errors[index]),
             "IRR": float(np.exp(np.clip(beta[index], -30, 30))),
             "IRR 95% CI lower": float(np.exp(np.clip(ci_low[index], -30, 30))),
