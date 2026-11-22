@@ -221,3 +221,53 @@ def test_welch_t_test_does_not_modify_original_data():
     )
 
     pd.testing.assert_frame_equal(df, original)
+
+
+def test_mean_confidence_interval_returns_estimate_and_interval():
+    from timan_intelligence.core.statistical_engine import run_mean_confidence_interval
+
+    result = run_mean_confidence_interval(
+        pd.DataFrame({"income": [10, 12, 14, 16, 18]}), "income", 0.95
+    )
+    assert result.status == "success"
+    assert result.metadata["estimate"] == pytest.approx(14.0)
+    assert result.metadata["standard_error"] == pytest.approx(1.41421356237)
+    lower, upper = result.metadata["confidence_interval"]
+    assert lower < 14 < upper
+    assert result.metadata["degrees_of_freedom"] == 4
+    assert result.metadata["sampling_design_aware"] is False
+
+
+def test_mean_confidence_interval_reports_missing_and_infinite_values():
+    from timan_intelligence.core.statistical_engine import run_mean_confidence_interval
+
+    result = run_mean_confidence_interval(
+        pd.DataFrame({"score": [10.0, 20.0, None, float("inf"), 30.0]}),
+        "score",
+    )
+    assert result.metadata["observations"] == 3
+    assert result.metadata["missing_values"] == 1
+    assert result.metadata["infinite_values"] == 1
+    assert any("infinite" in item for item in result.limitations)
+
+
+def test_mean_confidence_interval_validates_input_and_confidence_level():
+    from timan_intelligence.core.statistical_engine import run_mean_confidence_interval
+
+    frame = pd.DataFrame({"score": [1.0, 2.0, 3.0]})
+    with pytest.raises(ValueError, match="less than 1"):
+        run_mean_confidence_interval(frame, "score", 1.0)
+    with pytest.raises(ValueError, match="at least two"):
+        run_mean_confidence_interval(pd.DataFrame({"score": [1.0]}), "score")
+    with pytest.raises(TypeError, match="numeric"):
+        run_mean_confidence_interval(pd.DataFrame({"score": ["a", "b"]}), "score")
+
+
+def test_mean_confidence_interval_service_uses_shared_result_contract():
+    from timan_intelligence.services.analysis_service import run_mean_confidence_interval_service
+
+    result = run_mean_confidence_interval_service(
+        pd.DataFrame({"score": [2.0, 4.0, 6.0, 8.0]}), "score", 0.90
+    )
+    assert result.status == "success"
+    assert result.metadata["confidence_level"] == pytest.approx(0.90)
