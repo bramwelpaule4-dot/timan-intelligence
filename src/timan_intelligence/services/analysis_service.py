@@ -943,3 +943,96 @@ def run_two_stage_survey_proportion_service(
             "confidence_level": output["confidence_level"],
         },
     )
+
+
+def run_two_stage_survey_domain_total_service(
+    df: pd.DataFrame, outcome_variable: str, domain_variable: str,
+    domain_value: Any, psu_variable: str, ssu_variable: str,
+    psu_population_count_variable: str, ssu_population_count_variable: str,
+    strata_variable: str | None = None, confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Return a two-stage design-based domain total."""
+    from timan_intelligence.core.multistage_survey import estimate_two_stage_domain_total
+    output = estimate_two_stage_domain_total(
+        df, outcome_variable, domain_variable, domain_value, psu_variable,
+        ssu_variable, psu_population_count_variable, ssu_population_count_variable,
+        strata_variable, confidence_level,
+    )
+    return AnalysisResult(
+        title=f"Two-stage domain total: {outcome_variable}",
+        method=output["metadata"]["estimator"], status="success",
+        tables={"stratum_estimates": output["strata"], "psu_details": output["psu_details"]},
+        findings=list(output["findings"]),
+        assumptions=[
+            "Domain membership is constant within each SSU.",
+            "PSUs and SSUs are independently selected by SRSWOR at their respective stages.",
+            "All sampled SSUs are retained when estimating domain variance.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata={**output["metadata"], "estimate": output["estimate"],
+                  "variance": output["variance"], "standard_error": output["standard_error"],
+                  "confidence_interval": output["confidence_interval"],
+                  "confidence_level": output["confidence_level"]},
+    )
+
+
+def run_two_stage_survey_domain_mean_service(
+    df: pd.DataFrame, outcome_total_variable: str, element_count_variable: str,
+    domain_variable: str, domain_value: Any, psu_variable: str, ssu_variable: str,
+    psu_population_count_variable: str, ssu_population_count_variable: str,
+    strata_variable: str | None = None, confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Return a two-stage design-based domain mean."""
+    from timan_intelligence.core.multistage_survey import estimate_two_stage_domain_mean
+    output = estimate_two_stage_domain_mean(
+        df, outcome_total_variable, element_count_variable, domain_variable,
+        domain_value, psu_variable, ssu_variable, psu_population_count_variable,
+        ssu_population_count_variable, strata_variable, confidence_level,
+    )
+    return AnalysisResult(
+        title=f"Two-stage domain mean: {outcome_total_variable}",
+        method=output["metadata"]["estimator"], status="success",
+        tables={"stratum_estimates": output["strata"], "psu_details": output["psu_details"]},
+        findings=list(output["findings"]),
+        assumptions=[
+            "Domain membership is constant within each SSU.",
+            "Each sampled SSU supplies fully enumerated outcome totals and element counts.",
+            "All sampled SSUs are retained in domain variance estimation.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata={**output["metadata"], "estimate": output["estimate"],
+                  "variance": output["variance"], "standard_error": output["standard_error"],
+                  "confidence_interval": output["confidence_interval"],
+                  "confidence_level": output["confidence_level"]},
+    )
+
+
+def run_two_stage_survey_domain_proportion_service(
+    df: pd.DataFrame, successes_variable: str, eligible_count_variable: str,
+    domain_variable: str, domain_value: Any, psu_variable: str, ssu_variable: str,
+    psu_population_count_variable: str, ssu_population_count_variable: str,
+    strata_variable: str | None = None, confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Return a two-stage design-based domain proportion."""
+    from timan_intelligence.core.multistage_survey import estimate_two_stage_domain_proportion
+    output = estimate_two_stage_domain_proportion(
+        df, successes_variable, eligible_count_variable, domain_variable,
+        domain_value, psu_variable, ssu_variable, psu_population_count_variable,
+        ssu_population_count_variable, strata_variable, confidence_level,
+    )
+    return AnalysisResult(
+        title=f"Two-stage domain proportion: {successes_variable}",
+        method=output["metadata"]["estimator"], status="success",
+        tables={"stratum_estimates": output["strata"], "psu_details": output["psu_details"]},
+        findings=list(output["findings"]),
+        assumptions=[
+            "Domain membership is constant within each SSU.",
+            "Successes are whole numbers between zero and eligible counts.",
+            "All sampled SSUs are retained in domain variance estimation.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata={**output["metadata"], "estimate": output["estimate"],
+                  "variance": output["variance"], "standard_error": output["standard_error"],
+                  "confidence_interval": output["confidence_interval"],
+                  "confidence_level": output["confidence_level"]},
+    )
