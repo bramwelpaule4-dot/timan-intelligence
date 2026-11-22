@@ -96,7 +96,7 @@ def run_multinomial_logistic_regression(
     def gradient(parameters):
         beta = parameters.reshape(q, p + 1)
         probabilities = softmax(np.column_stack([design @ beta.T, np.zeros(n)]), axis=1)
-        residuals = probabilities[:, :q] - np.eye(q)[y]
+        residuals = probabilities[:, :q] - np.eye(k)[y, :q]
         return (residuals.T @ design).ravel()
 
     fit = minimize(
