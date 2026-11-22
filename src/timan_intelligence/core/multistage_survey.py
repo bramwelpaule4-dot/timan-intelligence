@@ -394,6 +394,7 @@ def _estimate_two_stage_ratio(
     strata_variable: str | None,
     confidence_level: float,
     require_proportion: bool = False,
+    certainty_psu_variable: str | None = None,
 ) -> dict[str, Any]:
     """Taylor-linearised ratio estimator for two-stage SRSWOR samples.
 
@@ -434,13 +435,13 @@ def _estimate_two_stage_ratio(
 
     common = (
         psu_variable, ssu_variable, psu_population_count_variable,
-        ssu_population_count_variable, strata_variable, confidence_level,
+        ssu_population_count_variable, strata_variable, confidence_level, certainty_psu_variable,
     )
     numerator_result = estimate_two_stage_total(
-        work, numerator_col, common[0], common[1], common[2], common[3], common[4], common[5]
+        work, numerator_col, common[0], common[1], common[2], common[3], common[4], common[5], common[6]
     )
     denominator_result = estimate_two_stage_total(
-        work, denominator_col, common[0], common[1], common[2], common[3], common[4], common[5]
+        work, denominator_col, common[0], common[1], common[2], common[3], common[4], common[5], common[6]
     )
     denominator_total = denominator_result["estimate"]
     numerator_total = numerator_result["estimate"]
@@ -449,7 +450,7 @@ def _estimate_two_stage_ratio(
     ratio = numerator_total / denominator_total
     work[linearized_col] = work[numerator_col] - ratio * work[denominator_col]
     linearized_result = estimate_two_stage_total(
-        work, linearized_col, common[0], common[1], common[2], common[3], common[4], common[5]
+        work, linearized_col, common[0], common[1], common[2], common[3], common[4], common[5], common[6]
     )
     variance = max(0.0, linearized_result["variance"] / (denominator_total ** 2))
     standard_error = float(np.sqrt(variance))
@@ -507,6 +508,7 @@ def estimate_two_stage_mean(
     ssu_population_count_variable: str,
     strata_variable: str | None = None,
     confidence_level: float = 0.95,
+    certainty_psu_variable: str | None = None,
 ) -> dict[str, Any]:
     """Estimate a population element mean from SSU outcome totals and sizes."""
     return _estimate_two_stage_ratio(
@@ -526,6 +528,7 @@ def estimate_two_stage_proportion(
     ssu_population_count_variable: str,
     strata_variable: str | None = None,
     confidence_level: float = 0.95,
+    certainty_psu_variable: str | None = None,
 ) -> dict[str, Any]:
     """Estimate a population proportion from SSU successes and eligible counts."""
     return _estimate_two_stage_ratio(
@@ -638,7 +641,7 @@ def _estimate_two_stage_domain_ratio(
     result = _estimate_two_stage_ratio(
         work, ncol, dcol, psu_variable, ssu_variable,
         psu_population_count_variable, ssu_population_count_variable,
-        strata_variable, confidence_level, require_proportion,
+        strata_variable, confidence_level, require_proportion, certainty_psu_variable,
     )
     kind = "proportion" if require_proportion else "mean"
     result["findings"] = [
@@ -666,12 +669,13 @@ def estimate_two_stage_domain_mean(
     domain_variable: str, domain_value: Any, psu_variable: str, ssu_variable: str,
     psu_population_count_variable: str, ssu_population_count_variable: str,
     strata_variable: str | None = None, confidence_level: float = 0.95,
+    certainty_psu_variable: str | None = None,
 ) -> dict[str, Any]:
     """Estimate a mean among SSUs/elements belonging to an SSU-level domain."""
     return _estimate_two_stage_domain_ratio(
         df, outcome_total_variable, element_count_variable, domain_variable,
         domain_value, psu_variable, ssu_variable, psu_population_count_variable,
-        ssu_population_count_variable, strata_variable, confidence_level, False,
+        ssu_population_count_variable, strata_variable, confidence_level, False, certainty_psu_variable,
     )
 
 
@@ -680,10 +684,11 @@ def estimate_two_stage_domain_proportion(
     domain_variable: str, domain_value: Any, psu_variable: str, ssu_variable: str,
     psu_population_count_variable: str, ssu_population_count_variable: str,
     strata_variable: str | None = None, confidence_level: float = 0.95,
+    certainty_psu_variable: str | None = None,
 ) -> dict[str, Any]:
     """Estimate a proportion among SSUs/elements belonging to an SSU-level domain."""
     return _estimate_two_stage_domain_ratio(
         df, successes_variable, eligible_count_variable, domain_variable,
         domain_value, psu_variable, ssu_variable, psu_population_count_variable,
-        ssu_population_count_variable, strata_variable, confidence_level, True,
+        ssu_population_count_variable, strata_variable, confidence_level, True, certainty_psu_variable,
     )
