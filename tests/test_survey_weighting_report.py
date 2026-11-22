@@ -33,7 +33,7 @@ def test_survey_weighting_report_documents_nonresponse_and_raking():
         "response": [1, 0, 1, 1],
         "cell": ["A", "A", "B", "B"],
         "sex": ["F", "F", "M", "M"],
-        "area": ["R", "U", "R", "U"],
+        "area": ["R", "U", "U", "R"],
     })
     result = run_survey_weighting_service(
         frame, "pi", response_column="response", adjustment_cells=["cell"],
