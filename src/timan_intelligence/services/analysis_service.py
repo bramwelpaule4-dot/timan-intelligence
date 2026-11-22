@@ -1625,3 +1625,52 @@ def run_survey_estimation_service(
             "cluster_variable": cluster_variable,
         },
     )
+
+
+def run_domain_survey_estimation_service(
+    frame: pd.DataFrame,
+    outcome_variable: str,
+    weight_variable: str,
+    domain_variable: str,
+    domain_value: Any,
+    estimand: str = "mean",
+    design: str = "weighted_descriptive",
+    strata_variable: str | None = None,
+    cluster_variable: str | None = None,
+    confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Run a domain estimate while retaining the complete sample design."""
+    from timan_intelligence.core.survey_estimation import estimate_domain_survey
+
+    output = estimate_domain_survey(
+        frame, outcome_variable, weight_variable, domain_variable,
+        domain_value, estimand, design, strata_variable,
+        cluster_variable, confidence_level,
+    )
+    return AnalysisResult(
+        title=f"Survey domain {estimand}: {domain_variable}={domain_value}",
+        method=output["metadata"].get("variance_method", "Design-based variance not estimated"),
+        status="success",
+        tables={
+            "estimates": output["table"],
+            "design_details": output.get("details", pd.DataFrame()),
+        },
+        findings=list(output["findings"]),
+        assumptions=[
+            "The domain variable and selected category correctly identify the target subpopulation.",
+            "The supplied weights and declared sampling design are valid for the full original sample.",
+            "Out-of-domain records are retained as zero contributors for domain variance estimation.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata={
+            **output["metadata"],
+            "estimand": estimand,
+            "design": design,
+            "outcome_variable": outcome_variable,
+            "weight_variable": weight_variable,
+            "domain_variable": domain_variable,
+            "domain_value": str(domain_value),
+            "strata_variable": strata_variable,
+            "cluster_variable": cluster_variable,
+        },
+    )
