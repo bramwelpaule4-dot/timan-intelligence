@@ -43,6 +43,7 @@ from timan_intelligence.services.analysis_service import (
     run_multiple_linear_regression_service,
     run_binary_logistic_regression_service,
     run_ordinal_logistic_regression_service,
+    run_multinomial_logistic_regression_service,
     run_regression_diagnostics_service,
 )
 from timan_intelligence.entitlements.subscriptions import process_due_subscriptions
@@ -1891,6 +1892,109 @@ def render_binary_logistic_regression(df):
         for warning in result.limitations:
             st.warning(warning)
 
+
+
+
+
+def render_multinomial_logistic_regression(df):
+    """Render guided multinomial logistic regression for nominal outcomes."""
+    st.subheader("Analyse an unordered categorical outcome")
+    st.write(
+        "Multinomial logistic regression is appropriate when an outcome has "
+        "three or more mutually exclusive categories without a meaningful "
+        "ranking, such as assistance type, referral destination or preferred "
+        "service channel."
+    )
+    candidates = [
+        column for column in df.columns
+        if df[column].dropna().nunique() >= 3
+    ]
+    numeric_predictors = [
+        column for column in df.select_dtypes(include="number").columns
+        if not pd.api.types.is_bool_dtype(df[column].dtype)
+    ]
+    if not candidates or not numeric_predictors:
+        st.info("A nominal outcome with at least three categories and one numeric predictor is required.")
+        return
+    outcome = st.selectbox(
+        "Nominal outcome variable", candidates, key="multinomial_logistic_outcome"
+    )
+    categories = list(pd.unique(df[outcome].dropna()))
+    if len(categories) < 3:
+        st.info("Select an outcome with at least three observed categories.")
+        return
+    reference = st.selectbox(
+        "Reference category", categories, index=len(categories) - 1,
+        key="multinomial_logistic_reference", format_func=str,
+        help="Every other category will be compared with this reference category.",
+    )
+    predictor_options = [c for c in numeric_predictors if c != outcome]
+    if not predictor_options:
+        st.info("Choose an outcome that leaves at least one numeric predictor available.")
+        return
+    predictors = st.multiselect(
+        "Numeric predictor variables", predictor_options,
+        key="multinomial_logistic_predictors", max_selections=15,
+    )
+    st.caption(
+        "Confirm that categories are genuinely unordered. If they have a "
+        "meaningful progression, use ordinal logistic regression instead. "
+        "Categorical predictors and complex survey adjustments are not yet included."
+    )
+    if not predictors:
+        st.info("Select at least one numeric predictor to run the model.")
+        return
+    dataset_key = _dataset_analysis_key(df)
+    result_key = f"timanstat_multinomial_logistic_{dataset_key}"
+    if st.button("Run multinomial logistic regression", type="primary", key="run_multinomial_logistic"):
+        try:
+            model = run_multinomial_logistic_regression_service(
+                df, list(predictors), str(outcome), reference
+            )
+        except (TypeError, ValueError) as exc:
+            st.error(str(exc))
+        except Exception:
+            st.error("The multinomial model could not be estimated. No inferential result has been reported.")
+        else:
+            st.session_state[result_key] = {
+                "predictors": list(predictors), "outcome": outcome,
+                "reference": reference, "result": model,
+            }
+    saved = st.session_state.get(result_key)
+    if not saved:
+        st.info("Confirm the nominal outcome and reference category, select predictors, then run the model.")
+        return
+    if (saved["predictors"] != list(predictors)
+        or saved["outcome"] != outcome or saved["reference"] != reference):
+        st.info("Run the model again to apply the changed variable selection.")
+        return
+    result = saved["result"]
+    metadata = result.metadata
+    metrics = st.columns(3)
+    metrics[0].metric("Complete records", f"{metadata['valid_n']:,}")
+    metrics[1].metric("Outcome categories", metadata["category_count"])
+    metrics[2].metric("AIC", f"{metadata['aic']:.3f}")
+    st.caption(
+        f"Reference category: {metadata['reference_category']}; "
+        f"overall likelihood-ratio chi-square({metadata['likelihood_ratio_df']}) = "
+        f"{metadata['likelihood_ratio_chi_square']:.4g}; p = {metadata['model_p_value']:.4g}."
+    )
+    st.markdown("#### Category-versus-reference effects")
+    st.dataframe(result.tables["coefficients"], hide_index=True, use_container_width=True)
+    st.caption(
+        "Relative risk ratios above 1 indicate higher relative odds of the "
+        "listed category rather than the reference category, holding other "
+        "predictors constant."
+    )
+    st.markdown("#### Predicted category probabilities")
+    st.dataframe(result.tables["category_probabilities"].head(100), hide_index=True, use_container_width=True)
+    st.markdown("#### Interpretation")
+    for finding in result.findings:
+        st.write(f"- {finding}")
+    if result.limitations:
+        st.markdown("#### Assumptions and limitations")
+        for warning in result.limitations:
+            st.warning(warning)
 
 
 def render_ordinal_logistic_regression(df):
