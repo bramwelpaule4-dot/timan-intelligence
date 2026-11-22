@@ -1045,3 +1045,94 @@ def run_two_stage_survey_domain_proportion_service(
                   "confidence_interval": output["confidence_interval"],
                   "confidence_level": output["confidence_level"]},
     )
+
+
+def run_two_stage_ppswr_total_service(
+    df: pd.DataFrame, outcome_variable: str, psu_variable: str,
+    draw_variable: str, ssu_variable: str, ssu_population_count_variable: str,
+    selection_probability_variable: str, strata_variable: str | None = None,
+    confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Estimate a total using PPSWR PSU draws and SRSWOR SSUs."""
+    from timan_intelligence.core.pps_survey import estimate_two_stage_ppswr_total
+    output = estimate_two_stage_ppswr_total(
+        df, outcome_variable, psu_variable, draw_variable, ssu_variable,
+        ssu_population_count_variable, selection_probability_variable,
+        strata_variable, confidence_level,
+    )
+    return AnalysisResult(
+        title=f"Two-stage PPSWR survey total: {outcome_variable}",
+        method=output["metadata"]["estimator"], status="success",
+        tables={"stratum_estimates": output["strata"], "psu_draw_details": output["psu_draw_details"]},
+        findings=list(output["findings"]),
+        assumptions=[
+            "PSUs are selected independently with replacement within strata using known per-draw selection probabilities.",
+            "SSUs are selected by SRSWOR within each selected PSU draw.",
+            "Each PSU draw has a unique draw identifier, including repeat selections of the same physical PSU.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata={**output["metadata"], "estimate": output["estimate"],
+                  "variance": output["variance"], "standard_error": output["standard_error"],
+                  "confidence_interval": output["confidence_interval"],
+                  "confidence_level": output["confidence_level"]},
+    )
+
+
+def run_two_stage_ppswr_mean_service(
+    df: pd.DataFrame, outcome_total_variable: str, element_count_variable: str,
+    psu_variable: str, draw_variable: str, ssu_variable: str,
+    ssu_population_count_variable: str, selection_probability_variable: str,
+    strata_variable: str | None = None, confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Estimate an element mean using two-stage PPSWR sampling."""
+    from timan_intelligence.core.pps_survey import estimate_two_stage_ppswr_mean
+    output = estimate_two_stage_ppswr_mean(
+        df, outcome_total_variable, element_count_variable, psu_variable,
+        draw_variable, ssu_variable, ssu_population_count_variable,
+        selection_probability_variable, strata_variable, confidence_level,
+    )
+    return AnalysisResult(
+        title=f"Two-stage PPSWR survey mean: {outcome_total_variable}",
+        method=output["metadata"]["estimator"], status="success",
+        tables={"stratum_estimates": output["strata"]},
+        findings=list(output["findings"]), assumptions=[
+            "PSUs are selected independently with replacement using known selection probabilities.",
+            "SSUs are selected by SRSWOR within each PSU draw; each row contains SSU-level outcome totals and element counts.",
+        ], limitations=list(output["warnings"]),
+        metadata={**output["metadata"], "estimate": output["estimate"],
+                  "variance": output["variance"], "standard_error": output["standard_error"],
+                  "confidence_interval": output["confidence_interval"],
+                  "confidence_level": output["confidence_level"],
+                  "numerator_total": output["numerator_total"],
+                  "denominator_total": output["denominator_total"]},
+    )
+
+
+def run_two_stage_ppswr_proportion_service(
+    df: pd.DataFrame, successes_variable: str, eligible_count_variable: str,
+    psu_variable: str, draw_variable: str, ssu_variable: str,
+    ssu_population_count_variable: str, selection_probability_variable: str,
+    strata_variable: str | None = None, confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Estimate a proportion using two-stage PPSWR sampling."""
+    from timan_intelligence.core.pps_survey import estimate_two_stage_ppswr_proportion
+    output = estimate_two_stage_ppswr_proportion(
+        df, successes_variable, eligible_count_variable, psu_variable,
+        draw_variable, ssu_variable, ssu_population_count_variable,
+        selection_probability_variable, strata_variable, confidence_level,
+    )
+    return AnalysisResult(
+        title=f"Two-stage PPSWR survey proportion: {successes_variable}",
+        method=output["metadata"]["estimator"], status="success",
+        tables={"stratum_estimates": output["strata"]},
+        findings=list(output["findings"]), assumptions=[
+            "PSUs are selected independently with replacement using known selection probabilities.",
+            "SSUs are selected by SRSWOR within each PSU draw; successes and eligible counts are SSU-level totals.",
+        ], limitations=list(output["warnings"]),
+        metadata={**output["metadata"], "estimate": output["estimate"],
+                  "variance": output["variance"], "standard_error": output["standard_error"],
+                  "confidence_interval": output["confidence_interval"],
+                  "confidence_level": output["confidence_level"],
+                  "numerator_total": output["numerator_total"],
+                  "denominator_total": output["denominator_total"]},
+    )
