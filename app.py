@@ -38,6 +38,7 @@ from timan_intelligence.services.ppswor_report_service import build_ppswor_repor
 from timan_intelligence.services.analysis_service import (
     run_survey_profile,
     run_survey_weighting_service,
+    run_survey_estimation_service,
     run_weighted_frequency_service,
     run_weighted_numeric_summary_service,
     run_stratified_weighted_mean_service,
@@ -6119,6 +6120,197 @@ elif page == "Survey Analysis":
                             for warning in weighting_result.limitations:
                                 st.warning(warning)
 
+
+        with st.expander("Survey estimation and inference engine", expanded=False):
+            st.markdown(
+                "Estimate population totals, weighted means and category proportions. "
+                "Choose the sampling design so standard errors and confidence intervals "
+                "match the available design information."
+            )
+            stored_weighting = st.session_state.get("survey_weighting_result")
+            stored_weighting_key = st.session_state.get("survey_weighting_dataset_key")
+            current_candidate_key = _dataset_analysis_key(weighting_frame) if weighting_frame is not None else None
+            active_candidate_key = _dataset_analysis_key(df) if df is not None else None
+            stored_weighted_frame = (
+                stored_weighting.tables.get("weighted_dataset")
+                if stored_weighting is not None and hasattr(stored_weighting, "tables")
+                else None
+            )
+            weighted_result_is_current = (
+                isinstance(stored_weighted_frame, pd.DataFrame)
+                and stored_weighting_key in {current_candidate_key, active_candidate_key}
+            )
+            estimation_options = []
+            if df is not None:
+                estimation_options.append("Active dataset")
+            if weighted_result_is_current:
+                estimation_options.append("Previously weighted dataset")
+            if not estimation_options:
+                st.info("Load a dataset or construct survey weights above before running survey estimation.")
+            else:
+                default_source = "Previously weighted dataset" if weighted_result_is_current else "Active dataset"
+                estimation_source = st.radio(
+                    "Estimation data source", estimation_options,
+                    index=estimation_options.index(default_source),
+                    horizontal=True, key="survey_estimation_source",
+                )
+                if estimation_source == "Previously weighted dataset":
+                    estimation_frame = stored_weighted_frame.copy()
+                    default_weight = "analysis_weight"
+                    st.caption("Using the final analysis weights produced by the weighting engine above.")
+                else:
+                    estimation_frame = df.copy()
+                    default_weight = None
+                numeric_estimation_columns = list(
+                    estimation_frame.select_dtypes(include="number").columns
+                )
+                if not numeric_estimation_columns:
+                    st.error("The selected dataset has no numeric columns for a survey weight.")
+                else:
+                    eleft, eright = st.columns(2)
+                    with eleft:
+                        estimand_label = st.selectbox(
+                            "Population parameter",
+                            ["Mean", "Total", "Category proportion"],
+                            key="survey_estimation_estimand",
+                        )
+                        estimand = {
+                            "Mean": "mean", "Total": "total",
+                            "Category proportion": "proportion",
+                        }[estimand_label]
+                    with eright:
+                        weight_default_index = (
+                            numeric_estimation_columns.index(default_weight)
+                            if default_weight in numeric_estimation_columns else 0
+                        )
+                        estimation_weight = st.selectbox(
+                            "Final analysis weight", numeric_estimation_columns,
+                            index=weight_default_index, key="survey_estimation_weight",
+                        )
+                    outcome_candidates = [
+                        column for column in estimation_frame.columns
+                        if column != estimation_weight
+                        and (
+                            (estimand in {"mean", "total"} and pd.api.types.is_numeric_dtype(estimation_frame[column]))
+                            or estimand == "proportion"
+                        )
+                    ]
+                    if not outcome_candidates:
+                        st.error("No suitable outcome variable is available for this estimand.")
+                    else:
+                        estimation_outcome = st.selectbox(
+                            "Outcome variable", outcome_candidates,
+                            key="survey_estimation_outcome",
+                        )
+                        design_label = st.selectbox(
+                            "Sampling design",
+                            [
+                                "Weighted descriptive only (no design-based SE)",
+                                "Stratified one-stage SRS (constant expansion weights)",
+                                "One-stage PSU cluster sample (with-replacement variance)",
+                            ],
+                            key="survey_estimation_design",
+                        )
+                        design = {
+                            "Weighted descriptive only (no design-based SE)": "weighted_descriptive",
+                            "Stratified one-stage SRS (constant expansion weights)": "stratified_srs",
+                            "One-stage PSU cluster sample (with-replacement variance)": "cluster_wr",
+                        }[design_label]
+                        strata_variable = None
+                        cluster_variable = None
+                        if design == "stratified_srs":
+                            strata_candidates = [
+                                column for column in estimation_frame.columns
+                                if column not in {estimation_outcome, estimation_weight}
+                            ]
+                            if strata_candidates:
+                                strata_variable = st.selectbox(
+                                    "Stratum identifier", strata_candidates,
+                                    key="survey_estimation_strata",
+                                )
+                            else:
+                                st.error("A stratum identifier is required.")
+                        elif design == "cluster_wr":
+                            cluster_candidates = [
+                                column for column in estimation_frame.columns
+                                if column not in {estimation_outcome, estimation_weight}
+                            ]
+                            if cluster_candidates:
+                                cluster_variable = st.selectbox(
+                                    "Primary sampling unit (PSU)", cluster_candidates,
+                                    key="survey_estimation_cluster",
+                                )
+                                optional_strata = ["No strata"] + [
+                                    column for column in cluster_candidates
+                                    if column != cluster_variable
+                                ]
+                                selected_strata = st.selectbox(
+                                    "Stratification variable (optional)",
+                                    optional_strata, key="survey_estimation_cluster_strata",
+                                )
+                                strata_variable = None if selected_strata == "No strata" else selected_strata
+                            else:
+                                st.error("A PSU identifier is required.")
+                        confidence_level = st.select_slider(
+                            "Confidence level", options=[0.90, 0.95, 0.99],
+                            value=0.95, format_func=lambda value: f"{value:.0%}",
+                            key="survey_estimation_confidence",
+                        )
+                        if st.button(
+                            "Run survey estimation", type="primary",
+                            key="run_survey_estimation",
+                        ):
+                            try:
+                                estimation_result = run_survey_estimation_service(
+                                    estimation_frame,
+                                    estimation_outcome,
+                                    estimation_weight,
+                                    estimand=estimand,
+                                    design=design,
+                                    strata_variable=strata_variable,
+                                    cluster_variable=cluster_variable,
+                                    confidence_level=confidence_level,
+                                )
+                                st.session_state["survey_estimation_result"] = estimation_result
+                                st.session_state["survey_estimation_result_key"] = (
+                                    _dataset_analysis_key(estimation_frame),
+                                    estimand, estimation_outcome, estimation_weight,
+                                    design, strata_variable, cluster_variable,
+                                    confidence_level,
+                                )
+                            except (TypeError, ValueError, KeyError) as exc:
+                                st.error(f"Survey estimation could not be completed: {exc}")
+                        expected_estimation_key = (
+                            _dataset_analysis_key(estimation_frame),
+                            estimand, estimation_outcome, estimation_weight,
+                            design, strata_variable, cluster_variable,
+                            confidence_level,
+                        )
+                        saved_estimation = st.session_state.get("survey_estimation_result")
+                        if (
+                            saved_estimation is not None
+                            and st.session_state.get("survey_estimation_result_key") == expected_estimation_key
+                        ):
+                            st.markdown("#### Estimation results")
+                            st.caption(f"Method: {saved_estimation.method}")
+                            st.dataframe(
+                                saved_estimation.tables["estimates"],
+                                hide_index=True, use_container_width=True,
+                            )
+                            details_table = saved_estimation.tables.get("design_details")
+                            if isinstance(details_table, pd.DataFrame) and not details_table.empty:
+                                st.markdown("**Stratum / PSU variance details**")
+                                st.dataframe(details_table, hide_index=True, use_container_width=True)
+                            st.download_button(
+                                "Download survey estimates (CSV)",
+                                data=saved_estimation.tables["estimates"].to_csv(index=False).encode("utf-8-sig"),
+                                file_name="TimanStat_Survey_Estimates.csv",
+                                mime="text/csv", key="download_survey_estimates",
+                            )
+                            for finding in saved_estimation.findings:
+                                st.success(finding)
+                            for warning in saved_estimation.limitations:
+                                st.warning(warning)
 
         st.info(
             "Unweighted question-level frequencies above describe the imported "
