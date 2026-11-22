@@ -299,7 +299,8 @@ def test_two_stage_certainty_psu_validation():
             df, "outcome", "psu", "ssu", "psu_population",
             "ssu_population", "stratum", certainty_psu_variable="certainty",
         )
-    df["certainty"] = [True, True, False, False, False, False]
+    df = df[df["psu"].isin([1, 2])].copy()
+    df["certainty"] = [True, True, False, False]
     with pytest.raises(ValueError, match="At least two sampled non-certainty"):
         estimate_two_stage_total(
             df, "outcome", "psu", "ssu", "psu_population",
