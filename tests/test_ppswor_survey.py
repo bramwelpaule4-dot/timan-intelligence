@@ -446,3 +446,31 @@ def test_ppswor_domain_ratio_service_exposes_precision_diagnostics():
     assert "diagnostics" in result.tables
     assert result.tables["diagnostics"].iloc[0]["sampled_psus"] == 3
     assert "coefficient_of_variation_percent" in result.metadata["precision_diagnostics"]
+
+
+def test_ppswor_report_service_generates_pdf_with_core_sections():
+    from timan_intelligence.services.analysis_service import run_ppswor_domain_total_service
+    from timan_intelligence.services.ppswor_report_service import build_ppswor_report
+
+    df, joint = ppswor_fixture()
+    df["domain_total"] = [10.0, 0.0, 30.0]
+    result = run_ppswor_domain_total_service(
+        df, "Women", "domain_total", "psu", "pi", joint, "stratum",
+    )
+    pdf = build_ppswor_report(result)
+    assert pdf.startswith(b"%PDF-")
+    assert len(pdf) > 1500
+
+
+def test_ppswor_report_rejects_incomplete_or_unsuccessful_results():
+    from timan_intelligence.core.contracts import AnalysisResult
+    from timan_intelligence.services.ppswor_report_service import build_ppswor_report
+
+    with pytest.raises(TypeError, match="AnalysisResult"):
+        build_ppswor_report({"estimate": 1})
+    failed = AnalysisResult(title="Failed", method="None", status="failed")
+    with pytest.raises(ValueError, match="successful"):
+        build_ppswor_report(failed)
+    incomplete = AnalysisResult(title="Incomplete", method="PPSWOR")
+    with pytest.raises(ValueError, match="missing report fields"):
+        build_ppswor_report(incomplete)

@@ -34,6 +34,7 @@ from timan_intelligence.organisations.service import list_user_organisations
 from timan_intelligence.entitlements.subscription_ui import render_subscription_page
 from timan_intelligence.entitlements.subscription_admin_ui import render_subscription_administration
 from timan_intelligence.administration.user_admin_ui import render_user_administration
+from timan_intelligence.services.ppswor_report_service import build_ppswor_report
 from timan_intelligence.services.analysis_service import (
     run_survey_profile,
     run_weighted_frequency_service,
@@ -4775,6 +4776,13 @@ elif page == "Survey Analysis":
                         saved_ppswor.tables["pairwise_variance"],
                         hide_index=True, use_container_width=True,
                     )
+                st.download_button(
+                    "Download PPSWOR total report (PDF)",
+                    data=build_ppswor_report(saved_ppswor),
+                    file_name="timanstat_ppswor_total_report.pdf",
+                    mime="application/pdf",
+                    key="download_ppswor_total_report",
+                )
                 for warning in saved_ppswor.limitations:
                     st.warning(warning)
 
@@ -5007,6 +5015,13 @@ elif page == "Survey Analysis":
                             saved_ppswor_ratio.tables["pairwise_variance"],
                             hide_index=True, use_container_width=True,
                         )
+                    st.download_button(
+                        "Download PPSWOR mean/proportion report (PDF)",
+                        data=build_ppswor_report(saved_ppswor_ratio),
+                        file_name="timanstat_ppswor_ratio_report.pdf",
+                        mime="application/pdf",
+                        key="download_ppswor_ratio_report",
+                    )
                     for warning in saved_ppswor_ratio.limitations:
                         st.warning(warning)
 
@@ -5527,6 +5542,13 @@ elif page == "Survey Analysis":
                             hide_index=True,
                             use_container_width=True,
                         )
+                    st.download_button(
+                        "Download PPSWOR domain total report (PDF)",
+                        data=build_ppswor_report(saved_ppswor_domain_total),
+                        file_name="timanstat_ppswor_domain_total_report.pdf",
+                        mime="application/pdf",
+                        key="download_ppswor_domain_total_report",
+                    )
                     for warning in saved_ppswor_domain_total.limitations:
                         st.warning(warning)
 
