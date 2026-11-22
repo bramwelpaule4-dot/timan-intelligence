@@ -261,7 +261,7 @@ def estimate_two_stage_total(
         if n_noncertainty == 0 and N_noncertainty != 0:
             raise ValueError("At least two sampled non-certainty PSUs per stratum are required when non-certainty PSUs remain in the population.")
         if n_noncertainty == 1:
-            raise ValueError("At least two sampled non-certainty PSUs per stratum are required for first-stage variance estimation.")
+            raise ValueError("At least two sampled PSUs that are not certainty units per stratum are required for first-stage variance estimation.")
         expansion_noncertainty = float(N_noncertainty / n_noncertainty) if n_noncertainty else 0.0
         expanded_by_psu = {}
         stage2_variance_by_psu = {}
