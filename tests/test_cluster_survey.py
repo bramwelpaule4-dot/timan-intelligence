@@ -50,11 +50,13 @@ def test_rejects_single_psu_in_a_stratum():
         cluster_weighted_mean(df, "outcome", "weight", "psu", "stratum")
 
 
-def test_rejects_psu_assigned_to_multiple_strata():
+def test_psu_labels_may_repeat_across_strata():
     df = _sample()
-    df.loc[0, "psu"] = 3
-    with pytest.raises(ValueError, match="only one stratum"):
-        cluster_weighted_mean(df, "outcome", "weight", "psu", "stratum")
+    df.loc[df["stratum"] == "B", "psu"] = df.loc[
+        df["stratum"] == "B", "psu"
+    ].map({3: 1, 4: 2})
+    result = cluster_weighted_mean(df, "outcome", "weight", "psu", "stratum")
+    assert result["metadata"]["number_of_clusters"] == 4
 
 
 def test_rejects_missing_cluster_identifiers():
