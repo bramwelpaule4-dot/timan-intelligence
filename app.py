@@ -62,6 +62,7 @@ from timan_intelligence.services.analysis_service import (
     run_two_stage_ppswor_domain_total_service,
     run_two_stage_ppswor_domain_mean_service,
     run_two_stage_ppswor_domain_proportion_service,
+    run_mean_confidence_interval_service,
     run_ppswor_total_service,
     run_ppswor_ratio_service,
     run_ppswor_domain_ratio_service,
@@ -80,6 +81,10 @@ from timan_intelligence.services.analysis_service import (
     run_multinomial_logistic_regression_service,
     recommend_categorical_outcome_model_service,
     run_regression_diagnostics_service,
+)
+from timan_intelligence.core.statistical_engine import (
+    run_independent_samples_t_test,
+    run_one_way_anova,
 )
 from timan_intelligence.services.survey_weighting_report import generate_survey_weighting_pdf_report
 from timan_intelligence.services.survey_estimation_report import generate_survey_estimation_pdf_report
@@ -7066,9 +7071,8 @@ elif page == "Statistical Inference":
             <div class="analysis-page-eyebrow">STATISTICAL WORKSPACE · MODULE 02</div>
             <div class="analysis-page-title">Statistical Inference</div>
             <div class="analysis-page-description">
-                Move beyond describing the observed data to estimate population
-                parameters, quantify uncertainty and evaluate statistical evidence.
-                Analysis methods will be made available here as they are validated.
+                Estimate parameters and evaluate statistical evidence using
+                validated procedures, explicit design checks and transparent limitations.
             </div>
         </section>
         """,
@@ -7079,9 +7083,9 @@ elif page == "Statistical Inference":
         """
         <div class="analysis-workflow">
             <div><strong>01</strong><b>Prepare</b><small>Check variables and design</small></div>
-            <div><strong>02</strong><b>Specify</b><small>State hypotheses</small></div>
-            <div><strong>03</strong><b>Estimate</b><small>Quantify uncertainty</small></div>
-            <div><strong>04</strong><b>Interpret</b><small>Assess evidence</small></div>
+            <div><strong>02</strong><b>Specify</b><small>Choose the inferential question</small></div>
+            <div><strong>03</strong><b>Estimate</b><small>Calculate uncertainty or test</small></div>
+            <div><strong>04</strong><b>Interpret</b><small>Review evidence and limitations</small></div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -7089,9 +7093,7 @@ elif page == "Statistical Inference":
 
     inference_df = get_dataset()
     if inference_df is None:
-        st.info(
-            "Load a dataset in Data Management to prepare for inferential analysis."
-        )
+        st.info("Load a dataset in Data Management to begin inferential analysis.")
         st.button(
             "Open Data Management",
             key="inference_open_data_management",
@@ -7100,92 +7102,160 @@ elif page == "Statistical Inference":
             args=("Data Management",),
         )
     else:
-        numeric_count = len(
-            inference_df.select_dtypes(include="number").columns
-        )
-        categorical_count = len(inference_df.columns) - numeric_count
-        missing_count = int(inference_df.isna().sum().sum())
-        total_count = int(inference_df.shape[0] * inference_df.shape[1])
+        numeric_cols = list(inference_df.select_dtypes(include="number").columns)
+        categorical_cols = [
+            column for column in inference_df.columns
+            if not pd.api.types.is_numeric_dtype(inference_df[column])
+        ]
+        total_cells = int(inference_df.shape[0] * inference_df.shape[1])
+        missing_cells = int(inference_df.isna().sum().sum())
         completeness = (
-            (total_count - missing_count) / total_count * 100
-            if total_count else 0.0
-        )
-        st.markdown("#### Dataset readiness")
-        st.caption(
-            f"Active dataset · {len(inference_df):,} records · "
-            f"{len(inference_df.columns):,} variables"
+            (total_cells - missing_cells) / total_cells * 100
+            if total_cells else 0.0
         )
         readiness = st.columns(4)
         readiness[0].metric("Records", f"{len(inference_df):,}")
-        readiness[1].metric("Numeric variables", f"{numeric_count:,}")
-        readiness[2].metric("Other variables", f"{categorical_count:,}")
+        readiness[1].metric("Numeric variables", f"{len(numeric_cols):,}")
+        readiness[2].metric("Categorical variables", f"{len(categorical_cols):,}")
         readiness[3].metric("Completeness", f"{completeness:.1f}%")
-        with st.expander("Review variables available for future inference", expanded=False):
-            variable_inventory = pd.DataFrame(
-                {
-                    "Variable": [str(column) for column in inference_df.columns],
-                    "Data type": [str(inference_df[column].dtype) for column in inference_df.columns],
-                    "Observed values": [int(inference_df[column].notna().sum()) for column in inference_df.columns],
-                    "Missing values": [int(inference_df[column].isna().sum()) for column in inference_df.columns],
-                    "Distinct values": [int(inference_df[column].nunique(dropna=True)) for column in inference_df.columns],
-                }
-            )
-            st.dataframe(
-                variable_inventory,
-                hide_index=True,
-                use_container_width=True,
-            )
 
-    st.markdown("#### Planned inference capabilities")
-    inference_cards = [
-        (
-            "Estimation and confidence intervals",
-            "Estimate means, proportions and differences with uncertainty intervals.",
-            "Parameter estimation",
-        ),
-        (
-            "Hypothesis testing",
-            "Evaluate pre-specified hypotheses using suitable test assumptions and effect sizes.",
-            "Statistical tests",
-        ),
-        (
-            "Association and group comparisons",
-            "Assess relationships and differences between independent or paired groups.",
-            "Comparative inference",
-        ),
-        (
-            "Assumption diagnostics",
-            "Check distributional, independence and variance assumptions before interpreting results.",
-            "Model diagnostics",
-        ),
-    ]
-    for card_start in range(0, len(inference_cards), 2):
-        card_columns = st.columns(2)
-        for offset, card in enumerate(inference_cards[card_start:card_start + 2]):
-            with card_columns[offset]:
-                st.markdown(
-                    f"""
-                    <div class="feature-card">
-                        <div class="feature-number">{card[2].upper()}</div>
-                        <div class="feature-title">{card[0]}</div>
-                        <div class="feature-description">{card[1]}</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
+        st.warning(
+            "These initial inferential procedures assume independent observations "
+            "and do not adjust for survey weights, clustering, stratification, "
+            "repeated measures or finite-population corrections. For probability "
+            "samples or complex survey designs, use the design-aware procedures "
+            "in Survey Analysis instead."
+        )
+        inference_method = st.selectbox(
+            "Inferential procedure",
+            [
+                "Confidence interval for a mean",
+                "Welch's independent-samples t-test",
+                "One-way ANOVA",
+            ],
+            key="inference_method_choice",
+        )
+        confidence_level = st.selectbox(
+            "Confidence level",
+            [0.90, 0.95, 0.99],
+            index=1,
+            format_func=lambda value: f"{value:.0%}",
+            key="inference_confidence_level",
+        )
+
+        if inference_method == "Confidence interval for a mean":
+            if numeric_cols:
+                outcome_variable = st.selectbox(
+                    "Numeric outcome variable",
+                    numeric_cols,
+                    key="inference_mean_outcome",
                 )
+                st.caption(
+                    "Calculates a two-sided Student-t interval for the population mean "
+                    "under an independent, identically distributed observation model."
+                )
+            else:
+                outcome_variable = None
+                st.warning("No numeric variables are available for a mean interval.")
+            group_variable = None
+        else:
+            outcome_variable = (
+                st.selectbox(
+                    "Numeric outcome variable",
+                    numeric_cols,
+                    key="inference_test_outcome",
+                )
+                if numeric_cols else None
+            )
+            group_variable = (
+                st.selectbox(
+                    "Grouping variable",
+                    categorical_cols,
+                    key="inference_group_variable",
+                )
+                if categorical_cols else None
+            )
+            if inference_method == "Welch's independent-samples t-test":
+                st.caption("Compares the means of exactly two independent groups without assuming equal variances.")
+            else:
+                st.caption("Tests whether at least one group mean differs across two or more independent groups.")
 
-    st.info(
-        "This workspace is currently an interface and preparation view. "
-        "Inferential calculations are not enabled here yet. Methods will be "
-        "released only after validation of assumptions, statistical outputs "
-        "and interpretation safeguards."
-    )
-    st.button(
-        "Open Descriptive Statistics",
-        key="inference_open_descriptive",
-        on_click=navigate_to,
-        args=("Descriptive Statistics",),
-    )
+        independence_confirmed = st.checkbox(
+            "I confirm that each row represents an independent observational unit and that this is not a complex survey or repeated-measures design.",
+            key="inference_independence_confirmed",
+        )
+        can_run = (
+            outcome_variable is not None
+            and (
+                inference_method == "Confidence interval for a mean"
+                or group_variable is not None
+            )
+            and independence_confirmed
+        )
+        if st.button(
+            "Run inferential analysis",
+            type="primary",
+            key="run_general_inference",
+            disabled=not can_run,
+        ):
+            try:
+                if inference_method == "Confidence interval for a mean":
+                    inference_result = run_mean_confidence_interval_service(
+                        inference_df, outcome_variable, confidence_level
+                    )
+                elif inference_method == "Welch's independent-samples t-test":
+                    inference_result = run_independent_samples_t_test(
+                        inference_df, outcome_variable, group_variable
+                    )
+                else:
+                    inference_result = run_one_way_anova(
+                        inference_df, outcome_variable, group_variable
+                    )
+                st.session_state["general_inference_result"] = inference_result
+                st.session_state["general_inference_result_key"] = (
+                    _dataset_analysis_key(inference_df),
+                    inference_method,
+                    outcome_variable,
+                    group_variable,
+                    confidence_level,
+                )
+            except (TypeError, ValueError, KeyError) as exc:
+                st.error(str(exc))
+
+        current_result_key = (
+            _dataset_analysis_key(inference_df),
+            inference_method,
+            outcome_variable,
+            group_variable,
+            confidence_level,
+        )
+        inference_result = st.session_state.get("general_inference_result")
+        if (
+            inference_result is not None
+            and st.session_state.get("general_inference_result_key") == current_result_key
+        ):
+            st.markdown("#### Inferential results")
+            for finding in inference_result.findings:
+                st.write(f"• {finding}")
+            for table in inference_result.tables.values():
+                if isinstance(table, pd.DataFrame):
+                    st.dataframe(table, hide_index=True, use_container_width=True)
+                elif isinstance(table, dict):
+                    st.dataframe(
+                        pd.DataFrame([table]),
+                        hide_index=True,
+                        use_container_width=True,
+                    )
+            with st.expander("Assumptions and interpretation guidance"):
+                for assumption in inference_result.assumptions:
+                    st.write(f"• {assumption}")
+            with st.expander("Limitations and exclusions"):
+                for limitation in inference_result.limitations:
+                    st.warning(limitation)
+            st.caption(
+                "A p-value does not measure effect size or practical importance. "
+                "Interpret estimates alongside uncertainty, study design and substantive context."
+            )
 
 
 # ============================================================
