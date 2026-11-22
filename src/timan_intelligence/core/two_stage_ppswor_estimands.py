@@ -14,6 +14,18 @@ import pandas as pd
 from timan_intelligence.core.two_stage_ppswor import estimate_two_stage_ppswor_total
 
 
+def _validate_population_ssu_total(value: float) -> float:
+    """Validate a known finite, positive whole-number SSU population count."""
+    denominator = float(value)
+    if (
+        not np.isfinite(denominator)
+        or denominator <= 0
+        or denominator != np.floor(denominator)
+    ):
+        raise ValueError("Known population SSU total must be a positive whole number.")
+    return denominator
+
+
 def _scale_total_result(
     output: dict[str, Any],
     denominator: float,
@@ -63,9 +75,7 @@ def estimate_two_stage_ppswor_mean(
     **kwargs: Any,
 ) -> dict[str, Any]:
     """Estimate an SSU population mean when total population SSUs are known."""
-    denominator = float(population_ssu_total)
-    if not np.isfinite(denominator) or denominator <= 0:
-        raise ValueError("Known population SSU total must be a positive finite number.")
+    denominator = _validate_population_ssu_total(population_ssu_total)
     output = estimate_two_stage_ppswor_total(
         df, outcome_variable, *args, **kwargs
     )
