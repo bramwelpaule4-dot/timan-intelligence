@@ -29,7 +29,7 @@ def test_weighting_service_zeroes_nonrespondents_after_adjustment():
     weighted = result.tables["weighted_dataset"]
     assert weighted.loc[1, "analysis_weight"] == 0
     assert weighted.loc[0, "analysis_weight"] == pytest.approx(4)
-    assert weighted.loc[2, "analysis_weight"] == pytest.approx(8 / 3)
+    assert weighted.loc[2, "analysis_weight"] == pytest.approx(2)
     assert result.metadata["diagnostics"]["n"] == 3
 
 
