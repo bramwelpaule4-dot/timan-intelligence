@@ -1731,3 +1731,119 @@ def run_two_stage_ppswor_total_service(
             "confidence_level": output["confidence_level"],
         },
     )
+
+
+
+def _two_stage_ppswor_estimand_result(output: dict[str, Any], title: str) -> AnalysisResult:
+    """Wrap a two-stage PPSWOR estimand in the shared result contract."""
+    return AnalysisResult(
+        title=title,
+        method=output["metadata"]["estimator"],
+        status="success",
+        tables={
+            "stratum_estimates": output["strata"],
+            "psu_details": output["psu_details"],
+            "pairwise_variance": output["pairwise_variance"],
+        },
+        findings=list(output["findings"]),
+        assumptions=[
+            "PSUs are selected by fixed-size PPS without replacement within each stratum.",
+            "Actual first- and second-order PSU inclusion probabilities are supplied from the sampling design.",
+            "SSUs are selected by SRSWOR within each sampled PSU.",
+            "Known population SSU denominators, where required, refer to the same target population and reference period.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata={
+            **output["metadata"],
+            "estimate": output["estimate"],
+            "variance": output["variance"],
+            "standard_error": output["standard_error"],
+            "confidence_interval": output["confidence_interval"],
+            "confidence_level": output["confidence_level"],
+        },
+    )
+
+
+def run_two_stage_ppswor_mean_service(
+    df: pd.DataFrame,
+    outcome_variable: str,
+    population_ssu_total: float,
+    psu_variable: str,
+    ssu_variable: str,
+    psu_inclusion_probability_variable: str,
+    ssu_population_count_variable: str,
+    joint_psu_inclusion_probabilities: pd.DataFrame | dict[Any, pd.DataFrame],
+    strata_variable: str | None = None,
+    confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Run a two-stage PPSWOR population mean with a known SSU denominator."""
+    from timan_intelligence.core.two_stage_ppswor_estimands import (
+        estimate_two_stage_ppswor_mean,
+    )
+
+    output = estimate_two_stage_ppswor_mean(
+        df, outcome_variable, population_ssu_total, psu_variable,
+        ssu_variable, psu_inclusion_probability_variable,
+        ssu_population_count_variable, joint_psu_inclusion_probabilities,
+        strata_variable, confidence_level,
+    )
+    return _two_stage_ppswor_estimand_result(
+        output, f"Two-stage PPSWOR mean: {outcome_variable}"
+    )
+
+
+def run_two_stage_ppswor_proportion_service(
+    df: pd.DataFrame,
+    outcome_variable: str,
+    population_ssu_total: float,
+    psu_variable: str,
+    ssu_variable: str,
+    psu_inclusion_probability_variable: str,
+    ssu_population_count_variable: str,
+    joint_psu_inclusion_probabilities: pd.DataFrame | dict[Any, pd.DataFrame],
+    strata_variable: str | None = None,
+    confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Run a two-stage PPSWOR population proportion from a binary SSU outcome."""
+    from timan_intelligence.core.two_stage_ppswor_estimands import (
+        estimate_two_stage_ppswor_proportion,
+    )
+
+    output = estimate_two_stage_ppswor_proportion(
+        df, outcome_variable, population_ssu_total, psu_variable,
+        ssu_variable, psu_inclusion_probability_variable,
+        ssu_population_count_variable, joint_psu_inclusion_probabilities,
+        strata_variable, confidence_level,
+    )
+    return _two_stage_ppswor_estimand_result(
+        output, f"Two-stage PPSWOR proportion: {outcome_variable}"
+    )
+
+
+def run_two_stage_ppswor_domain_total_service(
+    df: pd.DataFrame,
+    outcome_variable: str,
+    domain_variable: str,
+    domain_value: Any,
+    psu_variable: str,
+    ssu_variable: str,
+    psu_inclusion_probability_variable: str,
+    ssu_population_count_variable: str,
+    joint_psu_inclusion_probabilities: pd.DataFrame | dict[Any, pd.DataFrame],
+    strata_variable: str | None = None,
+    confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Run a two-stage PPSWOR domain total without dropping out-of-domain units."""
+    from timan_intelligence.core.two_stage_ppswor_estimands import (
+        estimate_two_stage_ppswor_domain_total,
+    )
+
+    output = estimate_two_stage_ppswor_domain_total(
+        df, outcome_variable, domain_variable, domain_value, psu_variable,
+        ssu_variable, psu_inclusion_probability_variable,
+        ssu_population_count_variable, joint_psu_inclusion_probabilities,
+        strata_variable, confidence_level,
+    )
+    return _two_stage_ppswor_estimand_result(
+        output, f"Two-stage PPSWOR domain total: {domain_variable}={domain_value}"
+    )
