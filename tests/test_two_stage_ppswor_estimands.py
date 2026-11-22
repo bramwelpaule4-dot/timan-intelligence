@@ -62,7 +62,7 @@ def test_two_stage_ppswor_mean_scales_total_and_variance():
 
 def test_two_stage_ppswor_mean_rejects_invalid_population_count():
     frame, common = fixture()
-    for invalid in (0, -2, np.nan, np.inf):
+    for invalid in (0, -2, 12.5, np.nan, np.inf):
         with pytest.raises(ValueError):
             estimate_two_stage_ppswor_mean(frame, "outcome", invalid, *common)
 
@@ -74,6 +74,10 @@ def test_two_stage_ppswor_proportion_requires_binary_outcome():
     )
     assert 0 <= result["estimate"] <= 1
     assert result["metadata"]["estimand"] == "population proportion"
+    with pytest.raises(ValueError, match="whole number"):
+        estimate_two_stage_ppswor_proportion(
+            frame, "binary", 12.5, *common
+        )
     frame.loc[0, "binary"] = 2
     with pytest.raises(ValueError, match="binary values"):
         estimate_two_stage_ppswor_proportion(
