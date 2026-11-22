@@ -1574,3 +1574,54 @@ def run_survey_weighting_service(
             },
         },
     )
+
+
+def run_survey_estimation_service(
+    frame: pd.DataFrame,
+    outcome_variable: str,
+    weight_variable: str,
+    estimand: str = "mean",
+    design: str = "weighted_descriptive",
+    strata_variable: str | None = None,
+    cluster_variable: str | None = None,
+    confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Run guarded weighted totals, means or category proportions."""
+    from timan_intelligence.core.survey_estimation import estimate_survey
+
+    output = estimate_survey(
+        frame,
+        outcome_variable,
+        weight_variable,
+        estimand,
+        design,
+        strata_variable,
+        cluster_variable,
+        confidence_level,
+    )
+    variance_method = output["metadata"].get("variance_method", "Design-based variance not estimated")
+    return AnalysisResult(
+        title=f"Survey {estimand}: {outcome_variable}",
+        method=variance_method,
+        status="success",
+        tables={
+            "estimates": output["table"],
+            "design_details": output.get("details", pd.DataFrame()),
+        },
+        findings=list(output["findings"]),
+        assumptions=[
+            "The supplied analysis weights are valid for the target population and analysis unit.",
+            "The selected design declaration matches the actual sample selection procedure.",
+            "Missing outcome records are not silently imputed; complete records are required by the selected estimator.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata={
+            **output["metadata"],
+            "estimand": estimand,
+            "design": design,
+            "outcome_variable": outcome_variable,
+            "weight_variable": weight_variable,
+            "strata_variable": strata_variable,
+            "cluster_variable": cluster_variable,
+        },
+    )
