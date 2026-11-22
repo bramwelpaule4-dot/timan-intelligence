@@ -921,6 +921,53 @@ def run_proportion_confidence_interval(
 
 
 
+
+def run_two_proportions_confidence_interval(df: pd.DataFrame, outcome_variable: str, group_variable: str, confidence_level: float = 0.95) -> AnalysisResult:
+    """Estimate group 1 minus group 2 with a Newcombe-Wilson interval; no test p-value."""
+    from scipy.stats import norm
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Expected a pandas DataFrame.")
+    if outcome_variable not in df.columns or group_variable not in df.columns or outcome_variable == group_variable:
+        raise ValueError("Select distinct, existing outcome and grouping variables.")
+    if not pd.api.types.is_numeric_dtype(df[outcome_variable]):
+        raise TypeError("The outcome must be numeric and coded strictly as 1 and 0.")
+    if isinstance(confidence_level, bool) or not isinstance(confidence_level, (int, float)) or not 0 < float(confidence_level) < 1:
+        raise ValueError("Confidence level must be numeric and between 0 and 1.")
+    level = float(confidence_level)
+    pair = df[[outcome_variable, group_variable]]
+    clean = pair.dropna()
+    excluded = int(len(pair) - len(clean))
+    if clean.empty:
+        raise ValueError("No complete outcome and group observations remain.")
+    if not set(clean[outcome_variable].unique()).issubset({0, 1}):
+        raise ValueError("The outcome must contain only 0 and 1 values.")
+    labels = list(pd.unique(clean[group_variable]))
+    if len(labels) != 2:
+        raise ValueError("A two-proportion interval requires exactly two observed independent groups.")
+    samples = [clean.loc[clean[group_variable] == label, outcome_variable].astype(int) for label in labels]
+    n1, n2 = (int(x.size) for x in samples)
+    x1, x2 = (int(x.sum()) for x in samples)
+    p1, p2 = x1 / n1, x2 / n2
+    difference = p1 - p2
+    zc = float(norm.ppf(0.5 + level / 2))
+    def wilson(x, n):
+        p = x / n
+        den = 1 + zc ** 2 / n
+        centre = (p + zc ** 2 / (2 * n)) / den
+        half = zc * (p * (1 - p) / n + zc ** 2 / (4 * n ** 2)) ** 0.5 / den
+        return max(0.0, centre - half), min(1.0, centre + half)
+    l1, u1 = wilson(x1, n1)
+    l2, u2 = wilson(x2, n2)
+    lower = max(-1.0, difference - ((p1-l1)**2 + (u2-p2)**2)**0.5)
+    upper = min(1.0, difference + ((u1-p1)**2 + (p2-l2)**2)**0.5)
+    se = (p1*(1-p1)/n1 + p2*(1-p2)/n2)**0.5
+    summary = pd.DataFrame([{"Group 1": str(labels[0]), "Group 1 successes": x1, "Group 1 observations": n1, "Group 1 proportion": p1, "Group 2": str(labels[1]), "Group 2 successes": x2, "Group 2 observations": n2, "Group 2 proportion": p2, "Difference (group 1 - group 2)": difference, "Unpooled standard error": se, "Confidence level": level, "Newcombe CI lower": lower, "Newcombe CI upper": upper, "Incomplete pairs excluded": excluded}])
+    findings = [f"Group {labels[0]}: {x1}/{n1} events ({p1:.1%}); group {labels[1]}: {x2}/{n2} events ({p2:.1%}).", f"Estimated difference (group 1 minus group 2): {difference:.1%}.", f"{level:.0%} Newcombe-Wilson confidence interval: [{lower:.1%}, {upper:.1%}]."]
+    limitations = ["Assumes two independent groups and independent Bernoulli observations within each group.", "Uses Newcombe's method combining two Wilson score intervals.", "Estimation only: no hypothesis-test p-value is calculated.", "Not adjusted for survey weights, clustering, stratification, repeated measures or finite-population corrections."]
+    if excluded:
+        limitations.append(f"{excluded:,} rows with a missing outcome or group label were excluded.")
+    return AnalysisResult(title=f"Confidence interval for difference in proportions: {outcome_variable} by {group_variable}", method="Newcombe-Wilson confidence interval for two independent proportions", status="success", tables={"interval_summary": summary}, findings=findings, assumptions=["Outcome is binary (1=event, 0=non-event).", "Exactly two independent groups are observed.", "Observations are independent within each group."], limitations=limitations, metadata={"outcome_variable": outcome_variable, "group_variable": group_variable, "group_1_label": str(labels[0]), "group_2_label": str(labels[1]), "group_1_successes": x1, "group_1_n": n1, "group_1_proportion": p1, "group_2_successes": x2, "group_2_n": n2, "group_2_proportion": p2, "estimate": difference, "standard_error": se, "confidence_level": level, "confidence_interval": (float(lower), float(upper)), "incomplete_pairs_excluded": excluded, "sampling_design_aware": False, "study_design": "independent_groups", "inference_framework": "newcombe_wilson_two_proportion_interval"})
+
 def run_two_independent_proportions_test(df: pd.DataFrame, outcome_variable: str, group_variable: str, confidence_level: float = 0.95, alternative: str = "two-sided") -> AnalysisResult:
     """Compare two independent binary proportions using a pooled score test and Newcombe-Wilson interval."""
     from scipy.stats import norm
