@@ -639,3 +639,33 @@ def test_two_independent_proportions_service_uses_shared_result_contract():
     result = run_two_independent_proportions_test_service(frame, "event", "group", 0.90)
     assert result.status == "success"
     assert result.metadata["confidence_level"] == pytest.approx(0.90)
+
+
+def test_two_proportions_confidence_interval_estimates_newcombe_difference():
+    from timan_intelligence.core.statistical_engine import run_two_proportions_confidence_interval
+    frame = pd.DataFrame({"group": ["A"] * 10 + ["B"] * 10, "event": [1] * 7 + [0] * 3 + [1] * 3 + [0] * 7})
+    result = run_two_proportions_confidence_interval(frame, "event", "group", 0.90)
+    assert result.status == "success"
+    assert result.metadata["estimate"] == pytest.approx(0.4)
+    assert result.metadata["confidence_level"] == pytest.approx(0.90)
+    lower, upper = result.metadata["confidence_interval"]
+    assert lower < 0.4 < upper
+    assert "p_value" not in result.metadata
+    assert result.metadata["sampling_design_aware"] is False
+
+
+def test_two_proportions_confidence_interval_handles_boundary_rates_and_missing_pairs():
+    from timan_intelligence.core.statistical_engine import run_two_proportions_confidence_interval
+    frame = pd.DataFrame({"group": ["A", "A", "B", "B", "B", None], "event": [1, 1, 0, 0, 0, 1]})
+    result = run_two_proportions_confidence_interval(frame, "event", "group")
+    assert result.metadata["group_1_proportion"] == pytest.approx(1.0)
+    assert result.metadata["group_2_proportion"] == pytest.approx(0.0)
+    assert result.metadata["incomplete_pairs_excluded"] == 1
+
+
+def test_two_proportions_confidence_interval_rejects_invalid_inputs():
+    from timan_intelligence.core.statistical_engine import run_two_proportions_confidence_interval
+    with pytest.raises(ValueError, match="exactly two"):
+        run_two_proportions_confidence_interval(pd.DataFrame({"event": [0, 1, 0], "group": ["A", "B", "C"]}), "event", "group")
+    with pytest.raises(ValueError, match="only 0 and 1"):
+        run_two_proportions_confidence_interval(pd.DataFrame({"event": [0, 1, 2, 0], "group": ["A", "A", "B", "B"]}), "event", "group")
