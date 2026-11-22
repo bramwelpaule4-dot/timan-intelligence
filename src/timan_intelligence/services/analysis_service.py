@@ -1885,3 +1885,14 @@ def run_two_stage_ppswor_domain_proportion_service(
     return _two_stage_ppswor_estimand_result(
         output, f"Two-stage PPSWOR domain proportion: {domain_variable}={domain_value}"
     )
+
+
+def run_mean_confidence_interval_service(
+    df: pd.DataFrame,
+    variable: str,
+    confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Run a shared model-based confidence interval for a numeric mean."""
+    from timan_intelligence.core.statistical_engine import run_mean_confidence_interval
+
+    return run_mean_confidence_interval(df, variable, confidence_level)
