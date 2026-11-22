@@ -180,6 +180,12 @@ def test_two_stage_proportion_is_bounded_and_validates_success_counts():
     assert 0 <= result["estimate"] <= 1
     assert 0 <= result["confidence_interval"][0] <= 1
     assert 0 <= result["confidence_interval"][1] <= 1
+    df.loc[0, "successes"] = 1.5
+    with pytest.raises(ValueError, match="whole numbers"):
+        estimate_two_stage_proportion(
+            df, "successes", "eligible", "psu", "ssu",
+            "psu_population", "ssu_population", "stratum",
+        )
     df.loc[0, "successes"] = 11
     with pytest.raises(ValueError, match="between zero"):
         estimate_two_stage_proportion(
