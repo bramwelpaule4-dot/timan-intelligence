@@ -1909,6 +1909,20 @@ def run_proportion_confidence_interval_service(
     return run_proportion_confidence_interval(df, variable, confidence_level)
 
 
+
+def run_paired_mean_difference_confidence_interval_service(
+    df: pd.DataFrame,
+    before_variable: str,
+    after_variable: str,
+    confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Run a paired Student-t confidence interval for mean change."""
+    from timan_intelligence.core.statistical_engine import run_paired_mean_difference_confidence_interval
+
+    return run_paired_mean_difference_confidence_interval(
+        df, before_variable, after_variable, confidence_level
+    )
+
 def run_welch_mean_difference_confidence_interval_service(
     df: pd.DataFrame,
     outcome_variable: str,
