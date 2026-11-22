@@ -1379,3 +1379,67 @@ def run_cluster_sample_plan_service(**kwargs: Any) -> AnalysisResult:
         limitations=list(output["warnings"]),
         metadata=output,
     )
+
+
+def run_sample_selection_service(
+    frame: pd.DataFrame,
+    id_column: str,
+    sample_size: int,
+    method: str = "srswor",
+    seed: int = 2026,
+    size_column: str | None = None,
+    reserve_size: int = 0,
+) -> AnalysisResult:
+    """Select a reproducible probability sample from a frame."""
+    from timan_intelligence.core.sampling_selection import select_sample
+
+    output = select_sample(
+        frame, id_column, sample_size, method, seed, size_column, reserve_size
+    )
+    return AnalysisResult(
+        title="Sampling-frame selection",
+        method=output["method"],
+        status="success",
+        tables={"selected_sample": output["selected"], "reserve_sample": output["reserve"]},
+        findings=[
+            f"Selected {output['sample_size']:,} main-sample units from a frame of {output['population_size']:,}.",
+            f"Selected {output['reserve_size']:,} reserve units separately.",
+            f"Random seed: {output['seed']}.",
+        ],
+        assumptions=["The uploaded frame is the complete eligible sampling frame.", "Identifiers are unique and represent eligible sampling units."],
+        limitations=list(output["warnings"]),
+        metadata=output["metadata"],
+    )
+
+
+def run_stratified_sample_selection_service(
+    frame: pd.DataFrame,
+    id_column: str,
+    strata_column: str,
+    allocations: dict[Any, int],
+    method: str = "srswor",
+    seed: int = 2026,
+    size_column: str | None = None,
+    reserve_allocations: dict[Any, int] | None = None,
+) -> AnalysisResult:
+    """Select independently within strata using supplied integer allocations."""
+    from timan_intelligence.core.sampling_selection import select_stratified_sample
+
+    output = select_stratified_sample(
+        frame, id_column, strata_column, allocations, method, seed,
+        size_column, reserve_allocations,
+    )
+    return AnalysisResult(
+        title="Stratified sampling-frame selection",
+        method=f"Stratified {output['method']}",
+        status="success",
+        tables={"selected_sample": output["selected"], "reserve_sample": output["reserve"]},
+        findings=[
+            f"Selected {output['sample_size']:,} main-sample units across strata.",
+            f"Selected {output['reserve_size']:,} reserve units separately.",
+            f"Random seed: {output['seed']}.",
+        ],
+        assumptions=["Each stratum is sampled independently.", "Supplied allocations match every observed stratum exactly."],
+        limitations=list(output["warnings"]),
+        metadata=output["metadata"],
+    )
