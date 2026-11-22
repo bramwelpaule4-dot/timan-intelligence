@@ -373,3 +373,31 @@ def test_welch_mean_difference_interval_validates_groups_and_sample_sizes():
             pd.DataFrame({"group": ["A", "A", "B", "B"], "score": [1, 2, 3, 4]}),
             "score", "group", 1.0,
         )
+
+
+def test_paired_mean_change_interval_uses_after_minus_before():
+    from timan_intelligence.core.statistical_engine import run_paired_mean_difference_confidence_interval
+    frame = pd.DataFrame({"before": [10.0, 12.0, 14.0, 16.0], "after": [12.0, 15.0, 15.0, 20.0]})
+    result = run_paired_mean_difference_confidence_interval(frame, "before", "after", 0.90)
+    assert result.status == "success"
+    assert result.metadata["estimate"] == pytest.approx(2.5)
+    assert result.metadata["complete_pairs"] == 4
+    assert result.metadata["degrees_of_freedom"] == 3
+    lower, upper = result.metadata["confidence_interval"]
+    assert lower < 2.5 < upper
+    assert result.metadata["study_design"] == "paired"
+
+def test_paired_mean_change_interval_excludes_incomplete_pairs():
+    from timan_intelligence.core.statistical_engine import run_paired_mean_difference_confidence_interval
+    frame = pd.DataFrame({"before": [1.0, 2.0, None, 4.0, float("inf")], "after": [2.0, 4.0, 5.0, 7.0, 8.0]})
+    result = run_paired_mean_difference_confidence_interval(frame, "before", "after")
+    assert result.metadata["complete_pairs"] == 3
+    assert result.metadata["missing_pairs"] == 1
+    assert result.metadata["infinite_pairs"] == 1
+
+def test_paired_mean_change_interval_validates_pair_count_and_variables():
+    from timan_intelligence.core.statistical_engine import run_paired_mean_difference_confidence_interval
+    with pytest.raises(ValueError, match="At least two complete"):
+        run_paired_mean_difference_confidence_interval(pd.DataFrame({"b": [1.0, None], "a": [2.0, 3.0]}), "b", "a")
+    with pytest.raises(ValueError, match="different variables"):
+        run_paired_mean_difference_confidence_interval(pd.DataFrame({"b": [1.0, 2.0]}), "b", "b")
