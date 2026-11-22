@@ -63,6 +63,7 @@ from timan_intelligence.services.analysis_service import (
     run_two_stage_ppswor_domain_mean_service,
     run_two_stage_ppswor_domain_proportion_service,
     run_mean_confidence_interval_service,
+    run_one_sample_t_test_service,
     run_proportion_confidence_interval_service,
     run_welch_mean_difference_confidence_interval_service,
     run_paired_mean_difference_confidence_interval_service,
@@ -7133,6 +7134,7 @@ elif page == "Statistical Inference":
             "Inferential procedure",
             [
                 "Confidence interval for a mean",
+                "One-sample Student's t-test",
                 "Confidence interval for a proportion",
                 "Welch confidence interval for a mean difference",
                 "Paired mean-change confidence interval",
@@ -7164,6 +7166,27 @@ elif page == "Statistical Inference":
                 outcome_variable = None
                 st.warning("No numeric variables are available for a mean interval.")
             group_variable = None
+        elif inference_method == "One-sample Student's t-test":
+            outcome_variable = (
+                st.selectbox("Numeric outcome variable", numeric_cols, key="inference_one_sample_t_outcome")
+                if numeric_cols else None
+            )
+            group_variable = None
+            reference_value = st.number_input(
+                "Reference population mean", value=0.0, step=1.0,
+                key="inference_one_sample_t_reference",
+                help="The benchmark or hypothesised population mean to test against.",
+            )
+            alternative = st.selectbox(
+                "Alternative hypothesis", ["two-sided", "greater", "less"],
+                format_func=lambda value: {
+                    "two-sided": "Two-sided: mean differs from reference",
+                    "greater": "One-sided: mean is greater than reference",
+                    "less": "One-sided: mean is less than reference",
+                }[value],
+                key="inference_one_sample_t_alternative",
+            )
+            st.caption("Reports the t statistic, degrees of freedom, p-value and two-sided 95% confidence interval. The alternative hypothesis controls the p-value direction.")
         elif inference_method == "Paired mean-change confidence interval":
             before_variable = (
                 st.selectbox("Before measurement", numeric_cols, key="inference_paired_before")
@@ -7234,6 +7257,7 @@ elif page == "Statistical Inference":
                 inference_method in {
                     "Confidence interval for a mean",
                     "Confidence interval for a proportion",
+                    "One-sample Student's t-test",
                 }
                 or group_variable is not None
             )
@@ -7249,6 +7273,10 @@ elif page == "Statistical Inference":
                 if inference_method == "Confidence interval for a mean":
                     inference_result = run_mean_confidence_interval_service(
                         inference_df, outcome_variable, confidence_level
+                    )
+                elif inference_method == "One-sample Student's t-test":
+                    inference_result = run_one_sample_t_test_service(
+                        inference_df, outcome_variable, reference_value, alternative
                     )
                 elif inference_method == "Confidence interval for a proportion":
                     inference_result = run_proportion_confidence_interval_service(
