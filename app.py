@@ -5059,7 +5059,7 @@ elif page == "Survey Analysis":
                         two_pps_result = run_two_stage_ppswor_domain_total_service(
                             df, two_pps_outcome, two_pps_domain_variable,
                             two_pps_domain_value, two_pps_psu, two_pps_ssu,
-                            two_pps_pi, two_pps_population, joint_matrix, None,
+                            two_pps_pi, two_pps_population, joint_matrix, two_pps_strata,
                             two_pps_confidence,
                         )
                     st.session_state["two_stage_ppswor_result"] = two_pps_result
