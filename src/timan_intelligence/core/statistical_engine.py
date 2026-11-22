@@ -604,6 +604,109 @@ def run_mean_confidence_interval(
     )
 
 
+def run_one_sample_t_test(
+    df: pd.DataFrame,
+    variable: str,
+    reference_value: float,
+    alternative: str = "two-sided",
+) -> AnalysisResult:
+    """Test a numeric population mean against a fixed reference under IID assumptions."""
+    from scipy.stats import t
+
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Expected a pandas DataFrame.")
+    if not isinstance(variable, str) or not variable.strip():
+        raise ValueError("Provide a valid numeric variable name.")
+    if variable not in df.columns:
+        raise ValueError(f"Variable '{variable}' was not found in the dataset.")
+    if isinstance(reference_value, bool) or not isinstance(reference_value, (int, float)):
+        raise TypeError("Reference value must be numeric.")
+    reference_value = float(reference_value)
+    if not pd.notna(reference_value) or abs(reference_value) == float("inf"):
+        raise ValueError("Reference value must be finite.")
+    if alternative not in {"two-sided", "less", "greater"}:
+        raise ValueError("Alternative must be 'two-sided', 'less' or 'greater'.")
+    series = df[variable]
+    if not pd.api.types.is_numeric_dtype(series):
+        raise TypeError(f"Variable '{variable}' must be numeric.")
+    observed = series.dropna().astype(float)
+    finite = observed[observed.map(lambda value: pd.notna(value) and abs(value) != float("inf"))]
+    missing_count = int(series.isna().sum())
+    infinite_count = int((observed.abs() == float("inf")).sum())
+    n = int(len(finite))
+    if n < 2:
+        raise ValueError("A one-sample t-test requires at least two finite observations.")
+    mean = float(finite.mean())
+    sd = float(finite.std(ddof=1))
+    if sd == 0:
+        difference = mean - reference_value
+        if difference == 0:
+            raise ValueError("The t statistic is undefined when all observations equal the reference value.")
+        statistic = float("inf") if difference > 0 else float("-inf")
+        p_value = 0.0 if ((alternative == "greater" and difference > 0) or (alternative == "less" and difference < 0) or alternative == "two-sided") else 1.0
+        standard_error = 0.0
+    else:
+        standard_error = sd / (n ** 0.5)
+        statistic = (mean - reference_value) / standard_error
+        if alternative == "two-sided":
+            p_value = float(2.0 * t.sf(abs(statistic), n - 1))
+        elif alternative == "greater":
+            p_value = float(t.sf(statistic, n - 1))
+        else:
+            p_value = float(t.cdf(statistic, n - 1))
+    degrees_of_freedom = n - 1
+    confidence_level = 0.95
+    critical = float(t.ppf(0.975, degrees_of_freedom))
+    lower = mean - critical * standard_error
+    upper = mean + critical * standard_error
+    findings = [
+        f"Sample mean of {variable}: {mean:,.6g}; reference value: {reference_value:,.6g}.",
+        f"Mean difference (sample minus reference): {mean - reference_value:,.6g}.",
+        f"t({degrees_of_freedom}) = {statistic:,.4g}; {alternative} p-value = {p_value:.6g}.",
+        f"95% confidence interval for the population mean: [{lower:,.6g}, {upper:,.6g}].",
+    ]
+    limitations = [
+        "Assumes independent observations from a population for which the one-sample Student-t model is appropriate.",
+        "Does not adjust for survey weights, clustering, stratification, repeated measures or finite-population corrections; use Survey Analysis for complex samples.",
+    ]
+    if missing_count:
+        limitations.append(f"{missing_count:,} missing observation(s) were excluded.")
+    if infinite_count:
+        limitations.append(f"{infinite_count:,} infinite observation(s) were excluded.")
+    return AnalysisResult(
+        title=f"One-sample t-test: {variable}",
+        method="One-sample Student's t-test",
+        status="success",
+        tables={"test": pd.DataFrame([{
+            "Variable": variable, "Observations": n, "Sample mean": mean,
+            "Reference value": reference_value, "Mean difference": mean - reference_value,
+            "Standard deviation": sd, "Standard error": standard_error,
+            "t statistic": statistic, "Degrees of freedom": degrees_of_freedom,
+            "Alternative": alternative, "p-value": p_value,
+            "Confidence level": confidence_level, "Lower confidence limit": lower,
+            "Upper confidence limit": upper,
+        }])},
+        findings=findings,
+        assumptions=[
+            "The outcome is numeric and the reference value is specified before interpreting the test.",
+            "Observations are independent and representative under the stated model.",
+            "For small samples, the outcome distribution should not be severely non-normal or dominated by influential outliers.",
+        ],
+        limitations=limitations,
+        metadata={
+            "variable": variable, "reference_value": reference_value,
+            "estimate": mean, "mean_difference": mean - reference_value,
+            "standard_error": standard_error, "t_statistic": statistic,
+            "degrees_of_freedom": degrees_of_freedom, "p_value": p_value,
+            "alternative": alternative, "confidence_level": confidence_level,
+            "confidence_interval": (float(lower), float(upper)),
+            "observations": n, "missing_values": missing_count,
+            "infinite_values": infinite_count, "sampling_design_aware": False,
+            "inference_framework": "iid_one_sample_t",
+        },
+    )
+
+
 def run_proportion_confidence_interval(
     df: pd.DataFrame,
     variable: str,
