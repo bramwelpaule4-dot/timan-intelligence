@@ -533,7 +533,7 @@ def estimate_two_stage_domain_total(
     result["warnings"] = [
         "Domain membership is treated as an SSU-level characteristic; all elements within an SSU must belong to the same domain.",
         "All sampled SSUs, including those outside the domain, are retained in variance estimation; outside-domain outcomes are set to zero.",
-        *result["warnings"],
+        *[warning for warning in result["warnings"] if "domain estimation" not in warning.lower()],
     ]
     result["metadata"] = {
         **result["metadata"],
