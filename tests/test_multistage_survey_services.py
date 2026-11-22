@@ -109,3 +109,22 @@ def test_two_stage_domain_services_return_analysis_results():
     assert mean.metadata["estimate"] == pytest.approx(400 / 240)
     assert proportion.metadata["estimate"] == pytest.approx(68 / 240)
     assert "psu_details" in mean.tables
+
+
+def test_two_stage_total_service_accepts_certainty_psu_indicator():
+    df = pd.DataFrame({
+        "stratum": ["A"] * 6 + ["B"] * 6,
+        "psu": [1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6],
+        "ssu": [1, 2] * 6,
+        "outcome": [10, 20, 30, 40, 50, 60, 15, 25, 35, 45, 55, 65],
+        "psu_population": [5] * 12,
+        "ssu_population": [4] * 12,
+        "certainty": [True, True, False, False, False, False] * 2,
+    })
+    result = run_two_stage_survey_total_service(
+        df, "outcome", "psu", "ssu", "psu_population",
+        "ssu_population", "stratum", 0.95, "certainty",
+    )
+    assert result.status == "success"
+    assert result.metadata["number_of_certainty_psus"] == 2
+    assert result.tables["psu_details"]["certainty_psu"].sum() == 2
