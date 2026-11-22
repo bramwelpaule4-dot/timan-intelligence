@@ -592,3 +592,56 @@ def recommend_categorical_outcome_model_service(
         limitations=list(output["warnings"]),
         metadata=output,
     )
+
+
+def run_weighted_frequency_service(
+    df: pd.DataFrame,
+    outcome_variable: str,
+    weight_variable: str,
+    include_missing: bool = False,
+) -> AnalysisResult:
+    """Run weighted categorical frequencies with explicit design limitations."""
+    from timan_intelligence.core.survey_weights import weighted_frequency_table
+
+    output = weighted_frequency_table(
+        df, outcome_variable, weight_variable, include_missing
+    )
+    return AnalysisResult(
+        title=f"Weighted frequencies: {outcome_variable}",
+        method="Survey-weighted descriptive frequency estimation",
+        status="success",
+        tables={"weighted_frequencies": output["table"]},
+        findings=list(output["findings"]),
+        assumptions=[
+            "The supplied weight is appropriate for the target population and analysis unit.",
+            "Observed positive weights are numeric and finite.",
+            "The weighted percentage denominator includes only records with usable weights and the selected response inclusion rule.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata=output["metadata"],
+    )
+
+
+def run_weighted_numeric_summary_service(
+    df: pd.DataFrame,
+    outcome_variable: str,
+    weight_variable: str,
+) -> AnalysisResult:
+    """Run weighted numeric summaries with explicit design limitations."""
+    from timan_intelligence.core.survey_weights import weighted_numeric_summary
+
+    output = weighted_numeric_summary(df, outcome_variable, weight_variable)
+    return AnalysisResult(
+        title=f"Weighted numeric summary: {outcome_variable}",
+        method="Survey-weighted descriptive estimation",
+        status="success",
+        tables={"weighted_summary": output["table"]},
+        findings=list(output["findings"]),
+        assumptions=[
+            "The supplied weight is appropriate for the target population and analysis unit.",
+            "Observed positive weights are numeric and finite.",
+            "The weighted standard deviation is a population-form descriptive spread measure, not a design-based variance estimate.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata=output["metadata"],
+    )
