@@ -53,6 +53,7 @@ from timan_intelligence.services.analysis_service import (
     run_two_stage_ppswr_mean_service,
     run_two_stage_ppswr_proportion_service,
     run_ppswor_total_service,
+    run_ppswor_ratio_service,
     run_categorical_comparison,
     run_numeric_group_comparison_service,
     run_numeric_association_service,
@@ -4773,6 +4774,238 @@ elif page == "Survey Analysis":
                     )
                 for warning in saved_ppswor.limitations:
                     st.warning(warning)
+
+            with st.expander("PPSWOR population mean and proportion estimation"):
+                st.write(
+                    "Estimate a population mean or proportion from fully observed "
+                    "PSU-level numerator and denominator totals. The point estimate "
+                    "is a ratio of Horvitz–Thompson totals; variance uses first-order "
+                    "Taylor linearisation with the Sen–Yates–Grundy estimator."
+                )
+                st.warning(
+                    "This is PSU-level ratio estimation, not a two-stage estimator. "
+                    "Use actual first- and second-order PPSWOR inclusion probabilities. "
+                    "For a proportion, each PSU numerator must be between zero and "
+                    "its denominator. For a mean, the denominator is typically a "
+                    "PSU population count or eligible-unit total."
+                )
+                ppswor_ratio_numerator_options = [
+                    x for x in ppswor_numeric if x != ppswor_pi
+                ]
+                ppswor_ratio_numerator = st.selectbox(
+                    "PSU numerator total", ppswor_ratio_numerator_options,
+                    key="ppswor_ratio_numerator",
+                )
+                ppswor_ratio_denominator_options = [
+                    x for x in ppswor_numeric
+                    if x not in (ppswor_pi, ppswor_ratio_numerator)
+                ]
+                ppswor_ratio_denominator = st.selectbox(
+                    "PSU denominator total", ppswor_ratio_denominator_options,
+                    key="ppswor_ratio_denominator",
+                )
+                ppswor_ratio_parameter = st.radio(
+                    "Ratio parameter", ["Mean", "Proportion"],
+                    horizontal=True, key="ppswor_ratio_parameter",
+                )
+                ppswor_ratio_ready = (
+                    ppswor_matrix_file is not None
+                    and ppswor_ratio_numerator is not None
+                    and ppswor_ratio_denominator is not None
+                    and len({
+                        ppswor_psu, ppswor_pi, ppswor_ratio_numerator,
+                        ppswor_ratio_denominator,
+                    }) == 4
+                    and (
+                        ppswor_stratification == "Unstratified"
+                        or ppswor_strata is not None
+                    )
+                )
+                if st.button(
+                    "Run PPSWOR mean / proportion",
+                    type="primary", key="run_ppswor_ratio",
+                    disabled=not ppswor_ratio_ready,
+                ):
+                    try:
+                        ratio_matrix_bytes = ppswor_matrix_file.getvalue()
+                        ratio_matrix_digest = hashlib.sha256(
+                            ratio_matrix_bytes
+                        ).hexdigest()
+                        if ppswor_stratification == "Stratified":
+                            ratio_workbook = pd.ExcelFile(
+                                io.BytesIO(ratio_matrix_bytes)
+                            )
+                            ratio_strata_values = (
+                                df[ppswor_strata].dropna().unique().tolist()
+                            )
+                            ratio_sheet_map = {
+                                str(value): value for value in ratio_strata_values
+                            }
+                            if len(ratio_sheet_map) != len(ratio_strata_values):
+                                raise ValueError(
+                                    "Stratum labels must have unique text "
+                                    "representations for worksheet matching."
+                                )
+                            if set(ratio_workbook.sheet_names) != set(ratio_sheet_map):
+                                raise ValueError(
+                                    "Workbook worksheets must match observed strata "
+                                    "exactly for ratio estimation."
+                                )
+                            ratio_matrices = {}
+                            for sheet_name, stratum_value in ratio_sheet_map.items():
+                                ratio_matrix = pd.read_excel(
+                                    ratio_workbook, sheet_name=sheet_name, index_col=0
+                                )
+                                if (
+                                    ratio_matrix.empty
+                                    or not ratio_matrix.index.is_unique
+                                    or not ratio_matrix.columns.is_unique
+                                ):
+                                    raise ValueError(
+                                        f"Worksheet {sheet_name!r} must have unique "
+                                        "PSU row and column labels."
+                                    )
+                                ratio_ids = (
+                                    df.loc[
+                                        df[ppswor_strata] == stratum_value,
+                                        ppswor_psu,
+                                    ].dropna().tolist()
+                                )
+                                ratio_lookup = {
+                                    str(value): value for value in ratio_ids
+                                }
+                                ratio_matrix.index = [
+                                    ratio_lookup.get(str(value), value)
+                                    for value in ratio_matrix.index
+                                ]
+                                ratio_matrix.columns = [
+                                    ratio_lookup.get(str(value), value)
+                                    for value in ratio_matrix.columns
+                                ]
+                                unique_ratio_ids = list(dict.fromkeys(ratio_ids))
+                                if (
+                                    ratio_matrix.shape != (
+                                        len(unique_ratio_ids), len(unique_ratio_ids)
+                                    )
+                                    or set(ratio_matrix.index) != set(unique_ratio_ids)
+                                    or set(ratio_matrix.columns) != set(unique_ratio_ids)
+                                ):
+                                    raise ValueError(
+                                        f"Worksheet {sheet_name!r} must be a square "
+                                        "matrix covering exactly the sampled PSUs "
+                                        "in that stratum."
+                                    )
+                                ratio_matrices[stratum_value] = ratio_matrix.loc[
+                                    unique_ratio_ids, unique_ratio_ids
+                                ]
+                            ratio_joint_probabilities = ratio_matrices
+                        else:
+                            ratio_matrix = pd.read_csv(
+                                io.BytesIO(ratio_matrix_bytes), index_col=0
+                            )
+                            if (
+                                ratio_matrix.empty
+                                or not ratio_matrix.index.is_unique
+                                or not ratio_matrix.columns.is_unique
+                            ):
+                                raise ValueError(
+                                    "The joint-inclusion CSV must have unique PSU "
+                                    "row and column labels."
+                                )
+                            ratio_ids = df[ppswor_psu].dropna().tolist()
+                            ratio_lookup = {str(value): value for value in ratio_ids}
+                            ratio_matrix.index = [
+                                ratio_lookup.get(str(value), value)
+                                for value in ratio_matrix.index
+                            ]
+                            ratio_matrix.columns = [
+                                ratio_lookup.get(str(value), value)
+                                for value in ratio_matrix.columns
+                            ]
+                            unique_ratio_ids = list(dict.fromkeys(ratio_ids))
+                            if (
+                                ratio_matrix.shape != (
+                                    len(unique_ratio_ids), len(unique_ratio_ids)
+                                )
+                                or set(ratio_matrix.index) != set(unique_ratio_ids)
+                                or set(ratio_matrix.columns) != set(unique_ratio_ids)
+                            ):
+                                raise ValueError(
+                                    "The joint-inclusion CSV must be a square matrix "
+                                    "covering exactly the sampled PSUs."
+                                )
+                            ratio_joint_probabilities = ratio_matrix.loc[
+                                unique_ratio_ids, unique_ratio_ids
+                            ]
+                        ratio_result = run_ppswor_ratio_service(
+                            df, ppswor_ratio_numerator, ppswor_ratio_denominator,
+                            ppswor_psu, ppswor_pi, ratio_joint_probabilities,
+                            ppswor_strata, ppswor_confidence,
+                            ppswor_ratio_parameter.lower(),
+                        )
+                        st.session_state["ppswor_ratio_result"] = ratio_result
+                        st.session_state["ppswor_ratio_result_key"] = (
+                            _dataset_analysis_key(df), ppswor_psu, ppswor_pi,
+                            ppswor_ratio_numerator, ppswor_ratio_denominator,
+                            ppswor_ratio_parameter, ppswor_stratification,
+                            ppswor_strata, ppswor_confidence, ratio_matrix_digest,
+                        )
+                    except (
+                        TypeError, ValueError, KeyError, pd.errors.ParserError,
+                        ImportError,
+                    ) as exc:
+                        st.error(str(exc))
+                ppswor_ratio_result_key = (
+                    _dataset_analysis_key(df), ppswor_psu, ppswor_pi,
+                    ppswor_ratio_numerator, ppswor_ratio_denominator,
+                    ppswor_ratio_parameter, ppswor_stratification,
+                    ppswor_strata, ppswor_confidence,
+                    hashlib.sha256(ppswor_matrix_file.getvalue()).hexdigest()
+                    if ppswor_matrix_file is not None else None,
+                )
+                saved_ppswor_ratio = st.session_state.get("ppswor_ratio_result")
+                if (
+                    saved_ppswor_ratio is not None
+                    and st.session_state.get("ppswor_ratio_result_key")
+                    == ppswor_ratio_result_key
+                ):
+                    ratio_estimate = saved_ppswor_ratio.metadata["estimate"]
+                    if ppswor_ratio_parameter == "Proportion":
+                        st.metric(
+                            "PPSWOR estimated population proportion",
+                            f"{ratio_estimate:.2%}",
+                        )
+                    else:
+                        st.metric(
+                            "PPSWOR estimated population mean",
+                            f"{ratio_estimate:,.4g}",
+                        )
+                    st.metric(
+                        "Taylor-linearised SYG standard error",
+                        f"{saved_ppswor_ratio.metadata['standard_error']:,.4g}",
+                    )
+                    ratio_ci = saved_ppswor_ratio.metadata["confidence_interval"]
+                    if ppswor_ratio_parameter == "Proportion":
+                        st.write(
+                            f"{ppswor_confidence:.0%} confidence interval: "
+                            f"[{ratio_ci[0]:.2%}, {ratio_ci[1]:.2%}]"
+                        )
+                    else:
+                        st.write(
+                            f"{ppswor_confidence:.0%} confidence interval: "
+                            f"[{ratio_ci[0]:,.4g}, {ratio_ci[1]:,.4g}]"
+                        )
+                    st.dataframe(
+                        saved_ppswor_ratio.tables["stratum_estimates"],
+                        hide_index=True, use_container_width=True,
+                    )
+                    with st.expander("Ratio pairwise SYG variance contributions"):
+                        st.dataframe(
+                            saved_ppswor_ratio.tables["pairwise_variance"],
+                            hide_index=True, use_container_width=True,
+                        )
+                    for warning in saved_ppswor_ratio.limitations:
+                        st.warning(warning)
 
 
         st.info(
