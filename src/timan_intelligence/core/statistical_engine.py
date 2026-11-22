@@ -33,6 +33,7 @@ def run_chi_square_test_of_independence(df: pd.DataFrame, row_variable: str, col
     if complete.empty:
         raise ValueError("No complete observations remain for the contingency table.")
     observed = pd.crosstab(complete[row_variable], complete[column_variable])
+    observed = observed.loc[observed.sum(axis=1) > 0, observed.sum(axis=0) > 0]
     if observed.shape[0] < 2 or observed.shape[1] < 2:
         raise ValueError("The chi-square test requires at least two observed categories in each variable.")
     statistic, p_value, dfree, expected_values = chi2_contingency(observed.to_numpy(), correction=False)
