@@ -141,8 +141,8 @@ def test_catalogue_summary_reports_lifecycle_and_priorities():
     summary = get_statistical_method_summary()
 
     assert summary["catalogue_version"] == CATALOGUE_VERSION
-    assert summary["total_methods"] == 23
-    assert summary["implementation_status"]["implemented"] == 5
+    assert summary["total_methods"] == 24
+    assert summary["implementation_status"]["implemented"] == 6
     assert summary["implementation_status"]["planned"] == 18
     assert set(summary["release_priorities"]) == {"P1", "P2", "P3"}
 
@@ -168,3 +168,12 @@ def test_repository_returns_defensive_copies():
 
     assert stored is not None
     assert stored.name == original_name
+
+
+def test_welch_mean_difference_interval_is_registered_as_implemented():
+    method = get_statistical_method(
+        "method.inference.confidence_interval.mean_difference.welch"
+    )
+    assert method is not None
+    assert method.implementation_status == "implemented"
+    assert method.execution_eligibility == "conditional"
