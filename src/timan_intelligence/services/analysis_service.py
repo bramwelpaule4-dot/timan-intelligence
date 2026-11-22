@@ -1907,3 +1907,17 @@ def run_proportion_confidence_interval_service(
     from timan_intelligence.core.statistical_engine import run_proportion_confidence_interval
 
     return run_proportion_confidence_interval(df, variable, confidence_level)
+
+
+def run_welch_mean_difference_confidence_interval_service(
+    df: pd.DataFrame,
+    outcome_variable: str,
+    group_variable: str,
+    confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Run a Welch-Satterthwaite interval for two independent group means."""
+    from timan_intelligence.core.statistical_engine import run_welch_mean_difference_confidence_interval
+
+    return run_welch_mean_difference_confidence_interval(
+        df, outcome_variable, group_variable, confidence_level
+    )
