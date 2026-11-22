@@ -1221,3 +1221,49 @@ def run_ppswor_ratio_service(
             "confidence_level": output["confidence_level"],
         },
     )
+
+
+def run_ppswor_domain_ratio_service(
+    df: pd.DataFrame,
+    domain_name: str,
+    domain_numerator_variable: str,
+    domain_denominator_variable: str,
+    psu_variable: str,
+    inclusion_probability_variable: str,
+    joint_inclusion_probabilities: pd.DataFrame | dict[Any, pd.DataFrame],
+    strata_variable: str | None = None,
+    confidence_level: float = 0.95,
+    parameter: str = "mean",
+) -> AnalysisResult:
+    """Run a design-based PPSWOR domain mean or proportion analysis."""
+    from timan_intelligence.core.ppswor_survey import estimate_ppswor_domain_ratio
+
+    output = estimate_ppswor_domain_ratio(
+        df, domain_name, domain_numerator_variable, domain_denominator_variable,
+        psu_variable, inclusion_probability_variable,
+        joint_inclusion_probabilities, strata_variable, confidence_level,
+        parameter,
+    )
+    return AnalysisResult(
+        title=f"PPSWOR domain {parameter}: {domain_name}",
+        method=output["metadata"]["estimator"],
+        status="success",
+        tables={
+            "stratum_estimates": output["strata"],
+            "pairwise_variance": output["pairwise_variance"],
+        },
+        findings=list(output["findings"]),
+        assumptions=[
+            "Every sampled PSU is retained, including PSUs with zero domain totals.",
+            "Each row represents one sampled PSU with fully observed domain-specific numerator and denominator totals.",
+            "The original fixed-size PPSWOR design and its actual first- and second-order inclusion probabilities are preserved.",
+            "Variance uses first-order Taylor linearisation with the Sen-Yates-Grundy estimator.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata={
+            **output["metadata"], "estimate": output["estimate"],
+            "variance": output["variance"], "standard_error": output["standard_error"],
+            "confidence_interval": output["confidence_interval"],
+            "confidence_level": output["confidence_level"],
+        },
+    )
