@@ -920,6 +920,63 @@ def run_proportion_confidence_interval(
 
 
 
+
+def run_two_independent_proportions_test(df: pd.DataFrame, outcome_variable: str, group_variable: str, confidence_level: float = 0.95, alternative: str = "two-sided") -> AnalysisResult:
+    """Compare two independent binary proportions using a pooled score test and Newcombe-Wilson interval."""
+    from scipy.stats import norm
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Expected a pandas DataFrame.")
+    if outcome_variable not in df.columns or group_variable not in df.columns:
+        raise ValueError("Both binary outcome and grouping variables must exist.")
+    if outcome_variable == group_variable:
+        raise ValueError("Outcome and grouping variables must be different.")
+    if not pd.api.types.is_numeric_dtype(df[outcome_variable]):
+        raise TypeError("The outcome must be numeric and coded strictly as 1 and 0.")
+    if isinstance(confidence_level, bool) or not isinstance(confidence_level, (int, float)):
+        raise TypeError("Confidence level must be numeric.")
+    level = float(confidence_level)
+    if not 0 < level < 1:
+        raise ValueError("Confidence level must be greater than 0 and less than 1.")
+    if alternative not in {"two-sided", "greater", "less"}:
+        raise ValueError("Alternative must be 'two-sided', 'greater' or 'less'.")
+    pair = df[[outcome_variable, group_variable]]
+    clean = pair.dropna()
+    excluded = int(len(pair) - len(clean))
+    if clean.empty:
+        raise ValueError("No complete outcome and group observations remain.")
+    if not set(clean[outcome_variable].unique()).issubset({0, 1}):
+        raise ValueError("The outcome must contain only 0 and 1 values.")
+    labels = list(pd.unique(clean[group_variable]))
+    if len(labels) != 2:
+        raise ValueError("A two-proportion comparison requires exactly two observed independent groups.")
+    samples = [clean.loc[clean[group_variable] == label, outcome_variable].astype(int) for label in labels]
+    n1, n2 = (int(x.size) for x in samples)
+    x1, x2 = (int(x.sum()) for x in samples)
+    p1, p2 = x1 / n1, x2 / n2
+    difference = p1 - p2
+    pooled = (x1 + x2) / (n1 + n2)
+    pooled_se = (pooled * (1 - pooled) * (1 / n1 + 1 / n2)) ** 0.5
+    z = difference / pooled_se if pooled_se else (0.0 if difference == 0 else (float("inf") if difference > 0 else float("-inf")))
+    p_value = float(2 * norm.sf(abs(z))) if alternative == "two-sided" else float(norm.sf(z) if alternative == "greater" else norm.cdf(z))
+    zc = float(norm.ppf(0.5 + level / 2))
+    def wilson(x, n):
+        p = x / n
+        den = 1 + zc ** 2 / n
+        centre = (p + zc ** 2 / (2 * n)) / den
+        half = zc * (p * (1 - p) / n + zc ** 2 / (4 * n ** 2)) ** 0.5 / den
+        return max(0.0, centre - half), min(1.0, centre + half)
+    l1, u1 = wilson(x1, n1)
+    l2, u2 = wilson(x2, n2)
+    lower = max(-1.0, difference - ((p1-l1)**2 + (u2-p2)**2)**0.5)
+    upper = min(1.0, difference + ((u1-p1)**2 + (p2-l2)**2)**0.5)
+    se = (p1*(1-p1)/n1 + p2*(1-p2)/n2)**0.5
+    summary = pd.DataFrame([{"Group 1": str(labels[0]), "Group 2": str(labels[1]), "Group 1 successes": x1, "Group 1 n": n1, "Group 1 proportion": p1, "Group 2 successes": x2, "Group 2 n": n2, "Group 2 proportion": p2, "Difference (group 1 - group 2)": difference, "Standard error": se, "Pooled z statistic": z, "p-value": p_value, "Alternative": alternative, "Confidence level": level, "CI lower": lower, "CI upper": upper, "Incomplete pairs excluded": excluded}])
+    findings = [f"Group {labels[0]}: {x1}/{n1} events ({p1:.1%}); group {labels[1]}: {x2}/{n2} events ({p2:.1%}).", f"Estimated difference (group 1 minus group 2): {difference:.1%}.", f"Pooled score z = {z:.4g}; p = {p_value:.4g} ({alternative}).", f"{level:.0%} Newcombe-Wilson confidence interval: [{lower:.1%}, {upper:.1%}]."]
+    limitations = ["Assumes two independent groups and independent Bernoulli observations within each group.", "The hypothesis test uses the pooled two-proportion score z statistic without continuity correction.", "The confidence interval uses Newcombe's method combining two Wilson score intervals.", "Not adjusted for survey weights, clustering, stratification, repeated measures or finite-population corrections."]
+    if excluded:
+        limitations.append(f"{excluded:,} rows with a missing outcome or group label were excluded.")
+    return AnalysisResult(title=f"Two independent proportions: {outcome_variable} by {group_variable}", method="Two-independent-proportions score test", status="success", tables={"test_summary": summary}, findings=findings, assumptions=["Outcome is binary (1=event, 0=non-event).", "The grouping variable defines exactly two independent groups.", "Observations are independent within each group."], limitations=limitations, metadata={"outcome_variable": outcome_variable, "group_variable": group_variable, "group_1_label": str(labels[0]), "group_2_label": str(labels[1]), "group_1_successes": x1, "group_1_n": n1, "group_1_proportion": p1, "group_2_successes": x2, "group_2_n": n2, "group_2_proportion": p2, "estimate": difference, "standard_error": se, "z_statistic": float(z), "p_value": p_value, "alternative": alternative, "confidence_level": level, "confidence_interval": (float(lower), float(upper)), "incomplete_pairs_excluded": excluded, "sampling_design_aware": False, "study_design": "independent_groups", "inference_framework": "pooled_two_proportion_score_newcombe_wilson"})
+
 def run_one_sample_binomial_test(df: pd.DataFrame, variable: str, reference_proportion: float,
                                 alternative: str = "two-sided", confidence_level: float = 0.95) -> AnalysisResult:
     """Test a binary population proportion against a reference using an exact binomial test."""
