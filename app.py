@@ -71,6 +71,7 @@ from timan_intelligence.services.analysis_service import (
     run_chi_square_test_of_independence_service,
     run_fisher_exact_test_service,
     run_one_sample_binomial_test_service,
+    run_two_independent_proportions_test_service,
     run_ppswor_total_service,
     run_ppswor_ratio_service,
     run_ppswor_domain_ratio_service,
@@ -868,7 +869,7 @@ MODULES = {
     ),
     "Statistical Inference": (
         "Partially available — initial independent-sample procedures",
-        "Model-based mean and proportion confidence intervals, one-sample Student's t-test and exact binomial test, "
+        "Model-based mean and proportion confidence intervals, one-sample Student's t-test and exact binomial test, two-independent-proportions comparisons, "
         "Welch mean-difference confidence intervals, paired mean-change intervals, paired t-tests, chi-square tests and Fisher's exact tests for categorical association, Welch's "
         "independent-samples t-test and one-way ANOVA are available for their stated study "
         "designs. Complex survey inference and other planned methods remain under development.",
@@ -7142,6 +7143,7 @@ elif page == "Statistical Inference":
                 "One-sample Student's t-test",
                 "Confidence interval for a proportion",
                 "Exact one-sample binomial test",
+                "Two-independent-proportions comparison",
                 "Welch confidence interval for a mean difference",
                 "Paired mean-change confidence interval",
                 "Paired-samples Student's t-test",
@@ -7221,6 +7223,44 @@ elif page == "Statistical Inference":
                 st.caption("Tests whether the mean within-pair change (after minus before) differs from zero. The confidence interval remains two-sided.")
             else:
                 st.caption("Each row must represent the same participant, household, facility or other matched unit at both time points. The reported change is after minus before.")
+        elif inference_method == "Two-independent-proportions comparison":
+            binary_cols = [
+                column for column in numeric_cols
+                if inference_df[column].notna().any()
+                and set(inference_df[column].dropna().unique()).issubset({0, 1})
+            ]
+            outcome_variable = (
+                st.selectbox(
+                    "Binary outcome variable (1 = event, 0 = non-event)",
+                    binary_cols,
+                    key="inference_two_prop_outcome",
+                )
+                if binary_cols else None
+            )
+            group_options = categorical_cols
+            group_variable = (
+                st.selectbox(
+                    "Independent two-group variable",
+                    group_options,
+                    key="inference_two_prop_group",
+                )
+                if group_options else None
+            )
+            if not binary_cols:
+                st.warning("No numeric outcome variable coded strictly as 0/1 is available.")
+            if not group_options:
+                st.warning("No non-numeric grouping variable is available. Recode group labels as categorical text.")
+            two_prop_alternative = st.selectbox(
+                "Alternative hypothesis",
+                ["two-sided", "greater", "less"],
+                format_func=lambda value: {
+                    "two-sided": "Two-sided: proportions differ",
+                    "greater": "Group 1 proportion is greater",
+                    "less": "Group 1 proportion is less",
+                }[value],
+                key="inference_two_prop_alternative",
+            )
+            st.caption("Compares group 1 minus group 2 using a pooled score z test and a Newcombe-Wilson confidence interval. Group order follows first appearance in the data.")
         elif inference_method in {"Confidence interval for a proportion", "Exact one-sample binomial test"}:
             binary_cols = [
                 column for column in numeric_cols
@@ -7316,6 +7356,10 @@ elif page == "Statistical Inference":
                 elif inference_method == "One-sample Student's t-test":
                     inference_result = run_one_sample_t_test_service(
                         inference_df, outcome_variable, reference_value, alternative
+                    )
+                elif inference_method == "Two-independent-proportions comparison":
+                    inference_result = run_two_independent_proportions_test_service(
+                        inference_df, outcome_variable, group_variable, confidence_level, two_prop_alternative
                     )
                 elif inference_method == "Exact one-sample binomial test":
                     inference_result = run_one_sample_binomial_test_service(inference_df, outcome_variable, reference_proportion, binomial_alternative, confidence_level)
