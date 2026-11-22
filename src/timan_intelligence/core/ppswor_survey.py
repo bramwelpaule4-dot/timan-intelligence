@@ -507,13 +507,14 @@ def estimate_ppswor_domain_ratio(
         df[domain_denominator_variable], errors="coerce"
     )
     zero_domain_psus = int(domain_denominator_values.eq(0).sum())
-    # Ratio variance is additive across independent strata; expose each
-    # stratum's contribution on the same scale as the overall ratio variance.
-    if "estimated_variance" in output["strata"].columns:
-        output["strata"]["estimated_ratio_variance"] = (
-            output["strata"]["estimated_variance"]
-            / (output["denominator_estimate"] ** 2)
-        )
+    # Use the Taylor-linearised variance by stratum, not the numerator
+    # total variance, to decompose the ratio variance correctly.
+    linearised_strata = linearised_result["strata"].set_index("stratum")
+    output["strata"]["estimated_ratio_variance"] = (
+        output["strata"]["stratum"].map(
+            linearised_strata["estimated_variance"]
+        ) / (output["denominator_estimate"] ** 2)
+    )
     (
         output["diagnostics"],
         output["strata"],
