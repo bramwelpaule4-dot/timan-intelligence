@@ -63,6 +63,7 @@ from timan_intelligence.services.analysis_service import (
     run_two_stage_ppswor_domain_mean_service,
     run_two_stage_ppswor_domain_proportion_service,
     run_mean_confidence_interval_service,
+    run_proportion_confidence_interval_service,
     run_ppswor_total_service,
     run_ppswor_ratio_service,
     run_ppswor_domain_ratio_service,
@@ -7130,6 +7131,7 @@ elif page == "Statistical Inference":
             "Inferential procedure",
             [
                 "Confidence interval for a mean",
+                "Confidence interval for a proportion",
                 "Welch's independent-samples t-test",
                 "One-way ANOVA",
             ],
@@ -7158,6 +7160,24 @@ elif page == "Statistical Inference":
                 outcome_variable = None
                 st.warning("No numeric variables are available for a mean interval.")
             group_variable = None
+        elif inference_method == "Confidence interval for a proportion":
+            binary_cols = [
+                column for column in numeric_cols
+                if inference_df[column].notna().any()
+                and set(inference_df[column].dropna().unique()).issubset({0, 1})
+            ]
+            outcome_variable = (
+                st.selectbox(
+                    "Binary outcome variable (1 = event, 0 = non-event)",
+                    binary_cols,
+                    key="inference_proportion_outcome",
+                )
+                if binary_cols else None
+            )
+            group_variable = None
+            if not binary_cols:
+                st.warning("No numeric variables coded strictly as 0/1 with observed values are available.")
+            st.caption("Uses the Wilson score interval for a binary outcome.")
         else:
             outcome_variable = (
                 st.selectbox(
@@ -7187,7 +7207,10 @@ elif page == "Statistical Inference":
         can_run = (
             outcome_variable is not None
             and (
-                inference_method == "Confidence interval for a mean"
+                inference_method in {
+                    "Confidence interval for a mean",
+                    "Confidence interval for a proportion",
+                }
                 or group_variable is not None
             )
             and independence_confirmed
@@ -7201,6 +7224,10 @@ elif page == "Statistical Inference":
             try:
                 if inference_method == "Confidence interval for a mean":
                     inference_result = run_mean_confidence_interval_service(
+                        inference_df, outcome_variable, confidence_level
+                    )
+                elif inference_method == "Confidence interval for a proportion":
+                    inference_result = run_proportion_confidence_interval_service(
                         inference_df, outcome_variable, confidence_level
                     )
                 elif inference_method == "Welch's independent-samples t-test":
