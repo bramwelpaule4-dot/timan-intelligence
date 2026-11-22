@@ -28,6 +28,7 @@ from timan_intelligence.core.statistical_engine import (
     run_chi_square_test_of_independence,
     run_fisher_exact_test,
     run_one_way_anova,
+    run_mann_whitney_u_test,
 )
 
 
@@ -50,6 +51,7 @@ _EXECUTOR_BY_METHOD_ID = {
     "method.inference.association.fisher_exact": "fisher_exact",
     "method.inference.comparison.t_test.independent.welch": "welch_t",
     "method.inference.comparison.anova.one_way": "anova",
+    "method.inference.comparison.mann_whitney": "mann_whitney",
 }
 
 
@@ -99,7 +101,7 @@ def _validate_design_compatibility(
         "paired", "repeated_measure", "repeated_measures",
         "longitudinal", "time_series",
     }
-    if executor in {"welch_t", "anova", "welch_mean_difference_ci", "chi_square_independence", "fisher_exact", "two_proportions", "two_proportions_ci"} and study_design in repeated_designs:
+    if executor in {"welch_t", "anova", "mann_whitney", "welch_mean_difference_ci", "chi_square_independence", "fisher_exact", "two_proportions", "two_proportions_ci"} and study_design in repeated_designs:
         raise AnalysisExecutionError(
             "Execution blocked: this executor assumes independent groups and "
             "is not validated for paired, repeated-measures, longitudinal or "
@@ -309,6 +311,11 @@ def execute_recommendation(
         result = run_welch_mean_difference_confidence_interval(
             df, variables[0], variables[1], confidence_level=confidence_level
         )
+    elif executor == "mann_whitney":
+        if len(variables) != 2:
+            raise AnalysisExecutionError("The Mann–Whitney U test requires an outcome and a two-group variable.")
+        options = recommendation.get("options") or {}
+        result = run_mann_whitney_u_test(df, variables[0], variables[1], alternative=options.get("alternative", "two-sided"))
     elif executor == "welch_t":
         if len(variables) != 2:
             raise AnalysisExecutionError(

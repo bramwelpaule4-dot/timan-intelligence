@@ -446,6 +446,85 @@ def run_independent_samples_t_test(
     )
 
 
+def run_mann_whitney_u_test(
+    df: pd.DataFrame,
+    outcome_variable: str,
+    group_variable: str,
+    alternative: str = "two-sided",
+) -> AnalysisResult:
+    """Compare two independent groups using the Mann–Whitney U rank test."""
+    from scipy.stats import mannwhitneyu
+
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Expected a pandas DataFrame.")
+    if outcome_variable not in df.columns or group_variable not in df.columns:
+        raise ValueError("Both outcome and grouping variables must exist.")
+    if outcome_variable == group_variable:
+        raise ValueError("Choose different outcome and grouping variables.")
+    if not pd.api.types.is_numeric_dtype(df[outcome_variable]):
+        raise TypeError("The outcome must be numeric or ordinal values encoded numerically.")
+    if df[group_variable].isna().any():
+        raise ValueError("The grouping variable contains missing group labels.")
+    if alternative not in {"two-sided", "less", "greater"}:
+        raise ValueError("Alternative must be 'two-sided', 'less' or 'greater'.")
+    group_labels = list(pd.unique(df[group_variable]))
+    if len(group_labels) != 2:
+        raise ValueError("The Mann–Whitney U test requires exactly two independent groups.")
+    outcome = df[outcome_variable]
+    missing_count = int(outcome.isna().sum())
+    numeric = outcome.astype(float)
+    finite_mask = outcome.notna() & numeric.map(lambda value: bool(pd.notna(value) and abs(value) != float("inf")))
+    infinite_count = int((outcome.notna() & ~finite_mask).sum())
+    valid = df.loc[finite_mask, [group_variable, outcome_variable]]
+    group_1 = valid.loc[valid[group_variable] == group_labels[0], outcome_variable].astype(float).to_numpy()
+    group_2 = valid.loc[valid[group_variable] == group_labels[1], outcome_variable].astype(float).to_numpy()
+    if len(group_1) < 2 or len(group_2) < 2:
+        raise ValueError("The Mann–Whitney U test requires at least two finite observations in each group.")
+    test = mannwhitneyu(group_1, group_2, alternative=alternative, method="auto", use_continuity=True)
+    u_statistic, p_value = float(test.statistic), float(test.pvalue)
+    rank_biserial = float((2.0 * u_statistic / (len(group_1) * len(group_2))) - 1.0)
+    has_ties = len(set(group_1.tolist() + group_2.tolist())) < (len(group_1) + len(group_2))
+    selected_method = "exact" if min(len(group_1), len(group_2)) <= 8 and not has_ties else "asymptotic"
+    summary = pd.DataFrame([{
+        "Group 1": str(group_labels[0]), "Group 2": str(group_labels[1]),
+        "Group 1 n": int(len(group_1)), "Group 2 n": int(len(group_2)),
+        "Group 1 median": float(pd.Series(group_1).median()), "Group 2 median": float(pd.Series(group_2).median()),
+        "U statistic (Group 1)": u_statistic, "Rank-biserial correlation": rank_biserial,
+        "Alternative": alternative, "P-value": p_value, "P-value method": selected_method,
+        "Missing outcomes excluded": missing_count, "Infinite outcomes excluded": infinite_count,
+    }])
+    assumptions = [
+        "The two groups are independent, and observations are independent within each group.",
+        "The outcome is at least ordinal; numeric values preserve the intended ordering.",
+        "The test compares rank distributions. A median/location-shift interpretation additionally requires similarly shaped group distributions.",
+        "The exact p-value is used automatically for small samples without ties; otherwise an asymptotic approximation is used.",
+    ]
+    limitations = [
+        "This is not automatically a test of medians; differing distribution shapes or spreads can produce a significant result without a pure median shift.",
+        "The rank-biserial correlation is a directional effect-size summary, not a causal effect.",
+        "The ordinary test is not adjusted for survey weights, clustering, stratification, finite population corrections or repeated-measures designs.",
+        "Missing and infinite outcome values are excluded; missing group labels are rejected.",
+    ]
+    findings = [
+        f"Group 1 ({group_labels[0]}) has {len(group_1)} usable observations; group 2 ({group_labels[1]}) has {len(group_2)}.",
+        f"Mann–Whitney U statistic for group 1 is {u_statistic:.4g}; p-value is {p_value:.4g}.",
+        f"Directional rank-biserial correlation is {rank_biserial:.3f}; positive values indicate higher ranks in group 1.",
+    ]
+    return AnalysisResult(
+        status="success", method="Mann–Whitney U test", tables={"test": summary},
+        findings=findings, assumptions=assumptions, limitations=limitations,
+        metadata={
+            "outcome_variable": outcome_variable, "group_variable": group_variable,
+            "group_1_label": str(group_labels[0]), "group_2_label": str(group_labels[1]),
+            "group_1_n": int(len(group_1)), "group_2_n": int(len(group_2)),
+            "u_statistic": u_statistic, "rank_biserial_correlation": rank_biserial,
+            "p_value": p_value, "alternative": alternative, "p_value_method": selected_method,
+            "missing_outcomes": missing_count, "infinite_outcomes": infinite_count,
+            "sampling_design_aware": False, "study_design": "independent_groups",
+        },
+    )
+
+
 def run_one_way_anova(
     df: pd.DataFrame,
     outcome_variable: str,

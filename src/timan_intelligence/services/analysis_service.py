@@ -1949,6 +1949,15 @@ def run_welch_mean_difference_confidence_interval_service(
     )
 
 
+def run_mann_whitney_u_test_service(
+    df: pd.DataFrame, outcome_variable: str, group_variable: str,
+    alternative: str = "two-sided",
+) -> AnalysisResult:
+    """Run the Mann–Whitney U test through the shared analysis service."""
+    from timan_intelligence.core.statistical_engine import run_mann_whitney_u_test
+    return run_mann_whitney_u_test(df, outcome_variable, group_variable, alternative)
+
+
 def run_paired_samples_t_test_service(
     df: pd.DataFrame, before_variable: str, after_variable: str,
     confidence_level: float = 0.95, alternative: str = "two-sided",

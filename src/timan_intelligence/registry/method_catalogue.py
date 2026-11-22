@@ -35,6 +35,7 @@ IMPLEMENTED_METHODS = frozenset(
         "method.inference.confidence_interval.mean_difference.paired",
         "method.inference.comparison.t_test.independent.welch",
         "method.inference.comparison.anova.one_way",
+        "method.inference.comparison.mann_whitney",
     }
 )
 
@@ -402,9 +403,11 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             required_roles=["outcome", "two_group_factor"],
             data_requirements=["Two independent groups and an ordered outcome."],
             assumptions=["Independent observations.", "Outcome values are at least ordinal.", "Distributional shapes are considered before interpreting a location shift."],
-            outputs=["U statistic", "P-value", "Group sample sizes", "Effect-size option"],
-            use_cases=["Compare two independent groups using a rank-based procedure"],
-            limitations=["It is not automatically a test of medians."],
+            outputs=["Group sample sizes and medians", "Mann–Whitney U statistic for group 1", "P-value", "Directional rank-biserial correlation", "P-value calculation method"],
+            use_cases=["Compare two independent groups using a rank-based procedure", "Compare ordinal or skewed numeric outcomes between independent groups"],
+            aliases=["Wilcoxon rank-sum test", "Mann Whitney test", "Rank-sum test"],
+            implementation_status="implemented", verification_status="unit_tested", execution_eligibility="conditional",
+            limitations=["It is not automatically a test of medians; a location-shift interpretation requires similarly shaped group distributions.", "The current procedure requires numeric or ordinal values encoded numerically.", "Not adjusted for complex survey sampling, weights, clustering or repeated-measures designs."],
         ),
         _method(
             entity_id="method.inference.comparison.kruskal_wallis",
