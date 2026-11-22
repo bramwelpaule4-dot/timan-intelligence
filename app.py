@@ -5559,6 +5559,182 @@ elif page == "Survey Analysis":
                     for warning in saved_ppswor_domain_total.limitations:
                         st.warning(warning)
 
+        with st.expander("Survey sample size and sampling design planner", expanded=False):
+            from timan_intelligence.services.analysis_service import (
+                run_sample_size_service,
+                run_stratified_allocation_service,
+                run_cluster_sample_plan_service,
+            )
+
+            st.write(
+                "Plan a survey before fieldwork. Supply the expected prevalence or "
+                "standard deviation, precision, population size and design assumptions. "
+                "These are planning calculations, not substitutes for a complete "
+                "analysis-specific design review."
+            )
+            planner_parameter = st.selectbox(
+                "Primary parameter", ["Proportion", "Mean"],
+                key="sample_planner_parameter",
+            )
+            planner_confidence = st.selectbox(
+                "Confidence level", [0.90, 0.95, 0.99], index=1,
+                format_func=lambda value: f"{value:.0%}",
+                key="sample_planner_confidence",
+            )
+            planner_error = st.number_input(
+                "Margin of error (absolute)", min_value=0.001,
+                max_value=0.99 if planner_parameter == "Proportion" else 1000000.0,
+                value=0.05 if planner_parameter == "Proportion" else 1.0,
+                step=0.01, key="sample_planner_error",
+            )
+            planner_population = st.number_input(
+                "Target population size (0 = large/unknown)", min_value=0,
+                value=0, step=100, key="sample_planner_population",
+            )
+            planner_prevalence = 0.5
+            planner_sd = None
+            if planner_parameter == "Proportion":
+                planner_prevalence = st.number_input(
+                    "Expected prevalence/proportion", min_value=0.0,
+                    max_value=1.0, value=0.5, step=0.05,
+                    key="sample_planner_prevalence",
+                )
+            else:
+                planner_sd = st.number_input(
+                    "Expected standard deviation", min_value=0.000001,
+                    value=10.0, step=0.5, key="sample_planner_sd",
+                )
+            planner_deff = st.number_input(
+                "Design effect", min_value=0.01, value=1.0, step=0.1,
+                key="sample_planner_deff",
+            )
+            planner_nonresponse = st.number_input(
+                "Expected nonresponse rate", min_value=0.0, max_value=0.99,
+                value=0.10, step=0.01, key="sample_planner_nonresponse",
+            )
+            if st.button("Calculate required sample size", key="run_sample_size"):
+                try:
+                    args = {
+                        "parameter": planner_parameter.lower(),
+                        "confidence_level": planner_confidence,
+                        "margin_of_error": planner_error,
+                        "population_size": int(planner_population) or None,
+                        "design_effect": planner_deff,
+                        "nonresponse_rate": planner_nonresponse,
+                    }
+                    if planner_parameter == "Proportion":
+                        args["prevalence"] = planner_prevalence
+                    else:
+                        args["standard_deviation"] = planner_sd
+                    result = run_sample_size_service(**args)
+                    st.session_state["sample_size_plan_result"] = result
+                except (TypeError, ValueError, KeyError) as exc:
+                    st.error(str(exc))
+            sample_plan = st.session_state.get("sample_size_plan_result")
+            if sample_plan is not None:
+                st.metric("Recommended sample to approach", f"{sample_plan.metadata['recommended_sample_size']:,}")
+                st.dataframe(sample_plan.tables["calculation"], hide_index=True, use_container_width=True)
+                for assumption in sample_plan.assumptions:
+                    st.caption(f"Assumption: {assumption}")
+                for warning in sample_plan.limitations:
+                    st.warning(warning)
+
+            st.divider()
+            st.markdown("**Stratified sample allocation**")
+            st.caption("Upload a CSV with one row per stratum and a positive population count.")
+            allocation_file = st.file_uploader(
+                "Stratum population CSV", type=["csv"],
+                key="sample_allocation_upload",
+            )
+            if allocation_file is not None:
+                try:
+                    allocation_frame = pd.read_csv(allocation_file)
+                    allocation_population_col = st.selectbox(
+                        "Stratum population column", allocation_frame.columns,
+                        key="sample_allocation_population_col",
+                    )
+                    allocation_method = st.selectbox(
+                        "Allocation method", ["proportional", "equal", "neyman"],
+                        key="sample_allocation_method",
+                    )
+                    allocation_sd_col = None
+                    allocation_cost_col = None
+                    if allocation_method == "neyman":
+                        allocation_sd_col = st.selectbox(
+                            "Within-stratum standard deviation",
+                            [col for col in allocation_frame.columns if col != allocation_population_col],
+                            key="sample_allocation_sd_col",
+                        )
+                        allocation_cost_col = st.selectbox(
+                            "Optional relative fieldwork cost",
+                            ["None"] + [col for col in allocation_frame.columns if col not in (allocation_population_col, allocation_sd_col)],
+                            key="sample_allocation_cost_col",
+                        )
+                    allocation_total = st.number_input(
+                        "Total sample to allocate", min_value=1,
+                        value=100, step=10, key="sample_allocation_total",
+                    )
+                    if st.button("Allocate sample by stratum", key="run_sample_allocation"):
+                        result = run_stratified_allocation_service(
+                            allocation_frame, int(allocation_total),
+                            allocation=allocation_method,
+                            population_column=allocation_population_col,
+                            standard_deviation_column=allocation_sd_col,
+                            cost_column=None if allocation_cost_col in (None, "None") else allocation_cost_col,
+                        )
+                        st.session_state["sample_allocation_result"] = result
+                    allocation_result = st.session_state.get("sample_allocation_result")
+                    if allocation_result is not None:
+                        st.dataframe(allocation_result.tables["stratum_allocation"], hide_index=True, use_container_width=True)
+                        st.download_button(
+                            "Download stratum allocation (CSV)",
+                            data=allocation_result.tables["stratum_allocation"].to_csv(index=False).encode("utf-8"),
+                            file_name="timanstat_stratum_sample_allocation.csv",
+                            mime="text/csv", key="download_sample_allocation",
+                        )
+                except (TypeError, ValueError, KeyError, pd.errors.ParserError) as exc:
+                    st.error(str(exc))
+
+            st.divider()
+            st.markdown("**Cluster sample planning**")
+            cluster_col1, cluster_col2 = st.columns(2)
+            with cluster_col1:
+                cluster_target = st.number_input(
+                    "Required completed respondents", min_value=1,
+                    value=400, step=25, key="cluster_target_respondents",
+                )
+                cluster_size = st.number_input(
+                    "Average respondents per cluster", min_value=1,
+                    value=20, step=1, key="cluster_average_size",
+                )
+            with cluster_col2:
+                cluster_icc = st.number_input(
+                    "Intraclass correlation (ICC)", min_value=0.0,
+                    max_value=1.0, value=0.05, step=0.01,
+                    key="cluster_icc",
+                )
+                cluster_nonresponse = st.number_input(
+                    "Cluster plan nonresponse rate", min_value=0.0,
+                    max_value=0.99, value=0.10, step=0.01,
+                    key="cluster_nonresponse",
+                )
+            if st.button("Plan clusters", key="run_cluster_sample_plan"):
+                try:
+                    result = run_cluster_sample_plan_service(
+                        total_respondents=int(cluster_target),
+                        average_cluster_size=int(cluster_size),
+                        intraclass_correlation=cluster_icc,
+                        nonresponse_rate=cluster_nonresponse,
+                    )
+                    st.session_state["cluster_sample_plan_result"] = result
+                except (TypeError, ValueError, KeyError) as exc:
+                    st.error(str(exc))
+            cluster_result = st.session_state.get("cluster_sample_plan_result")
+            if cluster_result is not None:
+                st.dataframe(cluster_result.tables["cluster_plan"], hide_index=True, use_container_width=True)
+                for warning in cluster_result.limitations:
+                    st.warning(warning)
+
         st.info(
             "Unweighted question-level frequencies above describe the imported "
             "records. Use the weighted estimator separately when a documented "
