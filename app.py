@@ -38,6 +38,8 @@ from timan_intelligence.services.analysis_service import (
     run_survey_profile,
     run_weighted_frequency_service,
     run_weighted_numeric_summary_service,
+    run_stratified_weighted_mean_service,
+    run_stratified_weighted_frequency_service,
     run_categorical_comparison,
     run_numeric_group_comparison_service,
     run_numeric_association_service,
@@ -3699,6 +3701,109 @@ elif page == "Survey Analysis":
                         "Weighted results are descriptive estimates only. "
                         "No design-adjusted standard errors, confidence intervals "
                         "or hypothesis tests are produced in this release."
+                    )
+
+        st.divider()
+        st.subheader("Stratified survey estimates")
+        st.write(
+            "Estimate weighted means or category proportions while accounting "
+            "for stratification. This release requires expansion weights that "
+            "are constant within each stratum and independent simple random "
+            "sampling within strata."
+        )
+        strat_numeric_columns = list(df.select_dtypes(include="number").columns)
+        if not strat_numeric_columns:
+            st.info("A numeric expansion-weight variable is required.")
+        else:
+            strat_weight = st.selectbox(
+                "Expansion weight", strat_numeric_columns,
+                key="stratified_weight_variable",
+            )
+            strat_candidates = [c for c in df.columns if c != strat_weight]
+            strat_variable = st.selectbox(
+                "Stratum identifier", strat_candidates,
+                key="stratified_stratum_variable",
+            )
+            strat_outcome_type = st.radio(
+                "Stratified outcome", ["Numeric mean", "Categorical proportion"],
+                horizontal=True, key="stratified_outcome_type",
+            )
+            if strat_outcome_type == "Numeric mean":
+                strat_outcomes = [
+                    c for c in strat_numeric_columns
+                    if c not in (strat_weight, strat_variable)
+                ]
+            else:
+                strat_outcomes = [
+                    c for c in df.columns
+                    if c not in (strat_weight, strat_variable)
+                ]
+            if not strat_outcomes:
+                st.info("No eligible outcome variable is available for this estimate.")
+            else:
+                strat_outcome = st.selectbox(
+                    "Outcome variable", strat_outcomes,
+                    key="stratified_outcome_variable",
+                )
+                strat_confidence = st.selectbox(
+                    "Confidence level", [0.90, 0.95, 0.99], index=1,
+                    format_func=lambda value: f"{value:.0%}",
+                    key="stratified_confidence_level",
+                )
+                if st.button(
+                    "Calculate stratified estimate", type="primary",
+                    key="run_stratified_estimate",
+                ):
+                    try:
+                        if strat_outcome_type == "Numeric mean":
+                            strat_result = run_stratified_weighted_mean_service(
+                                df, strat_outcome, strat_weight,
+                                strat_variable, strat_confidence,
+                            )
+                            strat_table_key = "stratified_estimate"
+                        else:
+                            strat_result = run_stratified_weighted_frequency_service(
+                                df, strat_outcome, strat_weight,
+                                strat_variable, strat_confidence,
+                            )
+                            strat_table_key = "stratified_frequencies"
+                        st.session_state["stratified_survey_result"] = strat_result
+                        st.session_state["stratified_survey_result_key"] = (
+                            _dataset_analysis_key(df), strat_outcome, strat_weight,
+                            strat_variable, strat_outcome_type, strat_confidence,
+                        )
+                    except (TypeError, ValueError, KeyError) as exc:
+                        st.error(str(exc))
+                strat_key = (
+                    _dataset_analysis_key(df), strat_outcome, strat_weight,
+                    strat_variable, strat_outcome_type, strat_confidence,
+                )
+                saved_strat_result = st.session_state.get("stratified_survey_result")
+                if (
+                    saved_strat_result is not None
+                    and st.session_state.get("stratified_survey_result_key") == strat_key
+                ):
+                    st.dataframe(
+                        saved_strat_result.tables[
+                            "stratified_estimate"
+                            if strat_outcome_type == "Numeric mean"
+                            else "stratified_frequencies"
+                        ],
+                        hide_index=True, use_container_width=True,
+                    )
+                    with st.expander("Stratum-level sample and weight summary"):
+                        st.dataframe(
+                            saved_strat_result.tables["strata_summary"],
+                            hide_index=True, use_container_width=True,
+                        )
+                    for finding in saved_strat_result.findings:
+                        st.write(f"• {finding}")
+                    for warning in saved_strat_result.limitations:
+                        st.warning(warning)
+                    st.caption(
+                        "Confidence intervals use a stratified simple-random-sample "
+                        "variance estimator without finite population correction. "
+                        "PSU clustering and multistage designs are not yet supported."
                     )
 
         st.info(
