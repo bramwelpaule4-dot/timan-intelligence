@@ -3,6 +3,8 @@ import pytest
 
 from timan_intelligence.core.multistage_survey import (
     estimate_two_stage_total,
+    estimate_two_stage_mean,
+    estimate_two_stage_proportion,
     inspect_two_stage_design,
 )
 
@@ -149,5 +151,48 @@ def test_estimator_requires_at_least_two_ssus_per_psu():
     with pytest.raises(ValueError, match="two sampled SSUs"):
         estimate_two_stage_total(
             df, "outcome", "psu", "ssu",
+            "psu_population", "ssu_population", "stratum",
+        )
+
+
+
+def test_two_stage_mean_uses_ratio_linearisation_and_both_fpcs():
+    df = estimator_sample()
+    df["element_count"] = [10] * len(df)
+    result = estimate_two_stage_mean(
+        df, "outcome", "element_count", "psu", "ssu",
+        "psu_population", "ssu_population", "stratum",
+    )
+    assert result["estimate"] == pytest.approx(1040.0 / 960.0)
+    assert result["standard_error"] >= 0
+    assert result["metadata"]["variance_method"] == "Taylor linearisation of y - R*x"
+    assert result["metadata"]["variance_stage_1"] + result["metadata"]["variance_stage_2"] == pytest.approx(result["variance"])
+
+
+def test_two_stage_proportion_is_bounded_and_validates_success_counts():
+    df = estimator_sample()
+    df["eligible"] = [10] * len(df)
+    df["successes"] = [1, 2, 3, 4, 2, 3, 4, 5]
+    result = estimate_two_stage_proportion(
+        df, "successes", "eligible", "psu", "ssu",
+        "psu_population", "ssu_population", "stratum",
+    )
+    assert 0 <= result["estimate"] <= 1
+    assert 0 <= result["confidence_interval"][0] <= 1
+    assert 0 <= result["confidence_interval"][1] <= 1
+    df.loc[0, "successes"] = 11
+    with pytest.raises(ValueError, match="between zero"):
+        estimate_two_stage_proportion(
+            df, "successes", "eligible", "psu", "ssu",
+            "psu_population", "ssu_population", "stratum",
+        )
+
+
+def test_two_stage_ratio_rejects_zero_population_denominator():
+    df = estimator_sample()
+    df["element_count"] = 0
+    with pytest.raises(ValueError, match="denominator must be positive"):
+        estimate_two_stage_mean(
+            df, "outcome", "element_count", "psu", "ssu",
             "psu_population", "ssu_population", "stratum",
         )
