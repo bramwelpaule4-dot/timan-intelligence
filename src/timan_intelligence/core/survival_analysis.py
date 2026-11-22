@@ -26,11 +26,11 @@ def _prepare_survival_data(df, time_variable, event_variable, event_value):
     if np.any(times < 0):
         raise ValueError("Survival or follow-up times must be non-negative.")
     events = (event_raw.loc[valid] == event_value).to_numpy(dtype=int)
+    if events.sum() == 0:
+        raise ValueError("No events of the selected type were observed.")
     observed_categories = list(pd.unique(event_raw.loc[valid]))
     if len(observed_categories) != 2:
         raise ValueError("The event indicator must have exactly two observed categories.")
-    if events.sum() == 0:
-        raise ValueError("No events of the selected type were observed.")
     return times, events, valid, observed_categories
 
 
