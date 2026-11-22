@@ -322,9 +322,14 @@ def _ppswor_domain_diagnostics(
         if sampled_psus else 0.0
     )
     strata_diagnostics = strata.copy()
-    if "estimated_variance" in strata_diagnostics.columns:
+    variance_column = (
+        "estimated_ratio_variance"
+        if "estimated_ratio_variance" in strata_diagnostics.columns
+        else "estimated_variance"
+    )
+    if variance_column in strata_diagnostics.columns:
         strata_diagnostics["variance_share_percent"] = (
-            strata_diagnostics["estimated_variance"] / variance * 100.0
+            strata_diagnostics[variance_column] / variance * 100.0
             if variance > 0 else 0.0
         )
     pairwise_diagnostics = pairwise_variance.copy()
