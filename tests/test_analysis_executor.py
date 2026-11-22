@@ -457,3 +457,28 @@ def test_two_independent_proportions_executor_blocks_cluster_sampling():
     }
     with pytest.raises(AnalysisExecutionError, match="not validated"):
         execute_recommendation(df, recommendation, approved=True)
+
+
+def test_execution_runs_registered_two_proportions_confidence_interval():
+    df = pd.DataFrame({"event": [1, 1, 1, 0, 0, 1, 0, 0], "group": ["A", "A", "A", "A", "B", "B", "B", "B"]})
+    recommendation = {
+        "method": "Confidence interval for difference in two proportions",
+        "method_id": "method.inference.confidence_interval.proportions.independent",
+        "variables": ["event", "group"], "status": "review_required",
+        "options": {"confidence_level": 0.90},
+    }
+    result = execute_recommendation(df, recommendation, approved=True)
+    assert result.status == "success"
+    assert result.metadata["method_id"] == "method.inference.confidence_interval.proportions.independent"
+    assert result.metadata["confidence_level"] == pytest.approx(0.90)
+
+
+def test_two_proportions_confidence_interval_executor_blocks_cluster_sampling():
+    df = pd.DataFrame({"event": [1, 0, 1, 0], "group": ["A", "A", "B", "B"]})
+    recommendation = {
+        "method": "Confidence interval for difference in two proportions",
+        "variables": ["event", "group"], "status": "review_required",
+        "design_context": {"sampling_design": "cluster"},
+    }
+    with pytest.raises(AnalysisExecutionError, match="not validated"):
+        execute_recommendation(df, recommendation, approved=True)
