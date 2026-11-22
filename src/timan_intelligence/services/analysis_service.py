@@ -1887,6 +1887,18 @@ def run_two_stage_ppswor_domain_proportion_service(
     )
 
 
+
+def run_one_sample_t_test_service(
+    df: pd.DataFrame,
+    variable: str,
+    reference_value: float,
+    alternative: str = "two-sided",
+) -> AnalysisResult:
+    """Run a one-sample Student's t-test through the shared analysis service."""
+    from timan_intelligence.core.statistical_engine import run_one_sample_t_test
+
+    return run_one_sample_t_test(df, variable, reference_value, alternative)
+
 def run_mean_confidence_interval_service(
     df: pd.DataFrame,
     variable: str,
