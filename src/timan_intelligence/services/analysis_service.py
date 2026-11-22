@@ -809,3 +809,53 @@ def run_two_stage_survey_design_inspection_service(
         limitations=list(output["warnings"]),
         metadata=output["metadata"],
     )
+
+
+def run_two_stage_survey_total_service(
+    df: pd.DataFrame,
+    outcome_variable: str,
+    psu_variable: str,
+    ssu_variable: str,
+    psu_population_count_variable: str,
+    ssu_population_count_variable: str,
+    strata_variable: str | None = None,
+    confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Estimate a total under stratified two-stage SRSWOR with stage FPCs."""
+    from timan_intelligence.core.multistage_survey import estimate_two_stage_total
+
+    output = estimate_two_stage_total(
+        df,
+        outcome_variable,
+        psu_variable,
+        ssu_variable,
+        psu_population_count_variable,
+        ssu_population_count_variable,
+        strata_variable,
+        confidence_level,
+    )
+    return AnalysisResult(
+        title=f"Two-stage survey total: {outcome_variable}",
+        method=output["metadata"]["estimator"],
+        status="success",
+        tables={
+            "stratum_estimates": output["strata"],
+            "psu_details": output["psu_details"],
+        },
+        findings=list(output["findings"]),
+        assumptions=[
+            "PSUs are selected by independent simple random sampling without replacement within each stratum.",
+            "SSUs are selected by simple random sampling without replacement within each sampled PSU.",
+            "Each row represents one sampled SSU and contains its fully enumerated outcome total.",
+            "Population PSU counts are constant within strata and population SSU counts are constant within PSUs.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata={
+            **output["metadata"],
+            "estimate": output["estimate"],
+            "variance": output["variance"],
+            "standard_error": output["standard_error"],
+            "confidence_interval": output["confidence_interval"],
+            "confidence_level": output["confidence_level"],
+        },
+    )
