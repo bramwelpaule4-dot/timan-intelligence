@@ -143,8 +143,9 @@ def estimate_two_stage_total(
     ssu_population_count_variable: str,
     strata_variable: str | None = None,
     confidence_level: float = 0.95,
+    certainty_psu_variable: str | None = None,
 ) -> dict[str, Any]:
-    """Estimate a population total and Taylor variance under two-stage SRSWOR.
+    """Estimate a population total and Taylor variance under two-stage SRSWOR with optional certainty PSUs.
 
     Each row must be one sampled SSU with its fully enumerated SSU outcome
     total. PSUs are sampled by SRSWOR within strata; SSUs are sampled by
@@ -158,6 +159,8 @@ def estimate_two_stage_total(
                psu_population_count_variable, ssu_population_count_variable]
     if strata_variable:
         columns.append(strata_variable)
+    if certainty_psu_variable:
+        columns.append(certainty_psu_variable)
     if len(set(columns)) != len(columns):
         raise ValueError("Outcome, identifiers, stratum and population-count variables must be different.")
     missing = [x for x in columns if x not in df.columns]
@@ -207,6 +210,23 @@ def estimate_two_stage_total(
         raise ValueError("First-stage PSU population count must be constant within each stratum.")
     if (data.groupby(ssu_keys)[ssu_population_count_variable].nunique() != 1).any():
         raise ValueError("Second-stage SSU population count must be constant within each PSU.")
+    if certainty_psu_variable:
+        raw = data[certainty_psu_variable]
+        if raw.isna().any():
+            raise ValueError("Certainty-PSU classification cannot be missing.")
+        if raw.dtype == bool:
+            data["__is_certainty_psu__"] = raw.astype(bool)
+        else:
+            normalized = raw.astype(str).str.strip().str.lower()
+            mapping = {"true": True, "false": False, "1": True, "0": False,
+                       "yes": True, "no": False, "certainty": True, "non-certainty": False}
+            if not normalized.isin(mapping).all():
+                raise ValueError("Certainty-PSU values must be Boolean or coded true/false, 1/0, yes/no, certainty/non-certainty.")
+            data["__is_certainty_psu__"] = normalized.map(mapping).astype(bool)
+        if (data.groupby(psu_keys)["__is_certainty_psu__"].nunique() != 1).any():
+            raise ValueError("Certainty-PSU classification must be constant within each PSU.")
+    else:
+        data["__is_certainty_psu__"] = False
 
     strata_results = []
     total_estimate = 0.0
@@ -227,10 +247,23 @@ def estimate_two_stage_total(
         N_h = int(N_values[0])
         if N_h < n_h:
             raise ValueError("First-stage PSU population count cannot be smaller than sampled PSUs.")
-        if n_h < 2:
-            raise ValueError("At least two sampled PSUs per stratum are required for variance estimation.")
-        expanded_psu_totals = []
-        stage2_variance_sum = 0.0
+        certainty_by_psu = hdata.groupby(psu_variable, sort=False)["__is_certainty_psu__"].first()
+        certainty_ids = set(certainty_by_psu[certainty_by_psu].index)
+        noncertainty_ids = [pid for pid in psu_frame.index if pid not in certainty_ids]
+        n_certainty = len(certainty_ids)
+        n_noncertainty = len(noncertainty_ids)
+        N_noncertainty = N_h - n_certainty
+        if N_noncertainty < 0:
+            raise ValueError("Sampled certainty PSUs cannot exceed the declared first-stage PSU population.")
+        if n_noncertainty > N_noncertainty:
+            raise ValueError("Sampled non-certainty PSUs cannot exceed the non-certainty PSU population.")
+        if n_noncertainty == 0 and N_noncertainty != 0:
+            raise ValueError("At least two sampled non-certainty PSUs per stratum are required when non-certainty PSUs remain in the population.")
+        if n_noncertainty == 1:
+            raise ValueError("At least two sampled non-certainty PSUs per stratum are required for first-stage variance estimation.")
+        expansion_noncertainty = float(N_noncertainty / n_noncertainty) if n_noncertainty else 0.0
+        expanded_by_psu = {}
+        stage2_variance_by_psu = {}
         psu_details = []
         for psu_id, pdata in hdata.groupby(psu_variable, sort=False):
             m_hi = len(pdata)
@@ -247,34 +280,50 @@ def estimate_two_stage_total(
             f2_hi = m_hi / M_hi
             sampled_ssu_total = float(y_values.sum())
             expanded_total = (M_hi / m_hi) * sampled_ssu_total
-            expanded_psu_totals.append(expanded_total)
-            stage2_variance_sum += (
-                M_hi ** 2 * (1.0 - f2_hi) * s2_hi / m_hi
-            )
+            stage2_variance = M_hi ** 2 * (1.0 - f2_hi) * s2_hi / m_hi
+            is_certainty = bool(certainty_by_psu.loc[psu_id])
+            expanded_by_psu[psu_id] = expanded_total
+            stage2_variance_by_psu[psu_id] = stage2_variance
             psu_details.append({
                 "psu": str(psu_id),
+                "certainty_psu": is_certainty,
                 "sampled_ssus": int(m_hi),
                 "population_ssus": M_hi,
                 "stage2_sampling_fraction": float(f2_hi),
                 "sampled_outcome_total": sampled_ssu_total,
                 "expanded_psu_total": expanded_total,
+                "stage2_variance": float(stage2_variance),
             })
-        t_values = np.asarray(expanded_psu_totals, dtype=float)
-        s2_between = float(np.var(t_values, ddof=1))
-        f1_h = n_h / N_h
-        estimate_h = (N_h / n_h) * float(t_values.sum())
-        variance_stage1 = N_h ** 2 * (1.0 - f1_h) * s2_between / n_h
-        variance_stage2 = (N_h / n_h) * stage2_variance_sum
+        certainty_total = float(sum(expanded_by_psu[x] for x in certainty_ids))
+        noncertainty_total = float(sum(expanded_by_psu[x] for x in noncertainty_ids))
+        estimate_h = certainty_total + expansion_noncertainty * noncertainty_total
+        if n_noncertainty >= 2:
+            noncertainty_values = np.asarray([expanded_by_psu[x] for x in noncertainty_ids], dtype=float)
+            s2_between = float(np.var(noncertainty_values, ddof=1))
+            f1_h = n_noncertainty / N_noncertainty
+            variance_stage1 = N_noncertainty ** 2 * (1.0 - f1_h) * s2_between / n_noncertainty
+        else:
+            f1_h = 1.0 if N_noncertainty == 0 else 0.0
+            variance_stage1 = 0.0
+        variance_stage2 = sum(
+            (1.0 if pid in certainty_ids else expansion_noncertainty) * stage2_variance_by_psu[pid]
+            for pid in expanded_by_psu
+        )
         variance_h = variance_stage1 + variance_stage2
         total_estimate += estimate_h
         total_variance += variance_h
-        total_df += n_h - 1
+        total_df += max(n_noncertainty - 1, 0)
         strata_results.append({
             "stratum": str(h),
             "sampled_psus": n_h,
             "population_psus": N_h,
+            "sampled_certainty_psus": n_certainty,
+            "sampled_noncertainty_psus": n_noncertainty,
+            "noncertainty_population_psus": N_noncertainty,
             "stage1_sampling_fraction": f1_h,
             "estimated_total": estimate_h,
+            "certainty_psu_total": certainty_total,
+            "noncertainty_expansion_factor": expansion_noncertainty,
             "stage1_variance": variance_stage1,
             "stage2_variance": variance_stage2,
             "estimated_variance": variance_h,
@@ -282,6 +331,11 @@ def estimate_two_stage_total(
             "psu_details": psu_details,
         })
 
+    if total_df <= 0:
+        total_df = int(sum(
+            max(int(group[ssu_variable].nunique()) - 1, 0)
+            for _, group in data.groupby(psu_keys, sort=False)
+        ))
     if total_df <= 0:
         raise ValueError("Insufficient design degrees of freedom for confidence intervals.")
     standard_error = float(np.sqrt(max(total_variance, 0.0)))
@@ -313,7 +367,7 @@ def estimate_two_stage_total(
             "Each row must represent one sampled SSU with its fully enumerated SSU outcome total; respondent subsampling within SSUs is not supported.",
             "The variance uses first- and second-stage finite population corrections and a Taylor two-stage decomposition.",
             "Confidence interval uses a t critical value with sum_h(n_h - 1) design degrees of freedom; small-sample coverage may be approximate.",
-            "No calibration, nonresponse adjustment, PPS selection, certainty-PSU treatment, replicate weights, or domain estimation is implemented.",
+            "Certainty PSUs are treated as take-all first-stage units when explicitly flagged; remaining non-certainty PSUs are assumed to be sampled by SRSWOR within stratum.",
         ],
         "metadata": {
             "estimator": "Stratified two-stage SRSWOR total estimator with stage-specific FPCs",
@@ -323,6 +377,8 @@ def estimate_two_stage_total(
             "degrees_of_freedom": int(total_df),
             "variance_stage_1": float(sum(x["stage1_variance"] for x in strata_results)),
             "variance_stage_2": float(sum(x["stage2_variance"] for x in strata_results)),
+            "certainty_psu_variable": certainty_psu_variable,
+            "number_of_certainty_psus": int(data.loc[data["__is_certainty_psu__"], psu_keys].drop_duplicates().shape[0]),
         },
     }
 
