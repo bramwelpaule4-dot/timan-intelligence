@@ -1674,3 +1674,60 @@ def run_domain_survey_estimation_service(
             "cluster_variable": cluster_variable,
         },
     )
+
+
+
+def run_two_stage_ppswor_total_service(
+    df: pd.DataFrame,
+    outcome_variable: str,
+    psu_variable: str,
+    ssu_variable: str,
+    psu_inclusion_probability_variable: str,
+    ssu_population_count_variable: str,
+    joint_psu_inclusion_probabilities: pd.DataFrame | dict[Any, pd.DataFrame],
+    strata_variable: str | None = None,
+    confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Run a two-stage PPSWOR total with explicit stage-specific design inputs."""
+    from timan_intelligence.core.two_stage_ppswor import (
+        estimate_two_stage_ppswor_total,
+    )
+
+    output = estimate_two_stage_ppswor_total(
+        df,
+        outcome_variable,
+        psu_variable,
+        ssu_variable,
+        psu_inclusion_probability_variable,
+        ssu_population_count_variable,
+        joint_psu_inclusion_probabilities,
+        strata_variable,
+        confidence_level,
+    )
+    return AnalysisResult(
+        title=f"Two-stage PPSWOR total: {outcome_variable}",
+        method=output["metadata"]["estimator"],
+        status="success",
+        tables={
+            "stratum_estimates": output["strata"],
+            "psu_details": output["psu_details"],
+            "pairwise_variance": output["pairwise_variance"],
+        },
+        findings=list(output["findings"]),
+        assumptions=[
+            "PSUs are selected by fixed-size PPS without replacement within each stratum.",
+            "Actual first- and second-order PSU inclusion probabilities are supplied from the sampling design.",
+            "SSUs are selected by SRSWOR within each sampled PSU.",
+            "Each row represents one sampled SSU with its fully observed outcome total.",
+            "The declared SSU population count is correct and constant within each PSU.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata={
+            **output["metadata"],
+            "estimate": output["estimate"],
+            "variance": output["variance"],
+            "standard_error": output["standard_error"],
+            "confidence_interval": output["confidence_interval"],
+            "confidence_level": output["confidence_level"],
+        },
+    )
