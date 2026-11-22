@@ -79,7 +79,7 @@ def test_two_stage_ppswor_stratified_matrices_are_combined():
 
 def test_two_stage_ppswor_allows_certainty_psus():
     data, _ = fixture()
-    data["pi"] = data["pi"].map({"P1": 1.0, "P2": 0.5, "P3": 0.5})
+    data["pi"] = data["psu"].map({"P1": 1.0, "P2": 0.5, "P3": 0.5})
     joint = pd.DataFrame(
         [[1.0, 0.5, 0.5], [0.5, 0.5, 0.25], [0.5, 0.25, 0.5]],
         index=["P1", "P2", "P3"], columns=["P1", "P2", "P3"],
