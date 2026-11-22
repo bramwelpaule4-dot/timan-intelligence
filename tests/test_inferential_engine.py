@@ -599,3 +599,43 @@ def test_exact_binomial_rejects_invalid_binary_values_reference_and_alternative(
         run_one_sample_binomial_test(valid, "event", 1.2)
     with pytest.raises(ValueError, match="Alternative must"):
         run_one_sample_binomial_test(valid, "event", 0.5, alternative="invalid")
+
+
+def test_two_independent_proportions_returns_score_test_and_newcombe_interval():
+    from timan_intelligence.core.statistical_engine import run_two_independent_proportions_test
+    frame = pd.DataFrame({"group": ["A"] * 10 + ["B"] * 10, "event": [1] * 7 + [0] * 3 + [1] * 3 + [0] * 7})
+    result = run_two_independent_proportions_test(frame, "event", "group")
+    assert result.status == "success"
+    assert result.metadata["group_1_proportion"] == pytest.approx(0.7)
+    assert result.metadata["group_2_proportion"] == pytest.approx(0.3)
+    assert result.metadata["estimate"] == pytest.approx(0.4)
+    assert 0 <= result.metadata["p_value"] <= 1
+    lower, upper = result.metadata["confidence_interval"]
+    assert lower < 0.4 < upper
+    assert result.metadata["sampling_design_aware"] is False
+
+
+def test_two_independent_proportions_supports_directional_test_and_missing_pairs():
+    from timan_intelligence.core.statistical_engine import run_two_independent_proportions_test
+    frame = pd.DataFrame({"group": ["A", "A", "A", "A", "B", "B", "B", "B", None],
+                          "event": [1, 1, 1, 0, 1, 0, 0, 0, 1]})
+    result = run_two_independent_proportions_test(frame, "event", "group", alternative="greater")
+    assert result.metadata["alternative"] == "greater"
+    assert result.metadata["p_value"] < 0.5
+    assert result.metadata["incomplete_pairs_excluded"] == 1
+
+
+def test_two_independent_proportions_rejects_invalid_binary_and_group_count():
+    from timan_intelligence.core.statistical_engine import run_two_independent_proportions_test
+    with pytest.raises(ValueError, match="only 0 and 1"):
+        run_two_independent_proportions_test(pd.DataFrame({"event": [0, 1, 2, 0], "group": ["A", "A", "B", "B"]}), "event", "group")
+    with pytest.raises(ValueError, match="exactly two"):
+        run_two_independent_proportions_test(pd.DataFrame({"event": [0, 1, 0], "group": ["A", "B", "C"]}), "event", "group")
+
+
+def test_two_independent_proportions_service_uses_shared_result_contract():
+    from timan_intelligence.services.analysis_service import run_two_independent_proportions_test_service
+    frame = pd.DataFrame({"event": [1, 1, 0, 0, 1, 0], "group": ["A", "A", "A", "B", "B", "B"]})
+    result = run_two_independent_proportions_test_service(frame, "event", "group", 0.90)
+    assert result.status == "success"
+    assert result.metadata["confidence_level"] == pytest.approx(0.90)
