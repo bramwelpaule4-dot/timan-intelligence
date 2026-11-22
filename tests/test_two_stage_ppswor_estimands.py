@@ -139,3 +139,50 @@ def test_shared_services_wrap_mean_proportion_and_domain_estimands():
     assert proportion.metadata["estimand"] == "population proportion"
     assert domain.metadata["estimand"] == "domain total"
     assert "psu_details" in domain.tables
+
+
+def test_two_stage_ppswor_domain_mean_uses_ratio_linearisation():
+    from timan_intelligence.core.two_stage_ppswor_estimands import estimate_two_stage_ppswor_domain_mean
+    frame, common = fixture()
+    result = estimate_two_stage_ppswor_domain_mean(
+        frame, "outcome", "domain", "A", *common
+    )
+    assert result["metadata"]["estimand"] == "domain mean"
+    assert result["metadata"]["estimated_domain_population_ssus"] > 0
+    assert result["metadata"]["variance_method"].startswith("Two-stage PPSWOR Taylor linearisation")
+    assert result["variance"] == pytest.approx(
+        result["variance_stage_1"] + result["variance_stage_2"]
+    )
+    assert result["metadata"]["number_of_sampled_ssus"] == 6
+
+
+def test_two_stage_ppswor_domain_proportion_requires_binary_values_and_is_not_clipped():
+    from timan_intelligence.core.two_stage_ppswor_estimands import estimate_two_stage_ppswor_domain_proportion
+    frame, common = fixture()
+    result = estimate_two_stage_ppswor_domain_proportion(
+        frame, "binary", "domain", "A", *common
+    )
+    assert result["metadata"]["estimand"] == "domain proportion"
+    assert any("not clipped to [0, 1]" in warning for warning in result["warnings"])
+    frame.loc[0, "binary"] = 3
+    with pytest.raises(ValueError, match="binary values"):
+        estimate_two_stage_ppswor_domain_proportion(
+            frame, "binary", "domain", "A", *common
+        )
+
+
+def test_two_stage_ppswor_domain_ratio_services():
+    from timan_intelligence.services.analysis_service import (
+        run_two_stage_ppswor_domain_mean_service,
+        run_two_stage_ppswor_domain_proportion_service,
+    )
+    frame, common = fixture()
+    mean = run_two_stage_ppswor_domain_mean_service(
+        frame, "outcome", "domain", "A", *common
+    )
+    proportion = run_two_stage_ppswor_domain_proportion_service(
+        frame, "binary", "domain", "A", *common
+    )
+    assert mean.status == proportion.status == "success"
+    assert mean.metadata["estimand"] == "domain mean"
+    assert proportion.metadata["estimand"] == "domain proportion"
