@@ -669,3 +669,45 @@ def test_two_proportions_confidence_interval_rejects_invalid_inputs():
         run_two_proportions_confidence_interval(pd.DataFrame({"event": [0, 1, 0], "group": ["A", "B", "C"]}), "event", "group")
     with pytest.raises(ValueError, match="only 0 and 1"):
         run_two_proportions_confidence_interval(pd.DataFrame({"event": [0, 1, 2, 0], "group": ["A", "A", "B", "B"]}), "event", "group")
+
+
+
+def test_mann_whitney_u_test_reports_rank_test_and_directional_effect_size():
+    from timan_intelligence.core.statistical_engine import run_mann_whitney_u_test
+    frame = pd.DataFrame({"score": [1, 2, 3, 4, 5, 6], "group": ["A", "A", "A", "B", "B", "B"]})
+    result = run_mann_whitney_u_test(frame, "score", "group")
+    row = result.tables["test"].iloc[0]
+    assert result.status == "success"
+    assert result.method == "Mann–Whitney U test"
+    assert row["U statistic (Group 1)"] == pytest.approx(0.0)
+    assert row["Rank-biserial correlation"] == pytest.approx(-1.0)
+    assert row["P-value"] < 0.05
+    assert result.metadata["study_design"] == "independent_groups"
+
+
+def test_mann_whitney_supports_alternatives_and_excludes_missing_and_infinite_outcomes():
+    from timan_intelligence.core.statistical_engine import run_mann_whitney_u_test
+    frame = pd.DataFrame({"score": [8, 9, 10, 1, 2, 3, None, float("inf")], "group": ["A", "A", "A", "B", "B", "B", "A", "B"]})
+    result = run_mann_whitney_u_test(frame, "score", "group", alternative="greater")
+    assert result.metadata["alternative"] == "greater"
+    assert result.metadata["missing_outcomes"] == 1
+    assert result.metadata["infinite_outcomes"] == 1
+    assert result.metadata["p_value"] < 0.05
+
+
+def test_mann_whitney_rejects_invalid_grouping_and_small_samples():
+    from timan_intelligence.core.statistical_engine import run_mann_whitney_u_test
+    with pytest.raises(ValueError, match="exactly two"):
+        run_mann_whitney_u_test(pd.DataFrame({"y": [1, 2, 3], "g": ["A", "B", "C"]}), "y", "g")
+    with pytest.raises(ValueError, match="at least two"):
+        run_mann_whitney_u_test(pd.DataFrame({"y": [1, 2, 3], "g": ["A", "B", "B"]}), "y", "g")
+    with pytest.raises(ValueError, match="Alternative"):
+        run_mann_whitney_u_test(pd.DataFrame({"y": [1, 2, 3, 4], "g": ["A", "A", "B", "B"]}), "y", "g", "invalid")
+
+
+def test_mann_whitney_service_returns_shared_analysis_result():
+    from timan_intelligence.services.analysis_service import run_mann_whitney_u_test_service
+    frame = pd.DataFrame({"y": [1, 2, 3, 4], "g": ["A", "A", "B", "B"]})
+    result = run_mann_whitney_u_test_service(frame, "y", "g")
+    assert result.status == "success"
+    assert result.method == "Mann–Whitney U test"

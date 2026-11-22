@@ -36,7 +36,7 @@ def test_only_existing_execution_methods_are_marked_implemented():
     }
 
     assert implemented == IMPLEMENTED_METHODS
-    assert len(implemented) == 14
+    assert len(implemented) == 15
 
 
 def test_exact_binomial_is_registered_as_conditionally_executable():
@@ -176,8 +176,8 @@ def test_catalogue_summary_reports_lifecycle_and_priorities():
 
     assert summary["catalogue_version"] == CATALOGUE_VERSION
     assert summary["total_methods"] == 29
-    assert summary["implementation_status"]["implemented"] == 14
-    assert summary["implementation_status"]["planned"] == 15
+    assert summary["implementation_status"]["implemented"] == 15
+    assert summary["implementation_status"]["planned"] == 14
     assert set(summary["release_priorities"]) == {"P1", "P2", "P3"}
 
 
@@ -242,6 +242,16 @@ def test_two_independent_proportions_is_registered_as_conditionally_executable()
 def test_two_proportions_confidence_interval_is_registered_as_conditionally_executable():
     method = get_statistical_method("method.inference.confidence_interval.proportions.independent")
     assert method is not None
+    assert method.implementation_status == "implemented"
+    assert method.verification_status == "unit_tested"
+    assert method.execution_eligibility == "conditional"
+
+
+
+def test_mann_whitney_is_registered_as_conditionally_executable():
+    method = get_statistical_method("method.inference.comparison.mann_whitney")
+    assert method is not None
+    assert method.name == "Mann–Whitney U test"
     assert method.implementation_status == "implemented"
     assert method.verification_status == "unit_tested"
     assert method.execution_eligibility == "conditional"

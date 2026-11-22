@@ -73,6 +73,7 @@ from timan_intelligence.services.analysis_service import (
     run_one_sample_binomial_test_service,
     run_two_independent_proportions_test_service,
     run_two_proportions_confidence_interval_service,
+    run_mann_whitney_u_test_service,
     run_ppswor_total_service,
     run_ppswor_ratio_service,
     run_ppswor_domain_ratio_service,
@@ -871,7 +872,7 @@ MODULES = {
     "Statistical Inference": (
         "Partially available — initial independent-sample procedures",
         "Model-based mean and proportion confidence intervals, one-sample Student's t-test and exact binomial test, two-independent-proportions comparisons and difference-in-proportions confidence intervals, "
-        "Welch mean-difference confidence intervals, paired mean-change intervals, paired t-tests, chi-square tests and Fisher's exact tests for categorical association, Welch's "
+        "Welch mean-difference confidence intervals, paired mean-change intervals, paired t-tests, Mann–Whitney U rank tests, chi-square tests and Fisher's exact tests for categorical association, Welch's "
         "independent-samples t-test and one-way ANOVA are available for their stated study "
         "designs. Complex survey inference and other planned methods remain under development.",
     ),
@@ -7153,6 +7154,7 @@ elif page == "Statistical Inference":
                 "Fisher's exact test",
                 "Welch's independent-samples t-test",
                 "One-way ANOVA",
+                "Mann–Whitney U test",
             ],
             key="inference_method_choice",
         )
@@ -7321,6 +7323,21 @@ elif page == "Statistical Inference":
                 st.caption("Exact test for a 2 × 2 table, useful when expected counts are sparse. The odds ratio follows the displayed row and column category order.")
             else:
                 st.caption("Tests association between two categorical variables. Recode numeric category codes as categorical variables first. Review expected cell counts before interpreting the p-value.")
+        elif inference_method == "Mann–Whitney U test":
+            outcome_variable = (
+                st.selectbox("Numeric or ordinal outcome (ordinal categories must be encoded in order)", numeric_cols, key="inference_mann_whitney_outcome")
+                if numeric_cols else None
+            )
+            group_variable = (
+                st.selectbox("Independent two-group variable", categorical_cols, key="inference_mann_whitney_group")
+                if categorical_cols else None
+            )
+            mann_whitney_alternative = st.selectbox(
+                "Alternative hypothesis", ["two-sided", "greater", "less"],
+                format_func=lambda value: {"two-sided": "Two-sided: rank distributions differ", "greater": "Group 1 tends to have higher ranks", "less": "Group 1 tends to have lower ranks"}[value],
+                key="inference_mann_whitney_alternative",
+            )
+            st.caption("Uses ranks rather than comparing means. Reports group medians, U statistic, p-value and directional rank-biserial effect size. Group order follows first appearance in the data.")
         else:
             outcome_variable = (
                 st.selectbox(
@@ -7364,6 +7381,7 @@ elif page == "Statistical Inference":
                     "Exact one-sample binomial test",
 
                     "One-sample Student's t-test",
+                    "Mann–Whitney U test",
                 }
                 or group_variable is not None
             )
@@ -7397,6 +7415,10 @@ elif page == "Statistical Inference":
                 elif inference_method == "Confidence interval for a proportion":
                     inference_result = run_proportion_confidence_interval_service(
                         inference_df, outcome_variable, confidence_level
+                    )
+                elif inference_method == "Mann–Whitney U test":
+                    inference_result = run_mann_whitney_u_test_service(
+                        inference_df, outcome_variable, group_variable, mann_whitney_alternative
                     )
                 elif inference_method == "Welch confidence interval for a mean difference":
                     inference_result = run_welch_mean_difference_confidence_interval_service(

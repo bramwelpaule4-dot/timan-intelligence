@@ -482,3 +482,23 @@ def test_two_proportions_confidence_interval_executor_blocks_cluster_sampling():
     }
     with pytest.raises(AnalysisExecutionError, match="not validated"):
         execute_recommendation(df, recommendation, approved=True)
+
+
+
+def test_execution_runs_registered_mann_whitney_u_test():
+    frame = pd.DataFrame({"score": [1, 2, 3, 4, 5, 6], "group": ["A", "A", "A", "B", "B", "B"]})
+    recommendation = {"method": "Mann–Whitney U test", "method_id": "method.inference.comparison.mann_whitney", "variables": ["score", "group"], "status": "review_required", "options": {"alternative": "less"}}
+    result = execute_recommendation(frame, recommendation, approved=True)
+    assert result.status == "success"
+    assert result.metadata["method_id"] == "method.inference.comparison.mann_whitney"
+    assert result.metadata["alternative"] == "less"
+
+
+def test_mann_whitney_executor_blocks_cluster_and_repeated_measures_designs():
+    frame = pd.DataFrame({"score": [1, 2, 3, 4], "group": ["A", "A", "B", "B"]})
+    recommendation = {"method": "Mann–Whitney U test", "variables": ["score", "group"], "status": "review_required", "design_context": {"sampling_design": "cluster"}}
+    with pytest.raises(AnalysisExecutionError, match="not validated"):
+        execute_recommendation(frame, recommendation, approved=True)
+    recommendation["design_context"] = {"study_design": "paired"}
+    with pytest.raises(AnalysisExecutionError, match="repeated-measures"):
+        execute_recommendation(frame, recommendation, approved=True)
