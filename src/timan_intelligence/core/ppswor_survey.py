@@ -289,6 +289,60 @@ def estimate_ppswor_ratio(
     }
 
 
+
+def estimate_ppswor_domain_total(
+    df: pd.DataFrame,
+    domain_name: str,
+    domain_total_variable: str,
+    psu_variable: str,
+    inclusion_probability_variable: str,
+    joint_inclusion_probabilities: pd.DataFrame | dict[Any, pd.DataFrame],
+    strata_variable: str | None = None,
+    confidence_level: float = 0.95,
+) -> dict[str, Any]:
+    """Estimate a domain population total using HT/SYG on the full PSU sample.
+
+    The domain total column must contain each sampled PSU's total for the
+    specified domain, explicitly set to zero for sampled PSUs with no domain
+    members. The input sample and joint-inclusion matrices are never subset
+    by domain membership.
+    """
+    if not isinstance(domain_name, str) or not domain_name.strip():
+        raise ValueError("A non-empty domain name is required.")
+    output = estimate_ppswor_total(
+        df=df,
+        outcome_total_variable=domain_total_variable,
+        psu_variable=psu_variable,
+        inclusion_probability_variable=inclusion_probability_variable,
+        joint_inclusion_probabilities=joint_inclusion_probabilities,
+        strata_variable=strata_variable,
+        confidence_level=confidence_level,
+    )
+    output["findings"] = [
+        f"Domain: {domain_name.strip()}.",
+        f"Horvitz-Thompson estimated domain total: {output['estimate']:,.4g}.",
+        f"Sen-Yates-Grundy domain standard error: {output['standard_error']:,.4g}.",
+        (
+            f"{confidence_level:.0%} t confidence interval for the domain total: "
+            f"[{output['confidence_interval'][0]:,.4g}, "
+            f"{output['confidence_interval'][1]:,.4g}]."
+        ),
+    ]
+    output["warnings"] = [
+        *output["warnings"],
+        "Domain total estimation requires a domain-specific PSU total for every sampled PSU, with zero totals retained for PSUs containing no domain units. Do not filter those PSUs out.",
+        "The domain total is the Horvitz-Thompson expansion of the supplied domain-specific PSU totals under the original PPSWOR design.",
+    ]
+    output["metadata"].update({
+        "estimator": "PPSWOR domain Horvitz-Thompson total with Sen-Yates-Grundy variance",
+        "domain_name": domain_name.strip(),
+        "domain_estimation": True,
+        "domain_parameter": "total",
+        "domain_total_variable": domain_total_variable,
+    })
+    return output
+
+
 def estimate_ppswor_domain_ratio(
     df: pd.DataFrame,
     domain_name: str,
