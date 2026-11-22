@@ -54,6 +54,7 @@ def test_poisson_regression_excludes_missing_and_does_not_mutate_input():
 @pytest.mark.parametrize("bad", [-1, 1.5])
 def test_poisson_regression_rejects_non_count_outcomes(bad):
     frame = _meal_counts()
+    frame["household_visits"] = frame["household_visits"].astype(float)
     frame.loc[0, "household_visits"] = bad
     with pytest.raises(ValueError, match="non-negative integer"):
         run_poisson_regression(frame, ["attendance_score"], "household_visits")
