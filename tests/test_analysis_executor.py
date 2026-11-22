@@ -255,3 +255,30 @@ def test_execution_result_records_catalogue_provenance():
     assert result.metadata["method_id"] == "method.descriptive.numeric.summary"
     assert result.metadata["catalogue_version"] == "1.0.0"
     assert result.metadata["sampling_design_aware"] is False
+
+def test_execution_runs_registered_mean_confidence_interval():
+    df = pd.DataFrame({"income": [10.0, 12.0, 14.0, 16.0, 18.0]})
+    recommendation = {
+        "method": "Confidence interval for a mean",
+        "method_id": "method.inference.confidence_interval.mean",
+        "variables": ["income"],
+        "status": "review_required",
+        "options": {"confidence_level": 0.90},
+    }
+    result = execute_recommendation(df, recommendation, approved=True)
+    assert result.status == "success"
+    assert result.metadata["method_id"] == "method.inference.confidence_interval.mean"
+    assert result.metadata["confidence_level"] == pytest.approx(0.90)
+    assert result.metadata["user_approved"] is True
+
+
+def test_mean_confidence_interval_executor_blocks_complex_sampling():
+    df = pd.DataFrame({"income": [10.0, 12.0, 14.0, 16.0]})
+    recommendation = {
+        "method": "Confidence interval for a mean",
+        "variables": ["income"],
+        "status": "review_required",
+        "design_context": {"sampling_design": "stratified"},
+    }
+    with pytest.raises(AnalysisExecutionError, match="not validated"):
+        execute_recommendation(df, recommendation, approved=True)
