@@ -708,3 +708,64 @@ def run_stratified_weighted_frequency_service(
         limitations=list(output["warnings"]),
         metadata=output["metadata"],
     )
+
+def run_cluster_weighted_mean_service(
+    df: pd.DataFrame,
+    outcome_variable: str,
+    weight_variable: str,
+    cluster_variable: str,
+    strata_variable: str | None = None,
+    confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Run PSU-cluster-adjusted weighted mean estimation."""
+    from timan_intelligence.core.cluster_survey import cluster_weighted_mean
+
+    output = cluster_weighted_mean(
+        df, outcome_variable, weight_variable, cluster_variable,
+        strata_variable, confidence_level,
+    )
+    return AnalysisResult(
+        title=f"Cluster-adjusted weighted mean: {outcome_variable}",
+        method="Weighted ratio mean with PSU-level Taylor linearization",
+        status="success",
+        tables={"cluster_estimate": output["table"]},
+        findings=list(output["findings"]),
+        assumptions=[
+            "Sampled primary sampling units are independent within strata.",
+            "At least two sampled PSUs are present in every stratum.",
+            "The supplied weights correctly represent selection probabilities and target-population expansion.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata=output["metadata"],
+    )
+
+
+def run_cluster_weighted_frequency_service(
+    df: pd.DataFrame,
+    outcome_variable: str,
+    weight_variable: str,
+    cluster_variable: str,
+    strata_variable: str | None = None,
+    confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Run PSU-cluster-adjusted weighted category proportions."""
+    from timan_intelligence.core.cluster_survey import cluster_weighted_frequencies
+
+    output = cluster_weighted_frequencies(
+        df, outcome_variable, weight_variable, cluster_variable,
+        strata_variable, confidence_level,
+    )
+    return AnalysisResult(
+        title=f"Cluster-adjusted weighted frequencies: {outcome_variable}",
+        method="Weighted proportions with PSU-level Taylor linearization",
+        status="success",
+        tables={"cluster_frequencies": output["table"]},
+        findings=list(output["findings"]),
+        assumptions=[
+            "Sampled primary sampling units are independent within strata.",
+            "At least two sampled PSUs are present in every stratum.",
+            "The supplied weights correctly represent selection probabilities and target-population expansion.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata=output["metadata"],
+    )
