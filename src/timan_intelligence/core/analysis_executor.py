@@ -17,6 +17,7 @@ from timan_intelligence.core.statistical_engine import (
     run_descriptive_statistics,
     run_independent_samples_t_test,
     run_mean_confidence_interval,
+    run_proportion_confidence_interval,
     run_one_way_anova,
 )
 
@@ -28,6 +29,7 @@ class AnalysisExecutionError(ValueError):
 _EXECUTOR_BY_METHOD_ID = {
     "method.descriptive.numeric.summary": "descriptive",
     "method.inference.confidence_interval.mean": "mean_ci",
+    "method.inference.confidence_interval.proportion": "proportion_ci",
     "method.inference.comparison.t_test.independent.welch": "welch_t",
     "method.inference.comparison.anova.one_way": "anova",
 }
@@ -198,6 +200,17 @@ def execute_recommendation(
             "confidence_level", 0.95
         )
         result = run_mean_confidence_interval(
+            df, variables[0], confidence_level=confidence_level
+        )
+    elif executor == "proportion_ci":
+        if len(variables) != 1:
+            raise AnalysisExecutionError(
+                "A proportion confidence interval requires exactly one binary variable."
+            )
+        confidence_level = (recommendation.get("options") or {}).get(
+            "confidence_level", 0.95
+        )
+        result = run_proportion_confidence_interval(
             df, variables[0], confidence_level=confidence_level
         )
     elif executor == "welch_t":
