@@ -5242,6 +5242,15 @@ elif page == "Survey Analysis":
                             f"{ppswor_confidence:.0%} confidence interval: "
                             f"[{domain_ci[0]:,.4g}, {domain_ci[1]:,.4g}]"
                         )
+                    st.caption(
+                        "Precision diagnostics are descriptive. The coefficient of "
+                        "variation is SE divided by the absolute estimate; it is not "
+                        "a universal pass/fail threshold."
+                    )
+                    st.dataframe(
+                        saved_ppswor_domain.tables["diagnostics"],
+                        hide_index=True, use_container_width=True,
+                    )
                     st.dataframe(
                         saved_ppswor_domain.tables["stratum_estimates"],
                         hide_index=True, use_container_width=True,
@@ -5494,6 +5503,16 @@ elif page == "Survey Analysis":
                     st.write(
                         f"{ppswor_confidence:.0%} confidence interval: "
                         f"[{domain_total_ci[0]:,.4g}, {domain_total_ci[1]:,.4g}]"
+                    )
+                    st.caption(
+                        "Precision diagnostics are descriptive. The coefficient of "
+                        "variation is SE divided by the absolute estimate; it is not "
+                        "a universal pass/fail threshold."
+                    )
+                    st.dataframe(
+                        saved_ppswor_domain_total.tables["diagnostics"],
+                        hide_index=True,
+                        use_container_width=True,
                     )
                     st.dataframe(
                         saved_ppswor_domain_total.tables["stratum_estimates"],
