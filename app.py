@@ -76,6 +76,7 @@ from timan_intelligence.services.analysis_service import (
     run_regression_diagnostics_service,
 )
 from timan_intelligence.services.survey_weighting_report import generate_survey_weighting_pdf_report
+from timan_intelligence.services.survey_estimation_report import generate_survey_estimation_pdf_report
 from timan_intelligence.entitlements.subscriptions import process_due_subscriptions
 from timan_intelligence.entitlements.service import (
     DatasetLimitExceeded,
@@ -6320,6 +6321,34 @@ elif page == "Survey Analysis":
                                 st.success(finding)
                             for warning in saved_estimation.limitations:
                                 st.warning(warning)
+                            st.markdown("**Technical report**")
+                            report_col1, report_col2 = st.columns(2)
+                            with report_col1:
+                                estimation_report_project = st.text_input(
+                                    "Project / study name (optional)",
+                                    key="estimation_report_project",
+                                )
+                            with report_col2:
+                                estimation_report_preparer = st.text_input(
+                                    "Prepared by (optional)",
+                                    key="estimation_report_preparer",
+                                )
+                            try:
+                                estimation_pdf = generate_survey_estimation_pdf_report(
+                                    saved_estimation,
+                                    project_name=estimation_report_project.strip() or None,
+                                    prepared_by=estimation_report_preparer.strip() or None,
+                                )
+                                st.download_button(
+                                    "Download survey estimation technical report (PDF)",
+                                    data=estimation_pdf,
+                                    file_name="TimanStat_Survey_Estimation_Technical_Report.pdf",
+                                    mime="application/pdf",
+                                    type="primary",
+                                    key="download_survey_estimation_report",
+                                )
+                            except (TypeError, ValueError, KeyError) as exc:
+                                st.error(f"Could not generate the estimation report: {exc}")
 
                 st.markdown("#### Domain / subpopulation estimation")
                 st.caption(
@@ -6411,6 +6440,35 @@ elif page == "Survey Analysis":
                                 st.success(finding)
                             for warning in saved_domain.limitations:
                                 st.warning(warning)
+                            st.markdown("**Domain technical report**")
+                            domain_report_col1, domain_report_col2 = st.columns(2)
+                            with domain_report_col1:
+                                domain_report_project = st.text_input(
+                                    "Domain report project / study name (optional)",
+                                    key="domain_estimation_report_project",
+                                )
+                            with domain_report_col2:
+                                domain_report_preparer = st.text_input(
+                                    "Domain report prepared by (optional)",
+                                    key="domain_estimation_report_preparer",
+                                )
+                            try:
+                                domain_pdf = generate_survey_estimation_pdf_report(
+                                    saved_domain,
+                                    report_title="Survey Domain and Subpopulation Estimation Report",
+                                    project_name=domain_report_project.strip() or None,
+                                    prepared_by=domain_report_preparer.strip() or None,
+                                )
+                                st.download_button(
+                                    "Download domain estimation technical report (PDF)",
+                                    data=domain_pdf,
+                                    file_name="TimanStat_Survey_Domain_Estimation_Report.pdf",
+                                    mime="application/pdf",
+                                    type="primary",
+                                    key="download_survey_domain_estimation_report",
+                                )
+                            except (TypeError, ValueError, KeyError) as exc:
+                                st.error(f"Could not generate the domain estimation report: {exc}")
 
         st.info(
             "Unweighted question-level frequencies above describe the imported "
