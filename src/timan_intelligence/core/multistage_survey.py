@@ -148,8 +148,9 @@ def estimate_two_stage_total(
     """Estimate a population total and Taylor variance under two-stage SRSWOR with optional certainty PSUs.
 
     Each row must be one sampled SSU with its fully enumerated SSU outcome
-    total. PSUs are sampled by SRSWOR within strata; SSUs are sampled by
-    SRSWOR within each sampled PSU. Stage-specific FPCs are applied.
+    total. Non-certainty PSUs are sampled by SRSWOR within strata; explicitly
+    flagged certainty PSUs are take-all units. SSUs are sampled by SRSWOR
+    within each sampled PSU. Stage-specific FPCs are applied.
     """
     if not isinstance(df, pd.DataFrame) or df.empty:
         raise ValueError("A non-empty pandas DataFrame is required.")
@@ -363,7 +364,8 @@ def estimate_two_stage_total(
             f"{confidence_level:.0%} t confidence interval: [{lower:,.4g}, {upper:,.4g}].",
         ],
         "warnings": [
-            "Estimator assumes independent SRS without replacement of PSUs within each stratum and SSUs within each sampled PSU.",
+            "Non-certainty PSUs are assumed to be selected by independent SRSWOR within strata; flagged certainty PSUs are treated as take-all units.",
+            "SSUs are assumed to be selected by SRSWOR within each sampled PSU.",
             "Each row must represent one sampled SSU with its fully enumerated SSU outcome total; respondent subsampling within SSUs is not supported.",
             "The variance uses first- and second-stage finite population corrections and a Taylor two-stage decomposition.",
             "Confidence interval uses a t critical value with sum_h(n_h - 1) design degrees of freedom; small-sample coverage may be approximate.",
@@ -483,7 +485,7 @@ def _estimate_two_stage_ratio(
             "Each row must be one sampled SSU; numerator and denominator values must be fully enumerated SSU-level totals.",
             "The ratio variance uses first- and second-stage finite population corrections and Taylor linearisation of the ratio.",
             "The confidence interval uses sum_h(n_h - 1) design degrees of freedom; coverage can be approximate with few PSUs.",
-            "No PPS, certainty-PSU treatment, respondent subsampling within SSUs, calibration, nonresponse adjustment, replicate weights or domain estimation.",
+            "Certainty PSU flags must identify every sampled PSU selected with certainty. The remaining PSU population count is derived by subtracting flagged sampled certainty PSUs from the declared stratum population count.",
         ],
         "metadata": {
             "estimator": f"Two-stage Taylor-linearised {kind} ratio estimator with stage-specific FPCs",
