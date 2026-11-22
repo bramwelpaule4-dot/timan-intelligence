@@ -73,3 +73,39 @@ def test_two_stage_mean_and_proportion_services_return_shared_results():
     assert "psu_details" in mean.tables
     assert proportion.status == "success"
     assert 0 <= proportion.metadata["estimate"] <= 1
+
+
+def test_two_stage_domain_services_return_analysis_results():
+    from timan_intelligence.services.analysis_service import (
+        run_two_stage_survey_domain_total_service,
+        run_two_stage_survey_domain_mean_service,
+        run_two_stage_survey_domain_proportion_service,
+    )
+    df = pd.DataFrame({
+        "stratum": ["A"] * 4 + ["B"] * 4,
+        "psu": [1, 1, 2, 2, 3, 3, 4, 4],
+        "ssu": [1, 2] * 4,
+        "outcome_total": [10, 20, 30, 40, 5, 15, 25, 35],
+        "successes": [1, 8, 2, 7, 3, 6, 4, 5],
+        "eligible": [10] * 8,
+        "domain": ["target", "other"] * 4,
+        "psu_population": [4] * 4 + [8] * 4,
+        "ssu_population": [4] * 8,
+    })
+    total = run_two_stage_survey_domain_total_service(
+        df, "outcome_total", "domain", "target", "psu", "ssu",
+        "psu_population", "ssu_population", "stratum",
+    )
+    mean = run_two_stage_survey_domain_mean_service(
+        df, "outcome_total", "eligible", "domain", "target", "psu", "ssu",
+        "psu_population", "ssu_population", "stratum",
+    )
+    proportion = run_two_stage_survey_domain_proportion_service(
+        df, "successes", "eligible", "domain", "target", "psu", "ssu",
+        "psu_population", "ssu_population", "stratum",
+    )
+    assert total.status == mean.status == proportion.status == "success"
+    assert total.metadata["estimate"] == pytest.approx(260)
+    assert mean.metadata["estimate"] == pytest.approx(260 / 160)
+    assert proportion.metadata["estimate"] == pytest.approx(10 / 40)
+    assert "psu_details" in mean.tables
