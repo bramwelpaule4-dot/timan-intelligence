@@ -18,7 +18,7 @@ def test_weighted_frequency_uses_weighted_denominator():
     assert table.loc["Yes", "weighted_count"] == pytest.approx(5.0)
     assert table.loc["No", "weighted_count"] == pytest.approx(5.0)
     assert table.loc["Yes", "weighted_percent"] == pytest.approx(50.0)
-    assert result["metadata"]["effective_sample_size_kish"] == pytest.approx(2.0)
+    assert result["metadata"]["effective_sample_size_kish"] == pytest.approx(100.0 / 38.0)
 
 
 def test_weighted_frequency_can_include_nonresponse():
