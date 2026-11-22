@@ -17,6 +17,7 @@ from timan_intelligence.core.statistical_engine import (
     run_descriptive_statistics,
     run_independent_samples_t_test,
     run_mean_confidence_interval,
+    run_one_sample_t_test,
     run_proportion_confidence_interval,
     run_welch_mean_difference_confidence_interval,
     run_paired_mean_difference_confidence_interval,
@@ -31,6 +32,7 @@ class AnalysisExecutionError(ValueError):
 _EXECUTOR_BY_METHOD_ID = {
     "method.descriptive.numeric.summary": "descriptive",
     "method.inference.confidence_interval.mean": "mean_ci",
+    "method.inference.comparison.t_test.one_sample": "one_sample_t",
     "method.inference.confidence_interval.proportion": "proportion_ci",
     "method.inference.confidence_interval.mean_difference.welch": "welch_mean_difference_ci",
     "method.inference.confidence_interval.mean_difference.paired": "paired_mean_difference_ci",
@@ -205,6 +207,22 @@ def execute_recommendation(
         )
         result = run_mean_confidence_interval(
             df, variables[0], confidence_level=confidence_level
+        )
+    elif executor == "one_sample_t":
+        if len(variables) != 1:
+            raise AnalysisExecutionError(
+                "A one-sample t-test requires exactly one numeric outcome variable."
+            )
+        options = recommendation.get("options") or {}
+        if "reference_value" not in options:
+            raise AnalysisExecutionError(
+                "A one-sample t-test requires a user-specified reference_value."
+            )
+        result = run_one_sample_t_test(
+            df,
+            variables[0],
+            reference_value=options["reference_value"],
+            alternative=options.get("alternative", "two-sided"),
         )
     elif executor == "proportion_ci":
         if len(variables) != 1:
