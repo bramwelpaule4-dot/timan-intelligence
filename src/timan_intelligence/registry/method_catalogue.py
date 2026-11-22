@@ -22,6 +22,7 @@ CATALOGUE_VERSION = "1.0.0"
 IMPLEMENTED_METHODS = frozenset(
     {
         "method.descriptive.numeric.summary",
+        "method.inference.confidence_interval.mean",
         "method.inference.comparison.t_test.independent.welch",
         "method.inference.comparison.anova.one_way",
     }
@@ -185,6 +186,14 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             assumptions=["Observations and sampling structure are correctly represented.", "The selected interval procedure is appropriate for the data and sample size."],
             outputs=["Sample mean", "Standard error", "Confidence level", "Lower confidence limit", "Upper confidence limit"],
             use_cases=["Estimate an average outcome", "Quantify uncertainty around a sample mean"],
+            aliases=["One-sample mean confidence interval", "Student-t interval for a mean"],
+            implementation_status="implemented",
+            verification_status="unit_tested",
+            execution_eligibility="conditional",
+            limitations=[
+                "The current implementation assumes independent, identically distributed observations.",
+                "It is not design-adjusted for complex survey samples, clustering, stratification or sampling weights.",
+            ],
         ),
         _method(
             entity_id="method.inference.confidence_interval.proportion",
