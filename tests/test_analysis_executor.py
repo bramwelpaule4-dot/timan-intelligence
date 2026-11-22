@@ -282,3 +282,29 @@ def test_mean_confidence_interval_executor_blocks_complex_sampling():
     }
     with pytest.raises(AnalysisExecutionError, match="not validated"):
         execute_recommendation(df, recommendation, approved=True)
+
+def test_execution_runs_registered_proportion_confidence_interval():
+    df = pd.DataFrame({"covered": [1, 1, 1, 0, 0, 0]})
+    recommendation = {
+        "method": "Confidence interval for a proportion",
+        "method_id": "method.inference.confidence_interval.proportion",
+        "variables": ["covered"],
+        "status": "review_required",
+        "options": {"confidence_level": 0.90},
+    }
+    result = execute_recommendation(df, recommendation, approved=True)
+    assert result.status == "success"
+    assert result.metadata["method_id"] == "method.inference.confidence_interval.proportion"
+    assert result.metadata["confidence_level"] == pytest.approx(0.90)
+
+
+def test_proportion_confidence_interval_executor_blocks_complex_sampling():
+    df = pd.DataFrame({"covered": [1, 1, 0, 0]})
+    recommendation = {
+        "method": "Confidence interval for a proportion",
+        "variables": ["covered"],
+        "status": "review_required",
+        "design_context": {"sampling_design": "cluster"},
+    }
+    with pytest.raises(AnalysisExecutionError, match="not validated"):
+        execute_recommendation(df, recommendation, approved=True)
