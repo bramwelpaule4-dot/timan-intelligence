@@ -505,3 +505,100 @@ def run_one_way_anova(
             "group_labels": [str(label) for label in unique_groups],
         },
     )
+
+
+def run_mean_confidence_interval(
+    df: pd.DataFrame,
+    variable: str,
+    confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Estimate a mean and Student-t confidence interval for IID observations.
+
+    This is a model-based interval for independent observations. It is not
+    design-adjusted and must not be used as a substitute for survey estimation.
+    """
+    from scipy.stats import t
+
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Expected a pandas DataFrame.")
+    if not isinstance(variable, str) or not variable.strip():
+        raise ValueError("Provide a valid numeric variable name.")
+    if variable not in df.columns:
+        raise ValueError(f"Variable '{variable}' was not found in the dataset.")
+    if isinstance(confidence_level, bool) or not isinstance(confidence_level, (int, float)):
+        raise TypeError("Confidence level must be numeric.")
+    if not 0 < float(confidence_level) < 1:
+        raise ValueError("Confidence level must be greater than 0 and less than 1.")
+    series = df[variable]
+    if not pd.api.types.is_numeric_dtype(series):
+        raise TypeError(f"Variable '{variable}' must be numeric.")
+
+    values = series.dropna().astype(float)
+    finite = values[pd.Series(values).map(lambda value: pd.notna(value) and abs(value) != float("inf")).to_numpy()]
+    missing_count = int(series.isna().sum())
+    infinite_count = int((values.abs() == float("inf")).sum())
+    n = int(len(finite))
+    if n < 2:
+        raise ValueError("A mean confidence interval requires at least two finite observations.")
+    mean = float(finite.mean())
+    standard_deviation = float(finite.std(ddof=1))
+    standard_error = standard_deviation / (n ** 0.5)
+    degrees_of_freedom = n - 1
+    critical_value = float(t.ppf(0.5 + float(confidence_level) / 2.0, degrees_of_freedom))
+    margin = critical_value * standard_error
+    lower, upper = mean - margin, mean + margin
+
+    findings = [
+        f"Estimated mean of {variable}: {mean:,.6g}.",
+        f"Standard error: {standard_error:,.6g} based on {n:,} usable observations.",
+        f"{float(confidence_level):.1%} Student-t confidence interval: [{lower:,.6g}, {upper:,.6g}].",
+    ]
+    limitations = [
+        "This interval assumes independent observations from a common population; it does not account for clustering, stratification, unequal survey weights or finite-population corrections.",
+        "The interval is model-based. For complex survey samples, use the relevant design-aware estimator in Survey Analysis.",
+    ]
+    if missing_count:
+        limitations.append(f"{missing_count:,} missing observation(s) were excluded.")
+    if infinite_count:
+        limitations.append(f"{infinite_count:,} infinite observation(s) were excluded.")
+
+    return AnalysisResult(
+        title=f"Confidence interval for mean: {variable}",
+        method="One-sample Student-t confidence interval",
+        status="success",
+        tables={
+            "estimate": pd.DataFrame([{
+                "Variable": variable,
+                "Observations": n,
+                "Mean": mean,
+                "Standard deviation": standard_deviation,
+                "Standard error": standard_error,
+                "Degrees of freedom": degrees_of_freedom,
+                "Confidence level": float(confidence_level),
+                "Lower confidence limit": lower,
+                "Upper confidence limit": upper,
+            }])
+        },
+        findings=findings,
+        assumptions=[
+            "The outcome is numeric and measured on a meaningful scale.",
+            "Observations are independent and arise from the target population under the stated model.",
+            "The Student-t interval is appropriate; with small samples, the population distribution should not be severely non-normal or dominated by influential outliers.",
+            "Missing and infinite observations are excluded and reported.",
+        ],
+        limitations=limitations,
+        metadata={
+            "variable": variable,
+            "estimate": mean,
+            "standard_deviation": standard_deviation,
+            "standard_error": standard_error,
+            "degrees_of_freedom": degrees_of_freedom,
+            "confidence_level": float(confidence_level),
+            "confidence_interval": (float(lower), float(upper)),
+            "observations": n,
+            "missing_values": missing_count,
+            "infinite_values": infinite_count,
+            "sampling_design_aware": False,
+            "inference_framework": "iid_model_based",
+        },
+    )
