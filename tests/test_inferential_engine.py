@@ -565,3 +565,37 @@ def test_fisher_exact_rejects_non_2_by_2_and_invalid_alternative():
         run_fisher_exact_test(pd.DataFrame({"a": ["x", "y", "z", "x"], "b": ["u", "u", "v", "v"]}), "a", "b")
     with pytest.raises(ValueError, match="Alternative must"):
         run_fisher_exact_test(pd.DataFrame({"a": ["x", "x", "y", "y"], "b": ["u", "v", "u", "v"]}), "a", "b", "invalid")
+
+
+def test_exact_one_sample_binomial_test_and_clopper_pearson_interval():
+    from timan_intelligence.core.statistical_engine import run_one_sample_binomial_test
+    frame = pd.DataFrame({"success": [1] * 8 + [0] * 12})
+    result = run_one_sample_binomial_test(frame, "success", 0.3, confidence_level=0.95)
+    assert result.status == "success"
+    assert result.metadata["successes"] == 8
+    assert result.metadata["observations"] == 20
+    assert result.metadata["estimate"] == pytest.approx(0.4)
+    assert 0 <= result.metadata["p_value"] <= 1
+    lower, upper = result.metadata["confidence_interval"]
+    assert lower < 0.4 < upper
+
+
+def test_exact_binomial_supports_directional_alternative_and_missing_values():
+    from timan_intelligence.core.statistical_engine import run_one_sample_binomial_test
+    frame = pd.DataFrame({"event": [1, 1, 1, 0, 0, None]})
+    result = run_one_sample_binomial_test(frame, "event", 0.5, alternative="greater")
+    assert result.metadata["alternative"] == "greater"
+    assert result.metadata["missing_values_excluded"] == 1
+    assert result.metadata["p_value"] < 0.5
+
+
+def test_exact_binomial_rejects_invalid_binary_values_reference_and_alternative():
+    from timan_intelligence.core.statistical_engine import run_one_sample_binomial_test
+    frame = pd.DataFrame({"event": [0, 1, 2]})
+    with pytest.raises(ValueError, match="only 0 and 1"):
+        run_one_sample_binomial_test(frame, "event", 0.5)
+    valid = pd.DataFrame({"event": [0, 1, 1]})
+    with pytest.raises(ValueError, match="between 0 and 1"):
+        run_one_sample_binomial_test(valid, "event", 1.2)
+    with pytest.raises(ValueError, match="Alternative must"):
+        run_one_sample_binomial_test(valid, "event", 0.5, alternative="invalid")

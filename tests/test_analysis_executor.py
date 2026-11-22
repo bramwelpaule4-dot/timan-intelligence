@@ -407,6 +407,21 @@ def test_executor_runs_chi_square_independence_and_blocks_complex_sampling():
         execute_recommendation(frame, blocked, approved=True)
 
 
+def test_executor_runs_exact_binomial_test_and_requires_reference_proportion():
+    from timan_intelligence.core.analysis_executor import AnalysisExecutionError, execute_recommendation
+    frame = pd.DataFrame({"event": [1] * 8 + [0] * 12})
+    recommendation = {"method": "Exact one-sample binomial test", "method_id": "method.inference.comparison.binomial.one_sample", "variables": ["event"], "status": "review_required", "options": {"reference_proportion": 0.3, "alternative": "greater"}, "design_context": {"study_design": "independent_observations"}}
+    result = execute_recommendation(frame, recommendation, approved=True)
+    assert result.status == "success"
+    assert result.metadata["method_id"] == "method.inference.comparison.binomial.one_sample"
+    missing = {**recommendation, "options": {}}
+    with pytest.raises(AnalysisExecutionError, match="reference_proportion"):
+        execute_recommendation(frame, missing, approved=True)
+    blocked = {**recommendation, "design_context": {"sampling_design": "cluster"}}
+    with pytest.raises(AnalysisExecutionError, match="not validated"):
+        execute_recommendation(frame, blocked, approved=True)
+
+
 def test_executor_runs_fisher_exact_and_blocks_complex_sampling():
     from timan_intelligence.core.analysis_executor import AnalysisExecutionError, execute_recommendation
     frame = pd.DataFrame({"exposure": ["Y"] * 10 + ["N"] * 6, "outcome": ["Y"] * 8 + ["N"] * 2 + ["Y"] + ["N"] * 5})

@@ -70,6 +70,7 @@ from timan_intelligence.services.analysis_service import (
     run_paired_samples_t_test_service,
     run_chi_square_test_of_independence_service,
     run_fisher_exact_test_service,
+    run_one_sample_binomial_test_service,
     run_ppswor_total_service,
     run_ppswor_ratio_service,
     run_ppswor_domain_ratio_service,
@@ -7140,6 +7141,7 @@ elif page == "Statistical Inference":
                 "Confidence interval for a mean",
                 "One-sample Student's t-test",
                 "Confidence interval for a proportion",
+                "Exact one-sample binomial test",
                 "Welch confidence interval for a mean difference",
                 "Paired mean-change confidence interval",
                 "Paired-samples Student's t-test",
@@ -7219,7 +7221,7 @@ elif page == "Statistical Inference":
                 st.caption("Tests whether the mean within-pair change (after minus before) differs from zero. The confidence interval remains two-sided.")
             else:
                 st.caption("Each row must represent the same participant, household, facility or other matched unit at both time points. The reported change is after minus before.")
-        elif inference_method == "Confidence interval for a proportion":
+        elif inference_method in {"Confidence interval for a proportion", "Exact one-sample binomial test"}:
             binary_cols = [
                 column for column in numeric_cols
                 if inference_df[column].notna().any()
@@ -7236,7 +7238,12 @@ elif page == "Statistical Inference":
             group_variable = None
             if not binary_cols:
                 st.warning("No numeric variables coded strictly as 0/1 with observed values are available.")
-            st.caption("Uses the Wilson score interval for a binary outcome.")
+            if inference_method == "Exact one-sample binomial test":
+                reference_proportion = st.number_input("Reference population proportion", min_value=0.0, max_value=1.0, value=0.5, step=0.05, key="inference_binomial_reference")
+                binomial_alternative = st.selectbox("Alternative hypothesis", ["two-sided", "greater", "less"], key="inference_binomial_alternative")
+                st.caption("Uses the exact binomial distribution and reports a Clopper-Pearson confidence interval. Code the event as 1 and non-event as 0.")
+            else:
+                st.caption("Uses the Wilson score interval for a binary outcome.")
         elif inference_method in {"Chi-square test of independence", "Fisher's exact test"}:
             category_options = categorical_cols
             row_variable = st.selectbox("First categorical variable", category_options, key="inference_chi_square_row") if category_options else None
@@ -7288,6 +7295,7 @@ elif page == "Statistical Inference":
                 or inference_method in {
                     "Confidence interval for a mean",
                     "Confidence interval for a proportion",
+                    "Exact one-sample binomial test",
                     "One-sample Student's t-test",
                 }
                 or group_variable is not None
@@ -7309,6 +7317,8 @@ elif page == "Statistical Inference":
                     inference_result = run_one_sample_t_test_service(
                         inference_df, outcome_variable, reference_value, alternative
                     )
+                elif inference_method == "Exact one-sample binomial test":
+                    inference_result = run_one_sample_binomial_test_service(inference_df, outcome_variable, reference_proportion, binomial_alternative, confidence_level)
                 elif inference_method == "Confidence interval for a proportion":
                     inference_result = run_proportion_confidence_interval_service(
                         inference_df, outcome_variable, confidence_level
