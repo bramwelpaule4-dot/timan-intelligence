@@ -93,7 +93,7 @@ def _validate_design_compatibility(
         "paired", "repeated_measure", "repeated_measures",
         "longitudinal", "time_series",
     }
-    if executor in {"welch_t", "anova", "welch_mean_difference_ci", "chi_square_independence"} and study_design in repeated_designs:
+    if executor in {"welch_t", "anova", "welch_mean_difference_ci", "chi_square_independence", "fisher_exact"} and study_design in repeated_designs:
         raise AnalysisExecutionError(
             "Execution blocked: this executor assumes independent groups and "
             "is not validated for paired, repeated-measures, longitudinal or "
