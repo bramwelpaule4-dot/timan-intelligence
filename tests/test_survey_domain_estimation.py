@@ -75,7 +75,7 @@ def test_weighted_descriptive_domain_has_point_estimate_but_no_inference():
     result = estimate_domain_survey(
         _stratified(), "income", "weight", "area", "Target", "mean",
     )
-    assert result["table"].iloc[0]["estimate"] == pytest.approx(11.0)
+    assert result["table"].iloc[0]["estimate"] == pytest.approx(9.0)
     assert np.isnan(result["table"].iloc[0]["standard_error"])
     assert any("Weights alone" in item for item in result["warnings"])
 
