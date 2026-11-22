@@ -4329,6 +4329,7 @@ elif page == "Survey Analysis":
                                 df, domain_outcome, domain_variable, domain_value,
                                 ms_psu, ms_ssu, ms_psu_population,
                                 ms_ssu_population, ms_strata, ms_confidence,
+                                ms_certainty_psu,
                             )
                             if domain_kind == "Total":
                                 domain_result = run_two_stage_survey_domain_total_service(
