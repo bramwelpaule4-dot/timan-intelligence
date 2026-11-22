@@ -357,8 +357,8 @@ def _estimate_two_stage_ratio(
         raise ValueError("Numerator SSU totals must be complete, numeric and finite.")
     if denominator.isna().any() or not np.isfinite(denominator.to_numpy(dtype=float)).all():
         raise ValueError("Denominator SSU counts must be complete, numeric and finite.")
-    if (denominator <= 0).any():
-        raise ValueError("Every sampled SSU must contain a positive eligible-element count.")
+    if (denominator < 0).any():
+        raise ValueError("Eligible-element counts cannot be negative.")
     if require_proportion and ((numerator < 0).any() or (numerator > denominator).any()):
         raise ValueError("For a proportion, successes in each SSU must be between zero and its eligible-element count.")
 
