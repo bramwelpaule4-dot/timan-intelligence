@@ -105,7 +105,7 @@ def test_two_stage_domain_services_return_analysis_results():
         "psu_population", "ssu_population", "stratum",
     )
     assert total.status == mean.status == proportion.status == "success"
-    assert total.metadata["estimate"] == pytest.approx(260)
-    assert mean.metadata["estimate"] == pytest.approx(260 / 160)
-    assert proportion.metadata["estimate"] == pytest.approx(10 / 40)
+    assert total.metadata["estimate"] == pytest.approx(400)
+    assert mean.metadata["estimate"] == pytest.approx(400 / 240)
+    assert proportion.metadata["estimate"] == pytest.approx(68 / 240)
     assert "psu_details" in mean.tables
