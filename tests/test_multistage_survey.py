@@ -260,3 +260,48 @@ def test_two_stage_domain_rejects_missing_or_absent_domain():
             df, "outcome", "domain", "target", "psu", "ssu",
             "psu_population", "ssu_population", "stratum",
         )
+
+
+def test_two_stage_estimator_supports_certainty_psus_and_remaining_srswor():
+    df = pd.DataFrame({
+        "stratum": ["A"] * 6 + ["B"] * 6,
+        "psu": [1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6],
+        "ssu": [1, 2] * 6,
+        "outcome": [10, 20, 30, 40, 50, 60, 15, 25, 35, 45, 55, 65],
+        "psu_population": [5] * 6 + [5] * 6,
+        "ssu_population": [4] * 12,
+        "certainty": [True, True, False, False, False, False] * 2,
+    })
+    result = estimate_two_stage_total(
+        df, "outcome", "psu", "ssu", "psu_population",
+        "ssu_population", "stratum", certainty_psu_variable="certainty",
+    )
+    assert result["metadata"]["number_of_certainty_psus"] == 2
+    assert result["metadata"]["certainty_psu_variable"] == "certainty"
+    assert result["strata"]["sampled_certainty_psus"].tolist() == [1, 1]
+    assert result["strata"]["sampled_noncertainty_psus"].tolist() == [2, 2]
+    assert result["psu_details"]["certainty_psu"].sum() == 2
+    assert result["variance"] >= 0
+
+
+def test_two_stage_certainty_psu_validation():
+    df = pd.DataFrame({
+        "stratum": ["A"] * 6,
+        "psu": [1, 1, 2, 2, 3, 3],
+        "ssu": [1, 2] * 3,
+        "outcome": [1, 2, 3, 4, 5, 6],
+        "psu_population": [4] * 6,
+        "ssu_population": [4] * 6,
+        "certainty": [True, False, False, False, False, False],
+    })
+    with pytest.raises(ValueError, match="classification must be constant"):
+        estimate_two_stage_total(
+            df, "outcome", "psu", "ssu", "psu_population",
+            "ssu_population", "stratum", certainty_psu_variable="certainty",
+        )
+    df["certainty"] = [True, True, False, False, False, False]
+    with pytest.raises(ValueError, match="At least two sampled non-certainty"):
+        estimate_two_stage_total(
+            df, "outcome", "psu", "ssu", "psu_population",
+            "ssu_population", "stratum", certainty_psu_variable="certainty",
+        )
