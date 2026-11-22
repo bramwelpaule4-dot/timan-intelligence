@@ -1311,3 +1311,71 @@ def run_ppswor_domain_total_service(
             "confidence_level": output["confidence_level"],
         },
     )
+
+
+def run_sample_size_service(**kwargs: Any) -> AnalysisResult:
+    """Run a validated proportion or mean sample-size calculation."""
+    from timan_intelligence.core.sample_size import calculate_sample_size
+
+    output = calculate_sample_size(**kwargs)
+    return AnalysisResult(
+        title="Survey sample-size determination",
+        method=f"Normal-approximation {output['parameter']} sample-size formula",
+        status="success",
+        tables={"calculation": pd.DataFrame([{
+            key: value for key, value in output.items()
+            if not isinstance(value, (list, dict))
+        }])},
+        findings=[
+            f"Recommended sample size to approach: {output['recommended_sample_size']:,}.",
+            f"Sample size before design-effect and nonresponse adjustments: {output['sample_size_after_fpc']:,}.",
+        ],
+        assumptions=list(output["assumptions"]),
+        limitations=list(output["warnings"]),
+        metadata=output,
+    )
+
+
+def run_stratified_allocation_service(
+    strata: pd.DataFrame, total_sample_size: int, **kwargs: Any
+) -> AnalysisResult:
+    """Allocate a fixed total sample across supplied strata."""
+    from timan_intelligence.core.sample_size import allocate_stratified_sample
+
+    output = allocate_stratified_sample(strata, total_sample_size, **kwargs)
+    return AnalysisResult(
+        title="Stratified sample allocation",
+        method=f"{output['allocation_method'].title()} allocation with largest-remainder rounding",
+        status="success",
+        tables={"stratum_allocation": output["allocation"]},
+        findings=[
+            f"Allocated {output['total_sample_size']:,} respondents across {len(output['allocation']):,} strata.",
+        ],
+        assumptions=list(output["assumptions"]),
+        limitations=list(output["warnings"]),
+        metadata={"allocation_method": output["allocation_method"], "total_sample_size": output["total_sample_size"]},
+    )
+
+
+def run_cluster_sample_plan_service(**kwargs: Any) -> AnalysisResult:
+    """Create a cluster count and respondent approach plan."""
+    from timan_intelligence.core.sample_size import plan_cluster_sample
+
+    output = plan_cluster_sample(**kwargs)
+    return AnalysisResult(
+        title="Cluster sample planning",
+        method="One-stage cluster design-effect approximation",
+        status="success",
+        tables={"cluster_plan": pd.DataFrame([{
+            key: value for key, value in output.items()
+            if not isinstance(value, (list, dict))
+        }])},
+        findings=[
+            f"Plan for {output['number_of_clusters']:,} clusters.",
+            f"Approach {output['respondents_to_approach']:,} respondents in total.",
+            f"Approximate design effect: {output['design_effect']:.3f}.",
+        ],
+        assumptions=list(output["assumptions"]),
+        limitations=list(output["warnings"]),
+        metadata=output,
+    )
