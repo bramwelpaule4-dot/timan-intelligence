@@ -47,10 +47,11 @@ def test_two_stage_ppswor_mean_scales_total_and_variance():
     result = estimate_two_stage_ppswor_mean(
         frame, "outcome", 12, *common
     )
-    total = estimate_two_stage_ppswor_mean(
-        frame, "outcome", 12, *common
+    total = estimate_two_stage_ppswor_total(
+        frame, "outcome", *common
     )
-    assert result["estimate"] == pytest.approx(total["estimate"])
+    assert result["estimate"] == pytest.approx(total["estimate"] / 12)
+    assert result["variance"] == pytest.approx(total["variance"] / 12**2)
     assert result["variance"] == pytest.approx(
         result["variance_stage_1"] + result["variance_stage_2"]
     )
