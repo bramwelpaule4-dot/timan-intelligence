@@ -7127,8 +7127,32 @@ elif page == "Descriptive Statistics":
 # ============================================================
 
 elif page == "Visualisations":
-    st.title("Visualisations")
+    st.markdown(
+        """
+        <section class="analysis-page-header">
+            <div class="analysis-page-eyebrow">VISUAL ANALYTICS · WORKSPACE 04</div>
+            <div class="analysis-page-title">Data Visualisations</div>
+            <div class="analysis-page-description">
+                Build clear exploratory charts from your active dataset.
+                Select a chart, choose the relevant variables and review
+                what the visual does—and does not—represent.
+            </div>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
     st.caption(status_text(MODULES[page][0]))
+    st.markdown(
+        """
+        <div class="analysis-workflow">
+            <div><strong>01</strong><b>Select</b><small>Chart type</small></div>
+            <div><strong>02</strong><b>Configure</b><small>Choose variables</small></div>
+            <div><strong>03</strong><b>Explore</b><small>Review the pattern</small></div>
+            <div><strong>04</strong><b>Interpret</b><small>Check context</small></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     df = get_dataset()
 
@@ -7137,6 +7161,16 @@ elif page == "Visualisations":
             df.select_dtypes(include="number").columns
         )
         all_cols = list(df.columns)
+        categorical_count = len(all_cols) - len(numeric_cols)
+
+        st.markdown("#### Dataset visualisation readiness")
+        readiness = st.columns(4)
+        readiness[0].metric("Records", f"{len(df):,}")
+        readiness[1].metric("Variables", f"{len(all_cols):,}")
+        readiness[2].metric("Numeric variables", f"{len(numeric_cols):,}")
+        readiness[3].metric("Other variables", f"{categorical_count:,}")
+        st.divider()
+        st.markdown("#### Chart builder")
 
         chart_type = st.selectbox(
             "Chart type",
@@ -7296,6 +7330,18 @@ elif page == "Visualisations":
                         x=x_col,
                         y=y_col,
                     )
+    else:
+        st.info(
+            "No dataset is loaded. Upload a dataset in Data Management "
+            "to start building visualisations."
+        )
+        if st.button(
+            "Go to Data Management",
+            type="primary",
+            key="visualisations_upload_dataset",
+            on_click=go_to_data_management,
+        ):
+            pass
 
 
 # ============================================================
