@@ -282,3 +282,72 @@ def test_ppswor_stratified_domain_ratio_combines_strata_and_full_pair_sets():
     assert result["estimate"] == pytest.approx(expected_num / expected_den)
     assert result["metadata"]["number_of_strata"] == 2
     assert len(result["pairwise_variance"]) == 6
+
+
+def test_ppswor_domain_total_uses_all_sampled_psus_and_syg_pairs():
+    from timan_intelligence.core.ppswor_survey import estimate_ppswor_domain_total
+
+    df, joint = ppswor_fixture()
+    df["domain_total"] = [10.0, 0.0, 30.0]
+    result = estimate_ppswor_domain_total(
+        df, "Women", "domain_total", "psu", "pi", joint, "stratum",
+    )
+    expected_total = 10 / .5 + 0 / .7 + 30 / .8
+    assert result["estimate"] == pytest.approx(expected_total)
+    assert result["variance"] > 0
+    assert len(result["pairwise_variance"]) == 3
+    assert set(result["pairwise_variance"]["psu_i"]) | set(
+        result["pairwise_variance"]["psu_j"]
+    ) == {"P1", "P2", "P3"}
+    assert result["metadata"]["domain_parameter"] == "total"
+    assert result["metadata"]["domain_estimation"] is True
+    assert any("Do not filter" in warning for warning in result["warnings"])
+
+
+def test_ppswor_stratified_domain_total_combines_stratum_estimates_and_variances():
+    from timan_intelligence.core.ppswor_survey import estimate_ppswor_domain_total
+
+    df_a, joint_a = ppswor_fixture()
+    df_b, joint_b = ppswor_fixture()
+    df_a["domain_total"] = [10.0, 0.0, 30.0]
+    df_b["stratum"] = "B"
+    df_b["psu"] = ["Q1", "Q2", "Q3"]
+    df_b["domain_total"] = [5.0, 15.0, 0.0]
+    joint_b.index = ["Q1", "Q2", "Q3"]
+    joint_b.columns = ["Q1", "Q2", "Q3"]
+    combined = pd.concat([df_a, df_b], ignore_index=True)
+
+    result = estimate_ppswor_domain_total(
+        combined, "Youth", "domain_total", "psu", "pi",
+        {"A": joint_a, "B": joint_b}, "stratum",
+    )
+    expected = (10 / .5 + 0 / .7 + 30 / .8) + (5 / .5 + 15 / .7 + 0 / .8)
+    assert result["estimate"] == pytest.approx(expected)
+    assert result["metadata"]["number_of_strata"] == 2
+    assert len(result["pairwise_variance"]) == 6
+
+
+def test_ppswor_domain_total_rejects_missing_domain_name():
+    from timan_intelligence.core.ppswor_survey import estimate_ppswor_domain_total
+
+    df, joint = ppswor_fixture()
+    df["domain_total"] = [1.0, 0.0, 3.0]
+    with pytest.raises(ValueError, match="domain name"):
+        estimate_ppswor_domain_total(
+            df, " ", "domain_total", "psu", "pi", joint, "stratum",
+        )
+
+
+def test_ppswor_domain_total_service_returns_domain_metadata():
+    from timan_intelligence.services.analysis_service import run_ppswor_domain_total_service
+
+    df, joint = ppswor_fixture()
+    df["domain_total"] = [10.0, 0.0, 30.0]
+    result = run_ppswor_domain_total_service(
+        df, "Women", "domain_total", "psu", "pi", joint, "stratum",
+    )
+    assert result.status == "success"
+    assert result.metadata["domain_name"] == "Women"
+    assert result.metadata["domain_parameter"] == "total"
+    assert result.metadata["domain_estimation"] is True
+    assert len(result.tables["pairwise_variance"]) == 3
