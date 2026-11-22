@@ -368,3 +368,28 @@ def test_paired_mean_change_executor_blocks_complex_sampling():
     }
     with pytest.raises(AnalysisExecutionError, match="not validated"):
         execute_recommendation(df, recommendation, approved=True)
+
+
+def test_executor_runs_approved_one_sample_t_test_with_reference_value():
+    df = pd.DataFrame({"score": [8, 9, 10, 11, 12]})
+    recommendation = {
+        "method": "One-sample Student's t-test",
+        "variables": ["score"],
+        "options": {"reference_value": 8, "alternative": "two-sided"},
+        "status": "review_required",
+    }
+    result = execute_recommendation(df, recommendation, approved=True)
+    assert result.status == "success"
+    assert result.method == "One-sample Student's t-test"
+    assert result.metadata["user_approved"] is True
+
+
+def test_executor_requires_reference_value_for_one_sample_t_test():
+    df = pd.DataFrame({"score": [8, 9, 10]})
+    recommendation = {
+        "method": "One-sample Student's t-test",
+        "variables": ["score"],
+        "status": "review_required",
+    }
+    with pytest.raises(AnalysisExecutionError, match="reference_value"):
+        execute_recommendation(df, recommendation, approved=True)
