@@ -1,6 +1,7 @@
 """Shared orchestration entry points used by the web and desktop interfaces."""
 
 import pandas as pd
+from timan_intelligence.core.poisson_regression import run_poisson_regression
 
 from timan_intelligence.core.contracts import AnalysisResult, AnalysisRequest
 from timan_intelligence.core.data_quality import profile_dataframe
@@ -383,6 +384,37 @@ def run_multinomial_logistic_regression_service(
         metadata=metadata,
     )
 
+
+
+def run_poisson_regression_service(
+    df: pd.DataFrame,
+    predictor_variables: list[str],
+    outcome_variable: str,
+    exposure_variable: str | None = None,
+) -> AnalysisResult:
+    """Run a shared Poisson count regression with an optional log exposure offset."""
+    output = run_poisson_regression(
+        df, predictor_variables, outcome_variable, exposure_variable
+    )
+    metadata = output["metadata"]
+    return AnalysisResult(
+        title=f"Poisson regression: {outcome_variable}",
+        method="Log-link Poisson regression by maximum likelihood",
+        status="success",
+        tables={
+            "coefficients": output["coefficients"],
+            "fitted_data": output["fitted_data"],
+        },
+        findings=list(output["findings"]),
+        assumptions=[
+            "The outcome is a non-negative integer count.",
+            "Conditional on the predictors and any offset, the Poisson model assumes the count mean equals its variance.",
+            "Observations are independent and the log expected count is correctly specified.",
+            "An exposure offset, when supplied, is assumed to have a coefficient fixed at one.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata=metadata,
+    )
 
 
 def run_regression_diagnostics_service(
