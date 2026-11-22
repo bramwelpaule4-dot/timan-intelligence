@@ -4191,46 +4191,45 @@ elif page == "Survey Analysis":
                             x for x in ratio_denominator_options
                             if x != proportion_successes
                         ]
-                        if not proportion_denominator_options:
-                            st.info("Select a separate numeric eligible-element count variable.")
-                        else:
+                        if proportion_denominator_options:
                             proportion_denominator = st.selectbox(
                                 "Eligible population count in each SSU",
                                 proportion_denominator_options,
                                 key="multistage_proportion_denominator",
                             )
-                        if proportion_denominator_options:
                             proportion_key = (
-                            _dataset_analysis_key(df), proportion_successes,
-                            proportion_denominator, ms_psu, ms_ssu, ms_strata,
-                            ms_psu_population, ms_ssu_population, ms_confidence,
-                        )
-                        if st.button(
-                            "Estimate two-stage population proportion",
-                            key="run_two_stage_proportion",
-                        ):
-                            try:
-                                proportion_result = run_two_stage_survey_proportion_service(
-                                    df, proportion_successes, proportion_denominator,
-                                    ms_psu, ms_ssu, ms_psu_population,
-                                    ms_ssu_population, ms_strata, ms_confidence,
-                                )
-                                st.session_state["two_stage_proportion_result"] = proportion_result
-                                st.session_state["two_stage_proportion_result_key"] = proportion_key
-                            except (TypeError, ValueError, KeyError) as exc:
-                                st.error(str(exc))
-                        saved_proportion = st.session_state.get("two_stage_proportion_result")
-                        if (
-                            saved_proportion is not None
-                            and st.session_state.get("two_stage_proportion_result_key") == proportion_key
-                        ):
-                            st.metric("Estimated population proportion", f"{saved_proportion.metadata['estimate']:.2%}")
-                            st.metric("Design-based standard error", f"{saved_proportion.metadata['standard_error']:.4f}")
-                            ci = saved_proportion.metadata["confidence_interval"]
-                            st.write(f"{ms_confidence:.0%} confidence interval: [{ci[0]:.2%}, {ci[1]:.2%}]")
-                            st.dataframe(saved_proportion.tables["stratum_estimates"], hide_index=True, use_container_width=True)
-                            for warning in saved_proportion.limitations:
-                                st.warning(warning)
+                                _dataset_analysis_key(df), proportion_successes,
+                                proportion_denominator, ms_psu, ms_ssu, ms_strata,
+                                ms_psu_population, ms_ssu_population, ms_confidence,
+                            )
+                            if st.button(
+                                "Estimate two-stage population proportion",
+                                key="run_two_stage_proportion",
+                            ):
+                                try:
+                                    proportion_result = run_two_stage_survey_proportion_service(
+                                        df, proportion_successes, proportion_denominator,
+                                        ms_psu, ms_ssu, ms_psu_population,
+                                        ms_ssu_population, ms_strata, ms_confidence,
+                                    )
+                                    st.session_state["two_stage_proportion_result"] = proportion_result
+                                    st.session_state["two_stage_proportion_result_key"] = proportion_key
+                                except (TypeError, ValueError, KeyError) as exc:
+                                    st.error(str(exc))
+                            saved_proportion = st.session_state.get("two_stage_proportion_result")
+                            if (
+                                saved_proportion is not None
+                                and st.session_state.get("two_stage_proportion_result_key") == proportion_key
+                            ):
+                                st.metric("Estimated population proportion", f"{saved_proportion.metadata['estimate']:.2%}")
+                                st.metric("Design-based standard error", f"{saved_proportion.metadata['standard_error']:.4f}")
+                                ci = saved_proportion.metadata["confidence_interval"]
+                                st.write(f"{ms_confidence:.0%} confidence interval: [{ci[0]:.2%}, {ci[1]:.2%}]")
+                                st.dataframe(saved_proportion.tables["stratum_estimates"], hide_index=True, use_container_width=True)
+                                for warning in saved_proportion.limitations:
+                                    st.warning(warning)
+                        else:
+                            st.info("Select a separate numeric eligible-element count variable.")
                     else:
                         st.info("Add a numeric eligible-element count for each sampled SSU to estimate a population proportion.")
                 else:
