@@ -36,7 +36,7 @@ def test_only_existing_execution_methods_are_marked_implemented():
     }
 
     assert implemented == IMPLEMENTED_METHODS
-    assert len(implemented) == 5
+    assert len(implemented) == 6
 
 
 def test_planned_methods_are_not_marked_executable():
