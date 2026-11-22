@@ -5913,11 +5913,18 @@ elif page == "Survey Analysis":
                         weight_response_col = None
                         weight_cells = []
                         if use_nonresponse:
-                            weight_response_col = st.selectbox(
-                                "Response indicator (1 = respondent, 0 = nonrespondent)",
-                                [column for column in numeric_weight_columns if column != weight_pi_col],
-                                key="weight_response_col",
-                            )
+                            response_candidates = [
+                                column for column in numeric_weight_columns
+                                if column != weight_pi_col
+                            ]
+                            if not response_candidates:
+                                st.error("Add a numeric 0/1 response-indicator column before applying nonresponse adjustment.")
+                            else:
+                                weight_response_col = st.selectbox(
+                                    "Response indicator (1 = respondent, 0 = nonrespondent)",
+                                    response_candidates,
+                                    key="weight_response_col",
+                                )
                             weight_cells = st.multiselect(
                                 "Nonresponse adjustment-cell variables",
                                 [column for column in weighting_frame.columns if column not in {weight_pi_col, weight_response_col}],
@@ -6026,12 +6033,24 @@ elif page == "Survey Analysis":
                                     raking_margins=raking_margins,
                                     trim_quantiles=trim_limits,
                                 )
+                                helper_columns = [
+                                    column for column in weighting_result.tables["weighted_dataset"].columns
+                                    if str(column).startswith("_timan_post_") or str(column).startswith("_timan_rake_")
+                                ]
+                                if helper_columns:
+                                    weighting_result.tables["weighted_dataset"] = (
+                                        weighting_result.tables["weighted_dataset"].drop(columns=helper_columns)
+                                    )
                                 st.session_state["survey_weighting_result"] = weighting_result
                                 st.session_state["survey_weighting_dataset_key"] = _dataset_analysis_key(weighting_frame)
                             except (TypeError, ValueError, KeyError) as exc:
                                 st.error(str(exc))
                         weighting_result = st.session_state.get("survey_weighting_result")
-                        if weighting_result is not None:
+                        current_weighting_key = _dataset_analysis_key(weighting_frame)
+                        if (
+                            weighting_result is not None
+                            and st.session_state.get("survey_weighting_dataset_key") == current_weighting_key
+                        ):
                             st.markdown("#### Weight diagnostics")
                             diag = weighting_result.metadata.get("diagnostics", {})
                             metric_cols = st.columns(4)
