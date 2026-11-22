@@ -63,6 +63,34 @@ def test_ppswor_validates_joint_matrix_diagonal_and_probability_bounds():
         estimate_ppswor_total(df, "total", "psu", "pi", joint, "stratum")
 
 
+
+def test_ppswor_combines_stratum_specific_totals_and_syg_variances():
+    df_a, joint_a = ppswor_fixture()
+    df_b, joint_b = ppswor_fixture()
+    df_a["stratum"] = "A"
+    df_b["stratum"] = "B"
+    df_b["psu"] = ["Q1", "Q2", "Q3"]
+    df_b["total"] = [50.0, 80.0, 120.0]
+    joint_b.index = ["Q1", "Q2", "Q3"]
+    joint_b.columns = ["Q1", "Q2", "Q3"]
+    combined = pd.concat([df_a, df_b], ignore_index=True)
+
+    result = estimate_ppswor_total(
+        combined, "total", "psu", "pi",
+        {"A": joint_a, "B": joint_b}, "stratum",
+    )
+
+    expected_a = 100 / .5 + 200 / .7 + 300 / .8
+    expected_b = 50 / .5 + 80 / .7 + 120 / .8
+    assert result["estimate"] == pytest.approx(expected_a + expected_b)
+    assert result["variance"] == pytest.approx(
+        result["strata"]["estimated_variance"].sum()
+    )
+    assert result["degrees_of_freedom"] == 4
+    assert result["metadata"]["number_of_strata"] == 2
+    assert len(result["pairwise_variance"]) == 6
+
+
 def test_ppswor_service_returns_shared_analysis_result():
     from timan_intelligence.services.analysis_service import run_ppswor_total_service
     df, joint = ppswor_fixture()
