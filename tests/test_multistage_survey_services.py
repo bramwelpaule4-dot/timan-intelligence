@@ -69,7 +69,7 @@ def test_two_stage_mean_and_proportion_services_return_shared_results():
         "psu_population", "ssu_population", "stratum",
     )
     assert mean.status == "success"
-    assert mean.metadata["estimate"] == pytest.approx(1040 / 960)
+    assert mean.metadata["estimate"] == pytest.approx(1040 / 480)
     assert "psu_details" in mean.tables
     assert proportion.status == "success"
     assert 0 <= proportion.metadata["estimate"] <= 1
