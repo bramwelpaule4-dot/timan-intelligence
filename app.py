@@ -848,12 +848,16 @@ MODULES = {
         "Calculate numeric summaries and categorical frequencies.",
     ),
     "Survey Analysis": (
-        "Available — profiling and Likert item analysis",
-        "Inspect questionnaire structure, response patterns and ordered Likert items.",
+        "Available — survey design, estimation and technical reports",
+        "Profile survey data; plan probability samples; analyse weighted, stratified, "
+        "clustered and multi-stage designs; estimate totals, means, proportions and "
+        "domains; inspect weighting diagnostics and download technical PDF reports.",
     ),
     "Statistical Inference": (
-        "Under development",
-        "Confidence intervals, hypothesis tests and statistical association.",
+        "Under development — general-purpose inference",
+        "A general-purpose inference workspace for standalone confidence intervals, "
+        "hypothesis tests and association analyses is not yet operational. "
+        "Design-based inference for supported survey designs is available in Survey Analysis.",
     ),
     "Research & Modelling": (
         "Under development",
@@ -884,8 +888,9 @@ MODULES = {
         "Natural-language analysis is not connected yet.",
     ),
     "Reports & Exports": (
-        "Available — data exports",
-        "Download the current dataset and available descriptive outputs.",
+        "Available — data exports and survey technical PDFs",
+        "Export datasets and supported survey weighting and estimation technical reports. "
+        "General automated narrative reporting remains under development.",
     ),
     "Subscription Administration": (
         "Available — platform administrators only",
@@ -7892,16 +7897,27 @@ elif page == "About":
     st.write(f"**Version:** {APP_VERSION}")
 
     st.write(
-        "The current prototype supports CSV and Excel import, "
-        "worksheet selection, initial data-quality checks, core "
-        "descriptive statistics, basic charts and CSV exports. "
-        "Additional modules remain under development."
+        "TimanStat provides a dataset workspace with CSV and Excel import, "
+        "data-quality checks, descriptive statistics and visualisations. "
+        "Its Survey Analysis workspace also includes probability-sampling "
+        "workflows, survey weighting and diagnostics, design-based estimation "
+        "for supported stratified, clustered and multi-stage designs, domain "
+        "estimation, and downloadable technical PDF reports."
+    )
+    st.write(
+        "The platform is being developed in modules. The module register and "
+        "Developer Dashboard identify which capabilities are available and "
+        "which remain under development. In particular, survey-design-based "
+        "estimation inside Survey Analysis should not be confused with the "
+        "separate, general-purpose Statistical Inference workspace, which is "
+        "still under development. General automated narrative reporting and "
+        "several advanced intelligence modules are also not yet operational."
     )
 
-    st.warning(
-        "The presence of a module in navigation does not mean its "
-        "analytical engine is implemented. Modules marked "
-        "Under development are not operational."
+    st.info(
+        "Availability is capability-specific: a module may contain working "
+        "features while other planned features remain incomplete. Review the "
+        "module status and its in-app guidance before relying on a workflow."
     )
 
 
