@@ -56,6 +56,7 @@ from timan_intelligence.services.analysis_service import (
     run_two_stage_ppswr_total_service,
     run_two_stage_ppswr_mean_service,
     run_two_stage_ppswr_proportion_service,
+    run_two_stage_ppswor_total_service,
     run_ppswor_total_service,
     run_ppswor_ratio_service,
     run_ppswor_domain_ratio_service,
@@ -4804,6 +4805,159 @@ elif page == "Survey Analysis":
                     with st.expander("PSU draw-level details"):
                         st.dataframe(saved_pps.tables["psu_draw_details"], hide_index=True, use_container_width=True)
                 for warning in saved_pps.limitations:
+                    st.warning(warning)
+
+        with st.expander("Two-stage PPS without replacement (PPSWOR) estimation"):
+            st.write(
+                "Use this estimator when PSUs were selected by fixed-size PPS "
+                "without replacement and SSUs were then selected by simple random "
+                "sampling without replacement within each sampled PSU. The input "
+                "dataset must contain one row per sampled SSU."
+            )
+            st.warning(
+                "This interface currently accepts an unstratified first-stage design. "
+                "Enter the actual first-order PSU inclusion probabilities and the "
+                "complete symmetric matrix of second-order joint inclusion "
+                "probabilities (pi_ij) from the sampling design. Do not substitute "
+                "normalized weights, size measures or conditional draw probabilities. "
+                "The estimator does not support respondent subsampling within SSUs."
+            )
+            two_pps_psu = st.selectbox(
+                "PSU identifier", ms_cols, key="two_ppswor_psu_variable"
+            )
+            two_pps_ssu_options = [x for x in ms_cols if x != two_pps_psu]
+            two_pps_ssu = st.selectbox(
+                "SSU identifier", two_pps_ssu_options,
+                key="two_ppswor_ssu_variable",
+            )
+            two_pps_numeric = [
+                x for x in ms_numeric
+                if x not in (two_pps_psu, two_pps_ssu, ms_strata)
+            ]
+            two_pps_pi = st.selectbox(
+                "First-order PSU inclusion probability (pi_i)", two_pps_numeric,
+                key="two_ppswor_pi_variable",
+            )
+            two_pps_population_options = [
+                x for x in two_pps_numeric if x != two_pps_pi
+            ]
+            two_pps_population = st.selectbox(
+                "Population SSU count in each PSU (M_i)", two_pps_population_options,
+                key="two_ppswor_population_variable",
+            )
+            two_pps_outcome_options = [
+                x for x in two_pps_population_options if x != two_pps_population
+            ]
+            two_pps_outcome = st.selectbox(
+                "SSU outcome total", two_pps_outcome_options,
+                key="two_ppswor_outcome_variable",
+            )
+            two_pps_confidence = st.selectbox(
+                "Two-stage PPSWOR confidence level", [0.90, 0.95, 0.99],
+                index=1, format_func=lambda x: f"{x:.0%}",
+                key="two_ppswor_confidence_level",
+            )
+            st.caption(
+                "Paste a square CSV matrix: the first column contains PSU IDs, "
+                "the header row contains the same PSU IDs, and each cell contains "
+                "the actual joint inclusion probability pi_ij. Diagonal cells must "
+                "equal pi_i."
+            )
+            two_pps_joint_text = st.text_area(
+                "Second-order PSU joint inclusion probability matrix (CSV)",
+                placeholder=(
+                    ",P1,P2,P3\n"
+                    "P1,0.50,0.20,0.30\n"
+                    "P2,0.20,0.70,0.50\n"
+                    "P3,0.30,0.50,0.80"
+                ),
+                height=150,
+                key="two_ppswor_joint_matrix_csv",
+            )
+            two_pps_key = (
+                _dataset_analysis_key(df), two_pps_psu, two_pps_ssu,
+                two_pps_pi, two_pps_population, two_pps_outcome,
+                two_pps_confidence, two_pps_joint_text,
+            )
+            two_pps_ready = (
+                all(value is not None for value in (
+                    two_pps_psu, two_pps_ssu, two_pps_pi,
+                    two_pps_population, two_pps_outcome,
+                ))
+                and len({
+                    two_pps_psu, two_pps_ssu, two_pps_pi,
+                    two_pps_population, two_pps_outcome,
+                }) == 5
+                and bool(two_pps_joint_text.strip())
+            )
+            if st.button(
+                "Run two-stage PPSWOR total",
+                type="primary", key="run_two_stage_ppswor",
+                disabled=not two_pps_ready,
+            ):
+                try:
+                    joint_matrix = pd.read_csv(
+                        io.StringIO(two_pps_joint_text.strip()), index_col=0
+                    )
+                    joint_matrix.index = joint_matrix.index.map(str)
+                    joint_matrix.columns = joint_matrix.columns.map(str)
+                    two_pps_result = run_two_stage_ppswor_total_service(
+                        df,
+                        two_pps_outcome,
+                        two_pps_psu,
+                        two_pps_ssu,
+                        two_pps_pi,
+                        two_pps_population,
+                        joint_matrix,
+                        None,
+                        two_pps_confidence,
+                    )
+                    st.session_state["two_stage_ppswor_result"] = two_pps_result
+                    st.session_state["two_stage_ppswor_result_key"] = two_pps_key
+                except (TypeError, ValueError, KeyError, pd.errors.ParserError) as exc:
+                    st.error(str(exc))
+            saved_two_pps = st.session_state.get("two_stage_ppswor_result")
+            if (
+                saved_two_pps is not None
+                and st.session_state.get("two_stage_ppswor_result_key") == two_pps_key
+            ):
+                meta = saved_two_pps.metadata
+                metric_left, metric_right, metric_variance = st.columns(3)
+                metric_left.metric(
+                    "Estimated population total", f"{meta['estimate']:,.4g}"
+                )
+                metric_right.metric(
+                    "Design-based standard error", f"{meta['standard_error']:,.4g}"
+                )
+                metric_variance.metric(
+                    "Combined variance", f"{meta['variance']:,.4g}"
+                )
+                ci = meta["confidence_interval"]
+                st.write(
+                    f"{meta['confidence_level']:.0%} confidence interval: "
+                    f"[{ci[0]:,.4g}, {ci[1]:,.4g}]"
+                )
+                st.caption(
+                    f"Stage 1 variance: {meta['stage_1_variance']:,.4g} · "
+                    f"Stage 2 variance: {meta['stage_2_variance']:,.4g}"
+                )
+                for finding in saved_two_pps.findings:
+                    st.write(f"• {finding}")
+                st.dataframe(
+                    saved_two_pps.tables["stratum_estimates"],
+                    hide_index=True, use_container_width=True,
+                )
+                with st.expander("Sampled PSU and SSU details"):
+                    st.dataframe(
+                        saved_two_pps.tables["psu_details"],
+                        hide_index=True, use_container_width=True,
+                    )
+                with st.expander("First-stage pairwise variance details"):
+                    st.dataframe(
+                        saved_two_pps.tables["pairwise_variance"],
+                        hide_index=True, use_container_width=True,
+                    )
+                for warning in saved_two_pps.limitations:
                     st.warning(warning)
 
         with st.expander("PSU-level PPS without replacement (PPSWOR) estimation"):
