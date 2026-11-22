@@ -822,6 +822,7 @@ def run_two_stage_survey_total_service(
     ssu_population_count_variable: str,
     strata_variable: str | None = None,
     confidence_level: float = 0.95,
+    certainty_psu_variable: str | None = None,
 ) -> AnalysisResult:
     """Estimate a total under stratified two-stage SRSWOR with stage FPCs."""
     from timan_intelligence.core.multistage_survey import estimate_two_stage_total
@@ -835,6 +836,7 @@ def run_two_stage_survey_total_service(
         ssu_population_count_variable,
         strata_variable,
         confidence_level,
+        certainty_psu_variable,
     )
     return AnalysisResult(
         title=f"Two-stage survey total: {outcome_variable}",
@@ -873,6 +875,7 @@ def run_two_stage_survey_mean_service(
     ssu_population_count_variable: str,
     strata_variable: str | None = None,
     confidence_level: float = 0.95,
+    certainty_psu_variable: str | None = None,
 ) -> AnalysisResult:
     """Estimate a two-stage design-based population element mean."""
     from timan_intelligence.core.multistage_survey import estimate_two_stage_mean
@@ -880,7 +883,7 @@ def run_two_stage_survey_mean_service(
     output = estimate_two_stage_mean(
         df, outcome_total_variable, element_count_variable, psu_variable,
         ssu_variable, psu_population_count_variable, ssu_population_count_variable,
-        strata_variable, confidence_level,
+        strata_variable, confidence_level, certainty_psu_variable,
     )
     return AnalysisResult(
         title=f"Two-stage survey mean: {outcome_total_variable}",
@@ -915,6 +918,7 @@ def run_two_stage_survey_proportion_service(
     ssu_population_count_variable: str,
     strata_variable: str | None = None,
     confidence_level: float = 0.95,
+    certainty_psu_variable: str | None = None,
 ) -> AnalysisResult:
     """Estimate a two-stage design-based population proportion."""
     from timan_intelligence.core.multistage_survey import estimate_two_stage_proportion
@@ -922,7 +926,7 @@ def run_two_stage_survey_proportion_service(
     output = estimate_two_stage_proportion(
         df, successes_variable, eligible_count_variable, psu_variable,
         ssu_variable, psu_population_count_variable, ssu_population_count_variable,
-        strata_variable, confidence_level,
+        strata_variable, confidence_level, certainty_psu_variable,
     )
     return AnalysisResult(
         title=f"Two-stage survey proportion: {successes_variable}",
@@ -952,13 +956,14 @@ def run_two_stage_survey_domain_total_service(
     domain_value: Any, psu_variable: str, ssu_variable: str,
     psu_population_count_variable: str, ssu_population_count_variable: str,
     strata_variable: str | None = None, confidence_level: float = 0.95,
+    certainty_psu_variable: str | None = None,
 ) -> AnalysisResult:
     """Return a two-stage design-based domain total."""
     from timan_intelligence.core.multistage_survey import estimate_two_stage_domain_total
     output = estimate_two_stage_domain_total(
         df, outcome_variable, domain_variable, domain_value, psu_variable,
         ssu_variable, psu_population_count_variable, ssu_population_count_variable,
-        strata_variable, confidence_level,
+        strata_variable, confidence_level, certainty_psu_variable,
     )
     return AnalysisResult(
         title=f"Two-stage domain total: {outcome_variable}",
@@ -983,13 +988,14 @@ def run_two_stage_survey_domain_mean_service(
     domain_variable: str, domain_value: Any, psu_variable: str, ssu_variable: str,
     psu_population_count_variable: str, ssu_population_count_variable: str,
     strata_variable: str | None = None, confidence_level: float = 0.95,
+    certainty_psu_variable: str | None = None,
 ) -> AnalysisResult:
     """Return a two-stage design-based domain mean."""
     from timan_intelligence.core.multistage_survey import estimate_two_stage_domain_mean
     output = estimate_two_stage_domain_mean(
         df, outcome_total_variable, element_count_variable, domain_variable,
         domain_value, psu_variable, ssu_variable, psu_population_count_variable,
-        ssu_population_count_variable, strata_variable, confidence_level,
+        ssu_population_count_variable, strata_variable, confidence_level, certainty_psu_variable,
     )
     return AnalysisResult(
         title=f"Two-stage domain mean: {outcome_total_variable}",
@@ -1014,13 +1020,14 @@ def run_two_stage_survey_domain_proportion_service(
     domain_variable: str, domain_value: Any, psu_variable: str, ssu_variable: str,
     psu_population_count_variable: str, ssu_population_count_variable: str,
     strata_variable: str | None = None, confidence_level: float = 0.95,
+    certainty_psu_variable: str | None = None,
 ) -> AnalysisResult:
     """Return a two-stage design-based domain proportion."""
     from timan_intelligence.core.multistage_survey import estimate_two_stage_domain_proportion
     output = estimate_two_stage_domain_proportion(
         df, successes_variable, eligible_count_variable, domain_variable,
         domain_value, psu_variable, ssu_variable, psu_population_count_variable,
-        ssu_population_count_variable, strata_variable, confidence_level,
+        ssu_population_count_variable, strata_variable, confidence_level, certainty_psu_variable,
     )
     return AnalysisResult(
         title=f"Two-stage domain proportion: {successes_variable}",
