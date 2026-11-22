@@ -6138,6 +6138,7 @@ elif page == "Survey Analysis":
             )
             weighted_result_is_current = (
                 isinstance(stored_weighted_frame, pd.DataFrame)
+                and stored_weighting_key is not None
                 and stored_weighting_key in {current_candidate_key, active_candidate_key}
             )
             estimation_options = []
@@ -6187,9 +6188,16 @@ elif page == "Survey Analysis":
                             "Final analysis weight", numeric_estimation_columns,
                             index=weight_default_index, key="survey_estimation_weight",
                         )
+                    internal_weight_columns = {
+                        "base_weight", "nonresponse_adjusted_weight",
+                        "poststratified_weight", "raked_weight",
+                        "trimmed_weight", "analysis_weight",
+                    }
                     outcome_candidates = [
                         column for column in estimation_frame.columns
                         if column != estimation_weight
+                        and column not in internal_weight_columns
+                        and not str(column).startswith("_timan_")
                         and (
                             (estimand in {"mean", "total"} and pd.api.types.is_numeric_dtype(estimation_frame[column]))
                             or estimand == "proportion"
