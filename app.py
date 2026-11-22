@@ -4054,6 +4054,7 @@ elif page == "Survey Analysis":
                     x for x in ms_numeric
                     if x not in (
                         ms_weight, ms_psu_population, ms_ssu_population,
+                        ms_psu, ms_ssu,
                     )
                 ]
                 if ms_strata in outcome_options:
@@ -4186,12 +4187,20 @@ elif page == "Survey Analysis":
                             outcome_options,
                             key="multistage_proportion_successes",
                         )
-                        proportion_denominator = st.selectbox(
-                            "Eligible population count in each SSU",
-                            ratio_denominator_options,
-                            key="multistage_proportion_denominator",
-                        )
-                        proportion_key = (
+                        proportion_denominator_options = [
+                            x for x in ratio_denominator_options
+                            if x != proportion_successes
+                        ]
+                        if not proportion_denominator_options:
+                            st.info("Select a separate numeric eligible-element count variable.")
+                        else:
+                            proportion_denominator = st.selectbox(
+                                "Eligible population count in each SSU",
+                                proportion_denominator_options,
+                                key="multistage_proportion_denominator",
+                            )
+                        if proportion_denominator_options:
+                            proportion_key = (
                             _dataset_analysis_key(df), proportion_successes,
                             proportion_denominator, ms_psu, ms_ssu, ms_strata,
                             ms_psu_population, ms_ssu_population, ms_confidence,
