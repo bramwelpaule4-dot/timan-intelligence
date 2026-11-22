@@ -51,14 +51,15 @@ def test_ppswor_requires_positive_joint_probability_for_sampled_pairs():
         estimate_ppswor_total(df, "total", "psu", "pi", joint, "stratum")
 
 
-def test_ppswor_validates_joint_matrix_diagonal_and_fixed_size():
+def test_ppswor_validates_joint_matrix_diagonal_and_probability_bounds():
     df, joint = ppswor_fixture()
     joint.loc["P1", "P1"] = .4
     with pytest.raises(ValueError, match="diagonal"):
         estimate_ppswor_total(df, "total", "psu", "pi", joint, "stratum")
     df, joint = ppswor_fixture()
-    df["pi"] = [.4, .4, .4]
-    with pytest.raises(ValueError, match="fixed sample size"):
+    joint.loc["P1", "P2"] = .01
+    joint.loc["P2", "P1"] = .01
+    with pytest.raises(ValueError, match="lower bound"):
         estimate_ppswor_total(df, "total", "psu", "pi", joint, "stratum")
 
 
