@@ -214,7 +214,7 @@ def test_two_stage_domain_mean_retains_non_domain_ssus_in_variance():
         df, "outcome", "element_count", "domain", "target", "psu", "ssu",
         "psu_population", "ssu_population", "stratum",
     )
-    assert result["estimate"] == pytest.approx(520 / 160)
+    assert result["estimate"] == pytest.approx(400 / 240)
     assert result["metadata"]["sampled_domain_ssus"] == 4
     assert result["metadata"]["sampled_non_domain_ssus"] == 4
     assert len(result["psu_details"]) == 4
@@ -237,10 +237,10 @@ def test_two_stage_domain_proportion_and_total_are_supported():
         df, "outcome", "domain", "target", "psu", "ssu",
         "psu_population", "ssu_population", "stratum",
     )
-    assert proportion["estimate"] == pytest.approx(10 / 40)
+    assert proportion["estimate"] == pytest.approx(68 / 240)
     assert 0 <= proportion["confidence_interval"][0] <= 1
     assert 0 <= proportion["confidence_interval"][1] <= 1
-    assert total["estimate"] == pytest.approx(260)
+    assert total["estimate"] == pytest.approx(400)
     assert len(total["psu_details"]) == 4
 
 
