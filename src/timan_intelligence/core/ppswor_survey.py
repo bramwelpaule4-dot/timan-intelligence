@@ -239,9 +239,15 @@ def estimate_ppswor_ratio(
 
     strata = numerator_result["strata"].copy()
     denominator_strata = denominator_result["strata"].set_index("stratum")
-    strata = strata.rename(columns={"estimated_total": "estimated_numerator_total"})
+    strata = strata.rename(columns={
+        "estimated_total": "estimated_numerator_total",
+        "estimated_variance": "estimated_numerator_variance",
+    })
     strata["estimated_denominator_total"] = strata["stratum"].map(
         denominator_strata["estimated_total"]
+    )
+    strata["estimated_denominator_variance"] = strata["stratum"].map(
+        denominator_strata["estimated_variance"]
     )
     strata["stratum_ratio"] = (
         strata["estimated_numerator_total"] / strata["estimated_denominator_total"]
