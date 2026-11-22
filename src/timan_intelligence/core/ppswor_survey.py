@@ -161,3 +161,129 @@ def estimate_ppswor_total(
             "joint_inclusion_probabilities_supplied": True,
         },
     }
+
+
+def estimate_ppswor_ratio(
+    df: pd.DataFrame,
+    numerator_variable: str,
+    denominator_variable: str,
+    psu_variable: str,
+    inclusion_probability_variable: str,
+    joint_inclusion_probabilities: pd.DataFrame | dict[Any, pd.DataFrame],
+    strata_variable: str | None = None,
+    confidence_level: float = 0.95,
+    parameter: str = "mean",
+) -> dict[str, Any]:
+    """Estimate a PSU-level ratio (mean or proportion) with SYG linearisation.
+
+    The point estimate is the ratio of HT estimates. Variance uses the SYG
+    estimator applied to PSU linearised totals z_i = y_i - R*x_i, divided by
+    the square of the HT denominator estimate. Matrices must contain actual
+    design pi_ij values and be supplied separately by stratum when stratified.
+    """
+    if parameter not in {"mean", "proportion"}:
+        raise ValueError("Parameter must be either 'mean' or 'proportion'.")
+    if numerator_variable == denominator_variable:
+        raise ValueError("Numerator and denominator variables must be different.")
+    required = [numerator_variable, denominator_variable, psu_variable, inclusion_probability_variable]
+    if strata_variable:
+        required.append(strata_variable)
+    if len(set(required)) != len(required):
+        raise ValueError("Numerator, denominator, PSU, inclusion probability and stratum variables must be different.")
+    missing = [column for column in required if column not in df.columns]
+    if missing:
+        raise KeyError(f"Variables not found: {', '.join(missing)}.")
+
+    numerator = pd.to_numeric(df[numerator_variable], errors="coerce")
+    denominator = pd.to_numeric(df[denominator_variable], errors="coerce")
+    if numerator.isna().any() or not np.isfinite(numerator.to_numpy(dtype=float)).all():
+        raise ValueError("PSU numerator totals must be complete, numeric and finite.")
+    if denominator.isna().any() or not np.isfinite(denominator.to_numpy(dtype=float)).all():
+        raise ValueError("PSU denominator totals must be complete, numeric and finite.")
+    if (denominator < 0).any():
+        raise ValueError("PSU denominator totals must be non-negative.")
+    if parameter == "proportion" and ((numerator < 0) | (numerator > denominator)).any():
+        raise ValueError("For a proportion, each PSU numerator total must be between zero and its denominator total.")
+
+    # Reuse the validated HT/SYG engine for numerator and denominator totals.
+    numerator_result = estimate_ppswor_total(
+        df, numerator_variable, psu_variable, inclusion_probability_variable,
+        joint_inclusion_probabilities, strata_variable, confidence_level,
+    )
+    denominator_result = estimate_ppswor_total(
+        df, denominator_variable, psu_variable, inclusion_probability_variable,
+        joint_inclusion_probabilities, strata_variable, confidence_level,
+    )
+    denominator_hat = denominator_result["estimate"]
+    if not np.isfinite(denominator_hat) or denominator_hat <= 0:
+        raise ValueError("The estimated population denominator must be positive for ratio estimation.")
+    ratio = numerator_result["estimate"] / denominator_hat
+    if not np.isfinite(ratio):
+        raise ValueError("The estimated ratio is not finite.")
+
+    linearised = df.copy()
+    linearised_variable = "__ppswor_linearised_total__"
+    while linearised_variable in linearised.columns:
+        linearised_variable += "_"
+    linearised[linearised_variable] = numerator - ratio * denominator
+    linearised_result = estimate_ppswor_total(
+        linearised, linearised_variable, psu_variable,
+        inclusion_probability_variable, joint_inclusion_probabilities,
+        strata_variable, confidence_level,
+    )
+    variance = linearised_result["variance"] / (denominator_hat ** 2)
+    standard_error = float(np.sqrt(max(0.0, variance)))
+    df_total = linearised_result["degrees_of_freedom"]
+    critical = float(stats.t.ppf(0.5 + confidence_level / 2, df_total))
+    ci = (float(ratio - critical * standard_error), float(ratio + critical * standard_error))
+
+    strata = numerator_result["strata"].copy()
+    denominator_strata = denominator_result["strata"].set_index("stratum")
+    strata = strata.rename(columns={"estimated_total": "estimated_numerator_total"})
+    strata["estimated_denominator_total"] = strata["stratum"].map(
+        denominator_strata["estimated_total"]
+    )
+    strata["stratum_ratio"] = (
+        strata["estimated_numerator_total"] / strata["estimated_denominator_total"]
+    )
+    pairwise = linearised_result["pairwise_variance"].copy()
+    pairwise["ratio_variance_contribution"] = (
+        pairwise["variance_contribution"] / (denominator_hat ** 2)
+    )
+    pairwise = pairwise.drop(columns=["variance_contribution"])
+    label = "proportion" if parameter == "proportion" else "mean"
+    warnings = list(linearised_result["warnings"])
+    warnings.append(
+        "The ratio variance uses first-order Taylor linearisation with the supplied SYG design variance; the t interval is an approximation."
+    )
+    if parameter == "proportion":
+        warnings.append(
+            "The proportion confidence interval is not truncated to [0, 1]; boundary estimates and small samples require cautious interpretation."
+        )
+    return {
+        "estimate": float(ratio), "variance": float(variance),
+        "standard_error": standard_error, "confidence_interval": ci,
+        "confidence_level": float(confidence_level),
+        "degrees_of_freedom": int(df_total),
+        "numerator_estimate": float(numerator_result["estimate"]),
+        "denominator_estimate": float(denominator_hat),
+        "strata": strata, "pairwise_variance": pairwise,
+        "findings": [
+            f"Horvitz-Thompson ratio {label} estimate: {ratio:,.4g}.",
+            f"Taylor-linearised Sen-Yates-Grundy standard error: {standard_error:,.4g}.",
+            f"{confidence_level:.0%} t confidence interval: [{ci[0]:,.4g}, {ci[1]:,.4g}].",
+        ],
+        "warnings": warnings,
+        "metadata": {
+            "estimator": f"PPSWOR HT ratio {label} with Taylor-linearised SYG variance",
+            "sampling_design": "PPS without replacement; fixed-size sample within each stratum",
+            "parameter": label,
+            "number_of_strata": int(linearised_result["metadata"]["number_of_strata"]),
+            "number_of_sampled_psus": int(linearised_result["metadata"]["number_of_sampled_psus"]),
+            "degrees_of_freedom": int(df_total),
+            "inclusion_probability_variable": inclusion_probability_variable,
+            "joint_inclusion_probabilities_supplied": True,
+            "numerator_estimate": float(numerator_result["estimate"]),
+            "denominator_estimate": float(denominator_hat),
+        },
+    }
