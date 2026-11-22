@@ -43,6 +43,7 @@ from timan_intelligence.services.analysis_service import (
     run_cluster_weighted_mean_service,
     run_cluster_weighted_frequency_service,
     run_two_stage_survey_design_inspection_service,
+    run_two_stage_survey_total_service,
     run_categorical_comparison,
     run_numeric_group_comparison_service,
     run_numeric_association_service,
@@ -4032,6 +4033,91 @@ elif page == "Survey Analysis":
                     st.write(f"• {finding}")
                 for warning in saved_ms_result.limitations:
                     st.warning(warning)
+
+            st.divider()
+            st.subheader("Two-stage design-based population total")
+            st.write(
+                "Estimate a population total using a two-stage Taylor variance "
+                "estimator with finite population corrections (FPCs) at both "
+                "sampling stages. This requires one row per sampled SSU, where "
+                "the outcome is the fully enumerated total for that SSU."
+            )
+            if ms_psu_population is None or ms_ssu_population is None:
+                st.warning(
+                    "Select both population PSU counts per stratum and population "
+                    "SSU counts per PSU above before running design-based estimation."
+                )
+            else:
+                outcome_options = [
+                    x for x in ms_numeric
+                    if x not in (
+                        ms_weight, ms_psu_population, ms_ssu_population,
+                    )
+                ]
+                if ms_strata in outcome_options:
+                    outcome_options.remove(ms_strata)
+                if outcome_options:
+                    ms_outcome = st.selectbox(
+                        "SSU outcome total", outcome_options,
+                        key="multistage_total_outcome",
+                    )
+                    ms_confidence = st.selectbox(
+                        "Confidence level", [0.90, 0.95, 0.99],
+                        index=1, format_func=lambda x: f"{x:.0%}",
+                        key="multistage_total_confidence",
+                    )
+                    ms_total_key = (
+                        _dataset_analysis_key(df), ms_outcome, ms_psu, ms_ssu,
+                        ms_strata, ms_psu_population, ms_ssu_population,
+                        ms_confidence,
+                    )
+                    if st.button(
+                        "Estimate two-stage population total",
+                        type="primary", key="run_two_stage_total",
+                    ):
+                        try:
+                            total_result = run_two_stage_survey_total_service(
+                                df, ms_outcome, ms_psu, ms_ssu,
+                                ms_psu_population, ms_ssu_population,
+                                ms_strata, ms_confidence,
+                            )
+                            st.session_state["two_stage_total_result"] = total_result
+                            st.session_state["two_stage_total_result_key"] = ms_total_key
+                        except (TypeError, ValueError, KeyError) as exc:
+                            st.error(str(exc))
+                    saved_total = st.session_state.get("two_stage_total_result")
+                    if (
+                        saved_total is not None
+                        and st.session_state.get("two_stage_total_result_key") == ms_total_key
+                    ):
+                        st.metric(
+                            "Estimated population total",
+                            f"{saved_total.metadata['estimate']:,.4g}",
+                        )
+                        st.metric(
+                            "Design-based standard error",
+                            f"{saved_total.metadata['standard_error']:,.4g}",
+                        )
+                        ci = saved_total.metadata["confidence_interval"]
+                        st.write(
+                            f"{ms_confidence:.0%} confidence interval: "
+                            f"[{ci[0]:,.4g}, {ci[1]:,.4g}]"
+                        )
+                        st.dataframe(
+                            saved_total.tables["stratum_estimates"],
+                            hide_index=True, use_container_width=True,
+                        )
+                        with st.expander("PSU-level expansion and sampling details"):
+                            st.dataframe(
+                                saved_total.tables["psu_details"],
+                                hide_index=True, use_container_width=True,
+                            )
+                        for finding in saved_total.findings:
+                            st.write(f"• {finding}")
+                        for warning in saved_total.limitations:
+                            st.warning(warning)
+                else:
+                    st.info("No eligible numeric SSU outcome variable is available.")
 
         st.info(
             "Unweighted question-level frequencies above describe the imported "
