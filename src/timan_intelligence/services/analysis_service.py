@@ -645,3 +645,66 @@ def run_weighted_numeric_summary_service(
         limitations=list(output["warnings"]),
         metadata=output["metadata"],
     )
+
+def run_stratified_weighted_mean_service(
+    df: pd.DataFrame,
+    outcome_variable: str,
+    weight_variable: str,
+    strata_variable: str,
+    confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Run stratified weighted mean estimation through the shared service."""
+    from timan_intelligence.core.stratified_survey import stratified_weighted_mean
+
+    output = stratified_weighted_mean(
+        df, outcome_variable, weight_variable, strata_variable, confidence_level
+    )
+    return AnalysisResult(
+        title=f"Stratified weighted mean: {outcome_variable}",
+        method="Stratified simple-random-sample weighted mean with Taylor linearization",
+        status="success",
+        tables={
+            "stratified_estimate": output["table"],
+            "strata_summary": output["strata_summary"],
+        },
+        findings=list(output["findings"]),
+        assumptions=[
+            "Sampling is independent simple random sampling within each stratum.",
+            "Expansion weights are constant within each stratum.",
+            "Each stratum has at least two complete observations.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata=output["metadata"],
+    )
+
+
+def run_stratified_weighted_frequency_service(
+    df: pd.DataFrame,
+    outcome_variable: str,
+    weight_variable: str,
+    strata_variable: str,
+    confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Run stratified weighted category proportions through the shared service."""
+    from timan_intelligence.core.stratified_survey import stratified_weighted_frequencies
+
+    output = stratified_weighted_frequencies(
+        df, outcome_variable, weight_variable, strata_variable, confidence_level
+    )
+    return AnalysisResult(
+        title=f"Stratified weighted frequencies: {outcome_variable}",
+        method="Stratified simple-random-sample proportions with Taylor linearization",
+        status="success",
+        tables={
+            "stratified_frequencies": output["table"],
+            "strata_summary": output["strata_summary"],
+        },
+        findings=list(output["findings"]),
+        assumptions=[
+            "Sampling is independent simple random sampling within each stratum.",
+            "Expansion weights are constant within each stratum.",
+            "Each stratum has at least two complete observations.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata=output["metadata"],
+    )
