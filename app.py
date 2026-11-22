@@ -39,6 +39,7 @@ from timan_intelligence.services.analysis_service import (
     run_survey_profile,
     run_survey_weighting_service,
     run_survey_estimation_service,
+    run_domain_survey_estimation_service,
     run_weighted_frequency_service,
     run_weighted_numeric_summary_service,
     run_stratified_weighted_mean_service,
@@ -6318,6 +6319,97 @@ elif page == "Survey Analysis":
                             for finding in saved_estimation.findings:
                                 st.success(finding)
                             for warning in saved_estimation.limitations:
+                                st.warning(warning)
+
+                st.markdown("#### Domain / subpopulation estimation")
+                st.caption(
+                    "Estimate totals, means or category proportions for a subgroup "
+                    "while retaining every record in the original sample for variance estimation."
+                )
+                domain_candidates = [
+                    column for column in estimation_frame.columns
+                    if column not in {estimation_outcome, estimation_weight}
+                    and not str(column).startswith("_timan_")
+                ]
+                if not domain_candidates:
+                    st.info("A separate domain-identification variable is required.")
+                else:
+                    domain_variable = st.selectbox(
+                        "Domain identifier", domain_candidates,
+                        key="survey_domain_variable",
+                    )
+                    domain_values = estimation_frame[domain_variable].dropna().unique().tolist()
+                    if not domain_values:
+                        st.warning("The selected domain variable has no observed categories.")
+                    else:
+                        domain_value = st.selectbox(
+                            "Target domain / category", domain_values,
+                            format_func=str, key="survey_domain_value",
+                        )
+                        domain_estimand_label = st.selectbox(
+                            "Domain parameter",
+                            ["Mean", "Total", "Category proportion"],
+                            key="survey_domain_estimand",
+                        )
+                        domain_estimand = {
+                            "Mean": "mean", "Total": "total",
+                            "Category proportion": "proportion",
+                        }[domain_estimand_label]
+                        if st.button(
+                            "Run domain estimation", type="primary",
+                            key="run_survey_domain_estimation",
+                        ):
+                            try:
+                                domain_result = run_domain_survey_estimation_service(
+                                    estimation_frame,
+                                    estimation_outcome,
+                                    estimation_weight,
+                                    domain_variable,
+                                    domain_value,
+                                    estimand=domain_estimand,
+                                    design=design,
+                                    strata_variable=strata_variable,
+                                    cluster_variable=cluster_variable,
+                                    confidence_level=confidence_level,
+                                )
+                                st.session_state["survey_domain_estimation_result"] = domain_result
+                                st.session_state["survey_domain_estimation_result_key"] = (
+                                    _dataset_analysis_key(estimation_frame),
+                                    estimation_outcome, estimation_weight, domain_variable,
+                                    str(domain_value), domain_estimand, design,
+                                    strata_variable, cluster_variable, confidence_level,
+                                )
+                            except (TypeError, ValueError, KeyError) as exc:
+                                st.error(f"Domain estimation could not be completed: {exc}")
+                        expected_domain_key = (
+                            _dataset_analysis_key(estimation_frame),
+                            estimation_outcome, estimation_weight, domain_variable,
+                            str(domain_value), domain_estimand, design,
+                            strata_variable, cluster_variable, confidence_level,
+                        )
+                        saved_domain = st.session_state.get("survey_domain_estimation_result")
+                        if (
+                            saved_domain is not None
+                            and st.session_state.get("survey_domain_estimation_result_key") == expected_domain_key
+                        ):
+                            st.markdown("**Domain estimates**")
+                            st.dataframe(
+                                saved_domain.tables["estimates"],
+                                hide_index=True, use_container_width=True,
+                            )
+                            domain_details = saved_domain.tables.get("design_details")
+                            if isinstance(domain_details, pd.DataFrame) and not domain_details.empty:
+                                st.markdown("**Full-sample design variance details**")
+                                st.dataframe(domain_details, hide_index=True, use_container_width=True)
+                            st.download_button(
+                                "Download domain estimates (CSV)",
+                                data=saved_domain.tables["estimates"].to_csv(index=False).encode("utf-8-sig"),
+                                file_name="TimanStat_Survey_Domain_Estimates.csv",
+                                mime="text/csv", key="download_survey_domain_estimates",
+                            )
+                            for finding in saved_domain.findings:
+                                st.success(finding)
+                            for warning in saved_domain.limitations:
                                 st.warning(warning)
 
         st.info(
