@@ -36,7 +36,7 @@ def test_only_existing_execution_methods_are_marked_implemented():
     }
 
     assert implemented == IMPLEMENTED_METHODS
-    assert len(implemented) == 9
+    assert len(implemented) == 10
 
 
 def test_planned_methods_are_not_marked_executable():
@@ -72,6 +72,15 @@ def test_paired_samples_t_test_is_registered_as_conditionally_executable():
     assert method.execution_eligibility == "conditional"
 
 
+def test_chi_square_independence_is_registered_as_conditionally_executable():
+    method = get_statistical_method("method.inference.association.chi_square.independence")
+    assert method is not None
+    assert method.implementation_status == "implemented"
+    assert method.verification_status == "unit_tested"
+    assert method.execution_eligibility == "conditional"
+
+
+def test_unknown_method_lookup_returns_none():
 def test_unknown_method_lookup_returns_none():
     assert get_statistical_method("method.unknown.not_registered") is None
 
@@ -151,8 +160,8 @@ def test_catalogue_summary_reports_lifecycle_and_priorities():
 
     assert summary["catalogue_version"] == CATALOGUE_VERSION
     assert summary["total_methods"] == 26
-    assert summary["implementation_status"]["implemented"] == 9
-    assert summary["implementation_status"]["planned"] == 17
+    assert summary["implementation_status"]["implemented"] == 10
+    assert summary["implementation_status"]["planned"] == 16
     assert set(summary["release_priorities"]) == {"P1", "P2", "P3"}
 
 

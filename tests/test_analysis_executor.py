@@ -393,3 +393,15 @@ def test_executor_requires_reference_value_for_one_sample_t_test():
     }
     with pytest.raises(AnalysisExecutionError, match="reference_value"):
         execute_recommendation(df, recommendation, approved=True)
+
+
+def test_executor_runs_chi_square_independence_and_blocks_complex_sampling():
+    from timan_intelligence.core.analysis_executor import AnalysisExecutionError, execute_recommendation
+    frame = pd.DataFrame({"training": ["Yes"] * 30 + ["No"] * 30, "employment": ["Yes"] * 24 + ["No"] * 6 + ["Yes"] * 12 + ["No"] * 18})
+    recommendation = {"method": "Chi-square test of independence", "method_id": "method.inference.association.chi_square.independence", "variables": ["training", "employment"], "status": "review_required", "design_context": {"study_design": "independent_observations"}}
+    result = execute_recommendation(frame, recommendation, approved=True)
+    assert result.status == "success"
+    assert result.metadata["method_id"] == "method.inference.association.chi_square.independence"
+    blocked = {**recommendation, "design_context": {"sampling_design": "cluster"}}
+    with pytest.raises(AnalysisExecutionError, match="not validated"):
+        execute_recommendation(frame, blocked, approved=True)

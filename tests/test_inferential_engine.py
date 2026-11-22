@@ -507,3 +507,34 @@ def test_executor_runs_registered_paired_samples_t_test_and_blocks_complex_sampl
     blocked = {**recommendation, "design_context": {"study_design": "paired", "sampling_design": "cluster"}}
     with pytest.raises(AnalysisExecutionError, match="not validated"):
         execute_recommendation(frame, blocked, approved=True)
+
+
+def test_chi_square_independence_returns_tables_and_effect_size():
+    from timan_intelligence.core.statistical_engine import run_chi_square_test_of_independence
+    frame = pd.DataFrame({"training": ["Yes"] * 30 + ["No"] * 30, "employed": ["Yes"] * 24 + ["No"] * 6 + ["Yes"] * 12 + ["No"] * 18})
+    result = run_chi_square_test_of_independence(frame, "training", "employed")
+    assert result.status == "success"
+    assert result.metadata["n_observations"] == 60
+    assert result.metadata["degrees_of_freedom"] == 1
+    assert 0 <= result.metadata["p_value"] <= 1
+    assert 0 <= result.metadata["cramers_v"] <= 1
+    assert "expected_counts" in result.tables and "pearson_residuals" in result.tables
+
+
+def test_chi_square_independence_excludes_missing_and_flags_small_expected_counts():
+    from timan_intelligence.core.statistical_engine import run_chi_square_test_of_independence
+    frame = pd.DataFrame({"sex": ["F", "F", "M", "M", "F", None], "completed": ["Y", "Y", "N", "N", "N", "Y"]})
+    result = run_chi_square_test_of_independence(frame, "sex", "completed")
+    assert result.metadata["n_observations"] == 5
+    assert result.metadata["missing_pairs_excluded"] == 1
+    assert result.metadata["expected_cells_below_5"] > 0
+
+
+def test_chi_square_independence_rejects_invalid_variables():
+    from timan_intelligence.core.statistical_engine import run_chi_square_test_of_independence
+    with pytest.raises(ValueError, match="different categorical variables"):
+        run_chi_square_test_of_independence(pd.DataFrame({"x": ["a", "b"]}), "x", "x")
+    with pytest.raises(TypeError, match="Both variables must be categorical"):
+        run_chi_square_test_of_independence(pd.DataFrame({"x": [0, 1], "y": ["a", "b"]}), "x", "y")
+    with pytest.raises(ValueError, match="at least two observed categories"):
+        run_chi_square_test_of_independence(pd.DataFrame({"x": ["a", "a"], "y": ["b", "c"]}), "x", "y")
