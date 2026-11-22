@@ -3,6 +3,7 @@
 import pandas as pd
 from timan_intelligence.core.poisson_regression import run_poisson_regression
 from timan_intelligence.core.negative_binomial_regression import run_negative_binomial_regression
+from timan_intelligence.core.survival_analysis import run_kaplan_meier, run_cox_proportional_hazards
 
 from timan_intelligence.core.contracts import AnalysisResult, AnalysisRequest
 from timan_intelligence.core.data_quality import profile_dataframe
@@ -447,6 +448,67 @@ def run_negative_binomial_regression_service(
         ],
         limitations=list(output["warnings"]),
         metadata=metadata,
+    )
+
+
+
+def run_kaplan_meier_service(
+    df: pd.DataFrame,
+    time_variable: str,
+    event_variable: str,
+    event_value,
+    group_variable: str | None = None,
+) -> AnalysisResult:
+    """Run Kaplan-Meier survival estimation and optional log-rank comparison."""
+    output = run_kaplan_meier(
+        df, time_variable, event_variable, event_value, group_variable
+    )
+    metadata = output["metadata"]
+    return AnalysisResult(
+        title="Kaplan-Meier survival analysis",
+        method="Non-parametric Kaplan-Meier estimator",
+        status="success",
+        tables=output["tables"],
+        findings=list(output["findings"]),
+        assumptions=[
+            "The event category is explicitly selected; other observed event-status categories are treated as censored.",
+            "Censoring is non-informative conditional on the analysis.",
+            "Each record represents an independent observational unit.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata=metadata,
+    )
+
+
+def run_cox_survival_service(
+    df: pd.DataFrame,
+    predictor_variables: list[str],
+    time_variable: str,
+    event_variable: str,
+    event_value,
+) -> AnalysisResult:
+    """Run Cox proportional hazards regression through the shared service."""
+    output = run_cox_proportional_hazards(
+        df, predictor_variables, time_variable, event_variable, event_value
+    )
+    return AnalysisResult(
+        title="Cox proportional hazards regression",
+        method="Cox semi-parametric proportional hazards model (Breslow ties)",
+        status="success",
+        tables={
+            "coefficients": output["coefficients"],
+            "baseline_survival": output["baseline_survival"],
+            "fitted_data": output["fitted_data"],
+        },
+        findings=list(output["findings"]),
+        assumptions=[
+            "The hazard ratios are constant over follow-up time (proportional hazards).",
+            "Censoring is non-informative conditional on included predictors.",
+            "The log hazard is linear in each numeric predictor.",
+            "Observations are independent.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata=output["metadata"],
     )
 
 
