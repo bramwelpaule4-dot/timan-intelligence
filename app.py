@@ -7236,7 +7236,7 @@ elif page == "Statistical Inference":
                 st.warning("No numeric variables coded strictly as 0/1 with observed values are available.")
             st.caption("Uses the Wilson score interval for a binary outcome.")
         elif inference_method == "Chi-square test of independence":
-            category_options = list(inference_df.columns)
+            category_options = categorical_cols
             row_variable = st.selectbox("First categorical variable", category_options, key="inference_chi_square_row") if category_options else None
             column_options = [column for column in category_options if column != row_variable]
             column_variable = st.selectbox("Second categorical variable", column_options, key="inference_chi_square_column") if column_options else None
