@@ -126,11 +126,12 @@ def test_catalogue_filters_can_be_combined():
         release_priority="P1",
     )
 
-    assert len(methods) == 3
+    assert len(methods) == 4
     assert {method.name for method in methods} == {
         "Welch's independent-samples t-test",
         "One-way ANOVA",
         "Paired-samples t-test",
+        "Two-independent-proportions comparison",
     }
 
 
