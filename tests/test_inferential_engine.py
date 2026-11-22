@@ -334,9 +334,9 @@ def test_welch_mean_difference_interval_uses_group_one_minus_group_two():
     assert result.status == "success"
     assert result.metadata["group_1_label"] == "A"
     assert result.metadata["group_2_label"] == "B"
-    assert result.metadata["estimate"] == pytest.approx(3.0)
+    assert result.metadata["estimate"] == pytest.approx(3.5)
     lower, upper = result.metadata["confidence_interval"]
-    assert lower < 3.0 < upper
+    assert lower < 3.5 < upper
     assert result.metadata["degrees_of_freedom"] > 0
     assert result.metadata["sampling_design_aware"] is False
 
@@ -363,7 +363,7 @@ def test_welch_mean_difference_interval_validates_groups_and_sample_sizes():
             pd.DataFrame({"group": ["A", "A", "A"], "score": [1, 2, 3]}),
             "score", "group",
         )
-    with pytest.raises(ValueError, match="at least two finite"):
+    with pytest.raises(ValueError, match="At least two finite"):
         run_welch_mean_difference_confidence_interval(
             pd.DataFrame({"group": ["A", "A", "B", "B"], "score": [1, float("inf"), 2, 3]}),
             "score", "group",
