@@ -290,6 +290,83 @@ def estimate_ppswor_ratio(
 
 
 
+
+def _ppswor_domain_diagnostics(
+    estimate: float,
+    variance: float,
+    standard_error: float,
+    confidence_interval: tuple[float, float],
+    sampled_psus: int,
+    strata: pd.DataFrame,
+    pairwise_variance: pd.DataFrame,
+    zero_domain_psus: int,
+    zero_domain_label: str,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict[str, Any]]:
+    """Build descriptive precision and variance-allocation diagnostics.
+
+    CV and relative interval width are descriptive precision measures, not
+    universal pass/fail thresholds. Zero totals are reported as supplied and
+    are not automatically interpreted as proof of domain non-membership.
+    """
+    cv = (
+        float(standard_error / abs(estimate) * 100.0)
+        if estimate != 0 else None
+    )
+    ci_width = float(confidence_interval[1] - confidence_interval[0])
+    relative_half_width = (
+        float(ci_width / (2.0 * abs(estimate)) * 100.0)
+        if estimate != 0 else None
+    )
+    zero_percent = (
+        float(zero_domain_psus / sampled_psus * 100.0)
+        if sampled_psus else 0.0
+    )
+    strata_diagnostics = strata.copy()
+    if "estimated_variance" in strata_diagnostics.columns:
+        strata_diagnostics["variance_share_percent"] = (
+            strata_diagnostics["estimated_variance"] / variance * 100.0
+            if variance > 0 else 0.0
+        )
+    pairwise_diagnostics = pairwise_variance.copy()
+    if "variance_contribution" in pairwise_diagnostics.columns:
+        pairwise_diagnostics["variance_share_percent"] = (
+            pairwise_diagnostics["variance_contribution"] / variance * 100.0
+            if variance > 0 else 0.0
+        )
+    elif "ratio_variance_contribution" in pairwise_diagnostics.columns:
+        pairwise_diagnostics["variance_share_percent"] = (
+            pairwise_diagnostics["ratio_variance_contribution"]
+            / variance * 100.0 if variance > 0 else 0.0
+        )
+    diagnostics = {
+        "estimate": float(estimate),
+        "standard_error": float(standard_error),
+        "coefficient_of_variation_percent": cv,
+        "confidence_interval_width": ci_width,
+        "relative_confidence_interval_half_width_percent": relative_half_width,
+        "sampled_psus": int(sampled_psus),
+        "psus_with_zero_domain_value": int(zero_domain_psus),
+        "zero_domain_value_percent": zero_percent,
+        "sampled_psu_pairs": int(len(pairwise_diagnostics)),
+        "minimum_sampled_pair_joint_inclusion_probability": (
+            float(pairwise_diagnostics["pi_ij"].min())
+            if not pairwise_diagnostics.empty and "pi_ij" in pairwise_diagnostics
+            else None
+        ),
+        "degrees_of_freedom": int(
+            strata_diagnostics["sampled_psus"].sum()
+            - len(strata_diagnostics)
+        ) if "sampled_psus" in strata_diagnostics else None,
+        "zero_value_definition": zero_domain_label,
+    }
+    return (
+        pd.DataFrame([diagnostics]),
+        strata_diagnostics,
+        pairwise_diagnostics,
+        diagnostics,
+    )
+
+
 def estimate_ppswor_domain_total(
     df: pd.DataFrame,
     domain_name: str,
@@ -333,12 +410,48 @@ def estimate_ppswor_domain_total(
         "Domain total estimation requires a domain-specific PSU total for every sampled PSU, with zero totals retained for PSUs containing no domain units. Do not filter those PSUs out.",
         "The domain total is the Horvitz-Thompson expansion of the supplied domain-specific PSU totals under the original PPSWOR design.",
     ]
+    domain_values = pd.to_numeric(df[domain_total_variable], errors="coerce")
+    zero_domain_psus = int(domain_values.eq(0).sum())
+    (
+        output["diagnostics"],
+        output["strata"],
+        output["pairwise_variance"],
+        diagnostic_metadata,
+    ) = _ppswor_domain_diagnostics(
+        output["estimate"], output["variance"], output["standard_error"],
+        output["confidence_interval"], output["metadata"]["number_of_sampled_psus"],
+        output["strata"], output["pairwise_variance"], zero_domain_psus,
+        "sampled PSUs whose supplied domain-specific total equals zero",
+    )
+    output["findings"].append(
+        (
+            f"Relative standard error (coefficient of variation): "
+            f"{diagnostic_metadata['coefficient_of_variation_percent']:.2f}%."
+        )
+        if diagnostic_metadata["coefficient_of_variation_percent"] is not None
+        else "Relative standard error is undefined because the estimated domain total is zero."
+    )
+    output["findings"].append(
+        f"{zero_domain_psus} of {diagnostic_metadata['sampled_psus']} sampled PSUs "
+        f"({diagnostic_metadata['zero_domain_value_percent']:.1f}%) have a supplied "
+        "domain-specific total equal to zero."
+    )
+    if zero_domain_psus:
+        output["warnings"].append(
+            "Some sampled PSU domain totals are zero. Confirm these are genuine "
+            "domain-specific zero contributions and not missing or unconstructed aggregates."
+        )
+    output["warnings"].append(
+        "The coefficient of variation and relative confidence-interval width are "
+        "descriptive precision diagnostics; no universal acceptability threshold is applied."
+    )
     output["metadata"].update({
         "estimator": "PPSWOR domain Horvitz-Thompson total with Sen-Yates-Grundy variance",
         "domain_name": domain_name.strip(),
         "domain_estimation": True,
         "domain_parameter": "total",
         "domain_total_variable": domain_total_variable,
+        "precision_diagnostics": diagnostic_metadata,
     })
     return output
 
@@ -385,6 +498,50 @@ def estimate_ppswor_domain_ratio(
         "Domain estimation requires domain-specific PSU totals for every sampled PSU, with zero totals retained for PSUs containing no domain units. Do not filter those PSUs out.",
         "The estimate is a ratio of design-weighted domain totals; domain-specific numerator and denominator aggregates must be correctly constructed from the full sampled PSU records.",
     ]
+    domain_denominator_values = pd.to_numeric(
+        df[domain_denominator_variable], errors="coerce"
+    )
+    zero_domain_psus = int(domain_denominator_values.eq(0).sum())
+    # Ratio variance is additive across independent strata; expose each
+    # stratum's contribution on the same scale as the overall ratio variance.
+    if "estimated_variance" in output["strata"].columns:
+        output["strata"]["estimated_ratio_variance"] = (
+            output["strata"]["estimated_variance"]
+            / (output["denominator_estimate"] ** 2)
+        )
+    (
+        output["diagnostics"],
+        output["strata"],
+        output["pairwise_variance"],
+        diagnostic_metadata,
+    ) = _ppswor_domain_diagnostics(
+        output["estimate"], output["variance"], output["standard_error"],
+        output["confidence_interval"], output["metadata"]["number_of_sampled_psus"],
+        output["strata"], output["pairwise_variance"], zero_domain_psus,
+        "sampled PSUs with a zero domain denominator",
+    )
+    output["findings"].append(
+        (
+            f"Relative standard error (coefficient of variation): "
+            f"{diagnostic_metadata['coefficient_of_variation_percent']:.2f}%."
+        )
+        if diagnostic_metadata["coefficient_of_variation_percent"] is not None
+        else "Relative standard error is undefined because the estimated domain ratio is zero."
+    )
+    output["findings"].append(
+        f"{zero_domain_psus} of {diagnostic_metadata['sampled_psus']} sampled PSUs "
+        f"({diagnostic_metadata['zero_domain_value_percent']:.1f}%) have a zero "
+        "domain denominator."
+    )
+    if zero_domain_psus:
+        output["warnings"].append(
+            "Some sampled PSUs have zero domain denominators. Confirm that these "
+            "are structural zero-domain PSUs and that all sampled PSUs remain in the design."
+        )
+    output["warnings"].append(
+        "The coefficient of variation and relative confidence-interval width are "
+        "descriptive precision diagnostics; no universal acceptability threshold is applied."
+    )
     output["metadata"].update({
         "estimator": output["metadata"]["estimator"].replace(
             "PPSWOR HT ratio", "PPSWOR domain HT ratio"
@@ -393,5 +550,6 @@ def estimate_ppswor_domain_ratio(
         "domain_estimation": True,
         "domain_numerator_variable": domain_numerator_variable,
         "domain_denominator_variable": domain_denominator_variable,
+        "precision_diagnostics": diagnostic_metadata,
     })
     return output
