@@ -195,14 +195,14 @@ def generate_survey_weighting_pdf_report(
     story.append(Paragraph("2. Weighting specification", styles["h1"]))
     specification_rows = [
         ["Specification", "Selected value"],
-        ["Base-weight probability field", _safe(spec.get("inclusion_probability_column"))],
-        ["Base-weight formula", "wᵢ = 1 / πᵢ, using exact first-order inclusion probabilities"],
-        ["Response indicator", _safe(spec.get("response_column"))],
-        ["Nonresponse adjustment cells", _safe(", ".join(map(str, spec.get("adjustment_cells", []))) if spec.get("adjustment_cells") else None)],
-        ["Post-stratification variable", _safe(spec.get("poststratification_variable"))],
-        ["Population control totals", _safe(spec.get("population_totals") or None)],
-        ["Raking margins", _safe(spec.get("raking_margins") or None)],
-        ["Trimming quantiles", _safe(spec.get("trimming_quantiles"))],
+        [Paragraph("Base-weight probability field", styles["table"]), Paragraph(_safe(spec.get("inclusion_probability_column")), styles["table"])],
+        [Paragraph("Base-weight formula", styles["table"]), Paragraph("wᵢ = 1 / πᵢ, using exact first-order inclusion probabilities", styles["table"])],
+        [Paragraph("Response indicator", styles["table"]), Paragraph(_safe(spec.get("response_column")), styles["table"])],
+        [Paragraph("Nonresponse adjustment cells", styles["table"]), Paragraph(_safe(", ".join(map(str, spec.get("adjustment_cells", []))) if spec.get("adjustment_cells") else None), styles["table"])],
+        [Paragraph("Post-stratification variable", styles["table"]), Paragraph(_safe(spec.get("poststratification_variable")), styles["table"])],
+        [Paragraph("Population control totals", styles["table"]), Paragraph(_safe(spec.get("population_totals") or None), styles["table"])],
+        [Paragraph("Raking margins", styles["table"]), Paragraph(_safe(spec.get("raking_margins") or None), styles["table"])],
+        [Paragraph("Trimming quantiles", styles["table"]), Paragraph(_safe(spec.get("trimming_quantiles")), styles["table"])],
     ]
     spec_table = Table(specification_rows, colWidths=[54 * mm, 113 * mm], repeatRows=1)
     spec_table.setStyle(_standard_table_style())
