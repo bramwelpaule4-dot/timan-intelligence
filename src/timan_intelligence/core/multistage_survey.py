@@ -357,10 +357,14 @@ def _estimate_two_stage_ratio(
         raise ValueError("Numerator SSU totals must be complete, numeric and finite.")
     if denominator.isna().any() or not np.isfinite(denominator.to_numpy(dtype=float)).all():
         raise ValueError("Denominator SSU counts must be complete, numeric and finite.")
-    if (denominator < 0).any():
-        raise ValueError("Eligible-element counts cannot be negative.")
-    if require_proportion and ((numerator < 0).any() or (numerator > denominator).any()):
-        raise ValueError("For a proportion, successes in each SSU must be between zero and its eligible-element count.")
+    if (denominator < 0).any() or not np.equal(denominator, np.floor(denominator)).all():
+        raise ValueError("Eligible-element counts must be non-negative whole numbers.")
+    if require_proportion and (
+        (numerator < 0).any()
+        or (numerator > denominator).any()
+        or not np.equal(numerator, np.floor(numerator)).all()
+    ):
+        raise ValueError("For a proportion, successes in each SSU must be whole numbers between zero and its eligible-element count.")
 
     work = df.copy()
     numerator_col = "__timanstat_ratio_numerator__"
