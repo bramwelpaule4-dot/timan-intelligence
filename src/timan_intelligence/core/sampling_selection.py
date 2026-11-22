@@ -109,7 +109,7 @@ def select_sample(
     remaining = source.loc[~source[id_column].isin(main[id_column])].copy()
     reserve = pd.DataFrame(columns=source.columns)
     if reserve_size:
-        reserve_method = "srswor" if method == "srswr" else method
+        reserve_method = "srswor" if method in {"srswr", "ppswr"} else method
         if reserve_method in {"ppswr", "ppswor"}:
             reserve, reserve_warnings = _draw(
                 remaining, id_column, reserve_method, reserve_size, rng, size_column
