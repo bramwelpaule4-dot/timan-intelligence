@@ -150,9 +150,9 @@ def test_catalogue_summary_reports_lifecycle_and_priorities():
     summary = get_statistical_method_summary()
 
     assert summary["catalogue_version"] == CATALOGUE_VERSION
-    assert summary["total_methods"] == 27
+    assert summary["total_methods"] == 26
     assert summary["implementation_status"]["implemented"] == 9
-    assert summary["implementation_status"]["planned"] == 18
+    assert summary["implementation_status"]["planned"] == 17
     assert set(summary["release_priorities"]) == {"P1", "P2", "P3"}
 
 
