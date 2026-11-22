@@ -569,6 +569,81 @@ st.markdown(
         .sidebar-wordmark { font-size: 22px; }
     }
 
+    /* Statistical workspace hierarchy */
+    .analysis-page-header {
+        padding: 1.35rem 1.55rem;
+        margin: .15rem 0 1rem;
+        border: 1px solid var(--timan-border);
+        border-left: 5px solid var(--timan-blue);
+        border-radius: 13px;
+        background: linear-gradient(115deg, #FFFFFF 0%, #F2F7FC 100%);
+        box-shadow: 0 5px 18px rgba(23,59,103,.045);
+    }
+    .analysis-page-eyebrow {
+        color: var(--timan-blue);
+        font-size: .67rem;
+        font-weight: 800;
+        letter-spacing: .13em;
+        margin-bottom: .45rem;
+    }
+    .analysis-page-title {
+        color: var(--timan-navy);
+        font-size: clamp(1.55rem, 2.7vw, 2.05rem);
+        font-weight: 850;
+        line-height: 1.15;
+        letter-spacing: -.035em;
+    }
+    .analysis-page-description {
+        color: var(--timan-muted);
+        font-size: .94rem;
+        line-height: 1.55;
+        margin-top: .45rem;
+        max-width: 58rem;
+    }
+    .analysis-workflow {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: .65rem;
+        margin: .55rem 0 1rem;
+    }
+    .analysis-workflow > div {
+        display: grid;
+        grid-template-columns: 27px 1fr;
+        column-gap: .55rem;
+        align-items: center;
+        padding: .72rem .75rem;
+        border: 1px solid var(--timan-border);
+        border-radius: 10px;
+        background: #FFFFFF;
+    }
+    .analysis-workflow span {
+        grid-row: span 2;
+        display: grid;
+        place-items: center;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background: rgba(37,134,199,.11);
+        color: var(--timan-blue);
+        font-size: .78rem;
+        font-weight: 800;
+    }
+    .analysis-workflow strong {
+        color: var(--timan-navy);
+        font-size: .82rem;
+    }
+    .analysis-workflow small {
+        color: var(--timan-muted);
+        font-size: .68rem;
+        line-height: 1.3;
+    }
+    @media (max-width: 760px) {
+        .analysis-workflow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 430px) {
+        .analysis-workflow { grid-template-columns: 1fr; }
+    }
+
     /* Refined application shell */
     [data-testid="stAppViewContainer"] .main .block-container {
         max-width: 1500px;
@@ -6603,18 +6678,61 @@ elif page == "Survey Analysis":
 # ============================================================
 
 elif page == "Descriptive Statistics":
-    st.title("Descriptive Statistics")
-    st.caption(status_text(MODULES[page][0]))
-    st.write(
-        "Explore distributions, central tendency, variability and category "
-        "frequencies. Results describe the loaded data; they do not establish "
-        "causation or automatically account for survey weights or complex "
-        "sample designs."
+    st.markdown(
+        """
+        <div class="analysis-page-header">
+            <div class="analysis-page-eyebrow">STATISTICAL WORKSPACE · MODULE 01</div>
+            <div class="analysis-page-title">Descriptive Statistics</div>
+            <div class="analysis-page-description">
+                Summarise your dataset, understand distributions and compare
+                groups before moving to inferential analysis.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
+    st.caption(status_text(MODULES[page][0]))
 
     df = get_dataset()
 
     if df is not None:
+        numeric_cols = list(df.select_dtypes(include="number").columns)
+        categorical_cols = [
+            col for col in df.columns
+            if not pd.api.types.is_numeric_dtype(df[col].dtype)
+        ]
+        st.markdown("#### Analysis readiness")
+        ready_columns = st.columns(4, gap="medium")
+        ready_columns[0].metric("Records", f"{len(df):,}")
+        ready_columns[1].metric("Variables", f"{df.shape[1]:,}")
+        ready_columns[2].metric("Numeric", f"{len(numeric_cols):,}")
+        ready_columns[3].metric("Categorical / other", f"{len(categorical_cols):,}")
+        st.caption(
+            f"Active dataset: **{st.session_state.get('dataset_name') or 'Uploaded dataset'}**. "
+            "Variable types are based on how values were imported."
+        )
+        with st.expander("Inspect variables before analysis", expanded=False):
+            variable_inventory = pd.DataFrame({
+                "Variable": [str(col) for col in df.columns],
+                "Imported type": [str(dtype) for dtype in df.dtypes],
+                "Valid values": [int(df[col].notna().sum()) for col in df.columns],
+                "Missing values": [int(df[col].isna().sum()) for col in df.columns],
+                "Distinct values": [int(df[col].nunique(dropna=True)) for col in df.columns],
+            })
+            st.dataframe(variable_inventory, hide_index=True, use_container_width=True)
+
+        st.markdown("#### Analysis workflow")
+        st.markdown(
+            """
+            <div class="analysis-workflow">
+                <div><span>1</span><strong>Review</strong><small>Check dataset structure</small></div>
+                <div><span>2</span><strong>Calculate</strong><small>Generate descriptive results</small></div>
+                <div><span>3</span><strong>Explore</strong><small>Inspect variables and patterns</small></div>
+                <div><span>4</span><strong>Export</strong><small>Download selected outputs</small></div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         analysis_key = _dataset_analysis_key(df)
         if st.button(
             "Run descriptive analysis",
@@ -6922,9 +7040,46 @@ elif page == "Descriptive Statistics":
                 st.info(
                     "A correlation matrix requires at least two numeric variables."
                 )
-                # ============================================================
             st.divider()
-            render_categorical_comparison(df)
+            with st.expander("Advanced statistical methods", expanded=False):
+                st.caption(
+                    "These additional methods are available in this workspace. "
+                    "Choose a method only after confirming the outcome type, "
+                    "study design and assumptions."
+                )
+                render_categorical_comparison(df)
+                st.divider()
+                render_numeric_group_comparison(df)
+                st.divider()
+                render_numeric_association(df)
+                st.divider()
+                render_simple_linear_regression(df)
+                st.divider()
+                render_multiple_linear_regression(df)
+                st.divider()
+                render_categorical_model_recommender(df)
+                st.divider()
+                render_binary_logistic_regression(df)
+                st.divider()
+                render_multinomial_logistic_regression(df)
+                st.divider()
+                render_ordinal_logistic_regression(df)
+                st.divider()
+                render_poisson_regression(df)
+                st.divider()
+                render_negative_binomial_regression(df)
+                st.divider()
+                render_kaplan_meier_analysis(df)
+                st.divider()
+                render_cox_survival_regression(df)
+    else:
+        st.info("Upload a dataset to begin descriptive analysis.")
+        st.button(
+            "Go to Data Management",
+            type="primary",
+            key="descriptive_upload_dataset",
+            on_click=go_to_data_management,
+        )
             st.divider()
             render_numeric_group_comparison(df)
             st.divider()
