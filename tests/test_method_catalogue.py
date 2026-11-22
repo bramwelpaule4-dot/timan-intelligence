@@ -36,7 +36,7 @@ def test_only_existing_execution_methods_are_marked_implemented():
     }
 
     assert implemented == IMPLEMENTED_METHODS
-    assert len(implemented) == 6
+    assert len(implemented) == 7
 
 
 def test_planned_methods_are_not_marked_executable():
@@ -141,8 +141,8 @@ def test_catalogue_summary_reports_lifecycle_and_priorities():
     summary = get_statistical_method_summary()
 
     assert summary["catalogue_version"] == CATALOGUE_VERSION
-    assert summary["total_methods"] == 24
-    assert summary["implementation_status"]["implemented"] == 6
+    assert summary["total_methods"] == 25
+    assert summary["implementation_status"]["implemented"] == 7
     assert summary["implementation_status"]["planned"] == 18
     assert set(summary["release_priorities"]) == {"P1", "P2", "P3"}
 
@@ -177,3 +177,11 @@ def test_welch_mean_difference_interval_is_registered_as_implemented():
     assert method is not None
     assert method.implementation_status == "implemented"
     assert method.execution_eligibility == "conditional"
+
+
+def test_paired_mean_change_interval_is_registered_as_implemented():
+    method = get_statistical_method("method.inference.confidence_interval.mean_difference.paired")
+    assert method is not None
+    assert method.implementation_status == "implemented"
+    assert method.execution_eligibility == "conditional"
+    assert "paired" in method.statistical_specification["compatible_study_designs"]
