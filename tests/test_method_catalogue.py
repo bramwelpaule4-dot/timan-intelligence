@@ -175,8 +175,8 @@ def test_catalogue_summary_reports_lifecycle_and_priorities():
     summary = get_statistical_method_summary()
 
     assert summary["catalogue_version"] == CATALOGUE_VERSION
-    assert summary["total_methods"] == 28
-    assert summary["implementation_status"]["implemented"] == 13
+    assert summary["total_methods"] == 29
+    assert summary["implementation_status"]["implemented"] == 14
     assert summary["implementation_status"]["planned"] == 15
     assert set(summary["release_priorities"]) == {"P1", "P2", "P3"}
 
@@ -233,6 +233,14 @@ def test_one_sample_t_test_is_registered_as_implemented():
 
 def test_two_independent_proportions_is_registered_as_conditionally_executable():
     method = get_statistical_method("method.inference.comparison.proportions.independent")
+    assert method is not None
+    assert method.implementation_status == "implemented"
+    assert method.verification_status == "unit_tested"
+    assert method.execution_eligibility == "conditional"
+
+
+def test_two_proportions_confidence_interval_is_registered_as_conditionally_executable():
+    method = get_statistical_method("method.inference.confidence_interval.proportions.independent")
     assert method is not None
     assert method.implementation_status == "implemented"
     assert method.verification_status == "unit_tested"
