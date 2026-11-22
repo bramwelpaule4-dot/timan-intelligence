@@ -53,7 +53,7 @@ def test_allows_reused_ssu_labels_under_different_psus():
 def test_allows_ssu_labels_to_repeat_across_psus_within_stratum():
     df = sample()
     # SSU labels are local to each PSU; the same label can occur in PSU 1 and PSU 2.
-    df.loc[4, "ssu"] = 1
+    df.loc[4:7, "ssu"] = [1, 1, 2, 2]
     result = inspect_two_stage_design(df, "psu", "ssu", "weight", "stratum")
     assert result["metadata"]["number_of_ssus"] == 8
 
