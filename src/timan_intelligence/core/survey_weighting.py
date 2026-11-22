@@ -43,15 +43,18 @@ def adjust_nonresponse(
         raise ValueError("Response indicator must contain only 0 (nonrespondent) and 1 (respondent).")
     if (response == 0).all():
         raise ValueError("No respondents are present.")
-    data = frame[adjustment_cells].copy()
-    data["_w"] = weights
-    data["_r"] = response
-    rates = data.groupby(adjustment_cells, dropna=False)["_w"].apply(
-        lambda s: float(data.loc[s.index, "_w"].mul(data.loc[s.index, "_r"]).sum() / s.sum())
-    )
-    keys = pd.MultiIndex.from_frame(frame[adjustment_cells])
-    rate_map = rates.to_dict()
-    factors = np.array([rate_map.get(tuple(k) if isinstance(k, tuple) else (k,), np.nan) for k in keys])
+    if frame[adjustment_cells].isna().any().any():
+        raise ValueError("Nonresponse adjustment-cell variables cannot contain missing values.")
+    grouped = frame.groupby(adjustment_cells, sort=False).groups
+    rate_map = {}
+    for key, index in grouped.items():
+        normalized_key = key if isinstance(key, tuple) else (key,)
+        positions = frame.index.get_indexer(index)
+        cell_weight = weights[positions]
+        cell_response = response[positions]
+        rate_map[normalized_key] = float(np.dot(cell_weight, cell_response) / cell_weight.sum())
+    keys = [tuple(row) for row in frame[adjustment_cells].to_numpy()]
+    factors = np.array([rate_map.get(key, np.nan) for key in keys])
     if not np.isfinite(factors).all() or (factors <= 0).any():
         raise ValueError("Every adjustment cell must contain at least one respondent.")
     adjusted = weights / factors
