@@ -1443,3 +1443,92 @@ def run_stratified_sample_selection_service(
         limitations=list(output["warnings"]),
         metadata=output["metadata"],
     )
+
+
+def run_survey_weighting_service(
+    frame: pd.DataFrame,
+    inclusion_probability_column: str,
+    response_column: str | None = None,
+    adjustment_cells: list[str] | None = None,
+    poststrata_column: str | None = None,
+    population_totals: dict[Any, float] | None = None,
+    raking_margins: dict[str, dict[Any, float]] | None = None,
+    trim_quantiles: tuple[float, float] | None = None,
+) -> AnalysisResult:
+    """Construct and adjust survey weights with explicit design inputs."""
+    from timan_intelligence.core.survey_weighting import (
+        calculate_base_weights, adjust_nonresponse,
+        calibrate_poststratification, rake_weights, trim_weights,
+        weight_diagnostics,
+    )
+
+    if not isinstance(frame, pd.DataFrame) or frame.empty:
+        raise ValueError("A non-empty respondent dataset is required.")
+    output = frame.copy()
+    output["base_weight"] = calculate_base_weights(output, inclusion_probability_column)
+    current_column = "base_weight"
+    stages = ["Inverse-probability base weights"]
+    if response_column:
+        if not adjustment_cells:
+            raise ValueError("Specify at least one adjustment-cell variable for nonresponse adjustment.")
+        output["nonresponse_adjusted_weight"] = adjust_nonresponse(
+            output, current_column, response_column, adjustment_cells
+        )
+        current_column = "nonresponse_adjusted_weight"
+        stages.append("Weighted response-rate adjustment within cells")
+    if population_totals is not None:
+        if not poststrata_column:
+            raise ValueError("Select a post-stratification variable.")
+        output["poststratified_weight"] = calibrate_poststratification(
+            output, current_column, poststrata_column, population_totals
+        )
+        current_column = "poststratified_weight"
+        stages.append("Post-stratification to known population totals")
+    raking_info = None
+    if raking_margins:
+        output["raked_weight"], raking_info = rake_weights(
+            output, current_column, raking_margins
+        )
+        current_column = "raked_weight"
+        stages.append("Iterative proportional fitting (raking)")
+    if trim_quantiles is not None:
+        output["trimmed_weight"] = trim_weights(
+            output, current_column, trim_quantiles[0], trim_quantiles[1],
+            preserve_total=True,
+        )
+        current_column = "trimmed_weight"
+        stages.append("Winsorised weight trimming with total-weight preservation")
+    diagnostics = pd.DataFrame([
+        {"stage": "final", **weight_diagnostics(output[current_column])}
+    ])
+    findings = [
+        f"Constructed final weights for {len(output):,} respondent records.",
+        f"Final weight column: {current_column}.",
+        f"Effective sample size (Kish): {diagnostics.iloc[0]['kish_effective_sample_size']:.2f}.",
+    ]
+    limitations = [
+        "Kish effective sample size and DEFF are unequal-weighting approximations; they do not capture clustering, stratification or all calibration effects.",
+        "Base weights require exact first-order unit inclusion probabilities. Conditional PPSWOR draw probabilities are not accepted as substitutes.",
+    ]
+    if raking_info and not raking_info["converged"]:
+        limitations.append(
+            f"Raking did not converge within {raking_info['iterations']} iterations; maximum relative margin error was {raking_info['maximum_relative_margin_error']:.6g}."
+        )
+    return AnalysisResult(
+        title="Survey weighting and adjustment",
+        method=" -> ".join(stages),
+        tables={"weighted_dataset": output, "weight_diagnostics": diagnostics},
+        findings=findings,
+        assumptions=[
+            "The supplied inclusion probabilities are exact first-order inclusion probabilities for the sampled units.",
+            "Nonresponse adjustment cells are substantively defensible and contain at least one respondent each, where used.",
+            "Population control totals are accurate and refer to the same target population and reference period.",
+        ],
+        limitations=limitations,
+        metadata={
+            "final_weight_column": current_column,
+            "stages": stages,
+            "raking": raking_info,
+            "diagnostics": diagnostics.iloc[0].to_dict(),
+        },
+    )
