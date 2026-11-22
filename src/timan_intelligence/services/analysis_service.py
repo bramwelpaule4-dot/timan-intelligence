@@ -859,3 +859,87 @@ def run_two_stage_survey_total_service(
             "confidence_level": output["confidence_level"],
         },
     )
+
+
+def run_two_stage_survey_mean_service(
+    df: pd.DataFrame,
+    outcome_total_variable: str,
+    element_count_variable: str,
+    psu_variable: str,
+    ssu_variable: str,
+    psu_population_count_variable: str,
+    ssu_population_count_variable: str,
+    strata_variable: str | None = None,
+    confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Estimate a two-stage design-based population element mean."""
+    from timan_intelligence.core.multistage_survey import estimate_two_stage_mean
+
+    output = estimate_two_stage_mean(
+        df, outcome_total_variable, element_count_variable, psu_variable,
+        ssu_variable, psu_population_count_variable, ssu_population_count_variable,
+        strata_variable, confidence_level,
+    )
+    return AnalysisResult(
+        title=f"Two-stage survey mean: {outcome_total_variable}",
+        method=output["metadata"]["estimator"],
+        status="success",
+        tables={"stratum_estimates": output["strata"], "psu_details": output["psu_details"]},
+        findings=list(output["findings"]),
+        assumptions=[
+            "Each sampled SSU supplies a fully enumerated outcome total and eligible-element count.",
+            "PSUs and SSUs are independently selected by SRSWOR at their respective stages.",
+            "Population frame counts are constant within the relevant sampling units.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata={
+            **output["metadata"], "estimate": output["estimate"],
+            "numerator_total": output["numerator_total"],
+            "denominator_total": output["denominator_total"],
+            "variance": output["variance"], "standard_error": output["standard_error"],
+            "confidence_interval": output["confidence_interval"],
+            "confidence_level": output["confidence_level"],
+        },
+    )
+
+
+def run_two_stage_survey_proportion_service(
+    df: pd.DataFrame,
+    successes_variable: str,
+    eligible_count_variable: str,
+    psu_variable: str,
+    ssu_variable: str,
+    psu_population_count_variable: str,
+    ssu_population_count_variable: str,
+    strata_variable: str | None = None,
+    confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Estimate a two-stage design-based population proportion."""
+    from timan_intelligence.core.multistage_survey import estimate_two_stage_proportion
+
+    output = estimate_two_stage_proportion(
+        df, successes_variable, eligible_count_variable, psu_variable,
+        ssu_variable, psu_population_count_variable, ssu_population_count_variable,
+        strata_variable, confidence_level,
+    )
+    return AnalysisResult(
+        title=f"Two-stage survey proportion: {successes_variable}",
+        method=output["metadata"]["estimator"],
+        status="success",
+        tables={"stratum_estimates": output["strata"], "psu_details": output["psu_details"]},
+        findings=list(output["findings"]),
+        assumptions=[
+            "The numerator is the number of successes and the denominator is the number of eligible elements enumerated in each sampled SSU.",
+            "Successes are between zero and eligible counts in every SSU.",
+            "PSUs and SSUs are independently selected by SRSWOR at their respective stages.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata={
+            **output["metadata"], "estimate": output["estimate"],
+            "numerator_total": output["numerator_total"],
+            "denominator_total": output["denominator_total"],
+            "variance": output["variance"], "standard_error": output["standard_error"],
+            "confidence_interval": output["confidence_interval"],
+            "confidence_level": output["confidence_level"],
+        },
+    )
