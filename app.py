@@ -4543,16 +4543,16 @@ elif page == "Survey Analysis":
 
         with st.expander("PSU-level PPS without replacement (PPSWOR) estimation"):
             st.write(
-                "Use this estimator only when PSUs were selected by a fixed-size "
+                "Use this estimator when PSUs were selected by a fixed-size "
                 "PPS-without-replacement design and each sampled PSU has a fully "
                 "observed outcome total. It uses the Horvitz–Thompson estimator "
                 "with Sen–Yates–Grundy (SYG) variance."
             )
             st.warning(
-                "This first interface supports an unstratified, PSU-level total only. "
-                "It does not support SSU subsampling, two-stage PPSWOR, means, "
-                "proportions, or PPSWR. Do not derive inclusion probabilities from "
-                "size measures or normalized weights."
+                "This is a PSU-level total estimator only. It does not support "
+                "SSU subsampling, two-stage PPSWOR, means, proportions, or PPSWR. "
+                "Supply actual design inclusion probabilities; do not derive them "
+                "from size measures or normalized weights."
             )
             ppswor_psu = st.selectbox(
                 "Sampled PSU identifier", ms_cols, key="ppswor_psu_variable"
@@ -4571,16 +4571,41 @@ elif page == "Survey Analysis":
                 "First-order inclusion probability (pi_i)", ppswor_pi_options,
                 key="ppswor_pi_variable",
             )
-            ppswor_matrix_file = st.file_uploader(
-                "Upload joint inclusion probability matrix (CSV)",
-                type=["csv"], key="ppswor_joint_matrix_upload",
-                help=(
-                    "Square CSV matrix: first column contains PSU identifiers; "
-                    "column headers contain the same PSU identifiers; each cell "
-                    "is the design joint inclusion probability pi_ij. The diagonal "
-                    "must equal pi_i."
-                ),
+            ppswor_stratification = st.radio(
+                "PPSWOR design structure",
+                ["Unstratified", "Stratified"],
+                horizontal=True, key="ppswor_stratification",
             )
+            ppswor_strata = None
+            ppswor_strata_options = [
+                x for x in ms_cols
+                if x not in (ppswor_psu, ppswor_outcome, ppswor_pi)
+            ]
+            if ppswor_stratification == "Stratified":
+                ppswor_strata = st.selectbox(
+                    "Stratum identifier", ppswor_strata_options,
+                    key="ppswor_strata_variable",
+                )
+                st.info(
+                    "Upload one Excel workbook (.xlsx) with one worksheet per "
+                    "stratum. Each worksheet name must exactly match its stratum "
+                    "label and contain that stratum's square pi_ij matrix. The "
+                    "first column is PSU IDs; column headers are the same PSU IDs."
+                )
+                ppswor_matrix_file = st.file_uploader(
+                    "Upload stratum-specific joint inclusion matrices (.xlsx)",
+                    type=["xlsx"], key="ppswor_stratified_matrix_upload",
+                )
+            else:
+                ppswor_matrix_file = st.file_uploader(
+                    "Upload joint inclusion probability matrix (CSV)",
+                    type=["csv"], key="ppswor_joint_matrix_upload",
+                    help=(
+                        "Square CSV matrix: first column contains PSU identifiers; "
+                        "column headers contain the same PSU identifiers; each cell "
+                        "is the design joint inclusion probability pi_ij."
+                    ),
+                )
             ppswor_confidence = st.selectbox(
                 "PPSWOR confidence level", [0.90, 0.95, 0.99],
                 index=1, format_func=lambda x: f"{x:.0%}",
@@ -4591,6 +4616,15 @@ elif page == "Survey Analysis":
                 and ppswor_outcome is not None
                 and ppswor_pi is not None
                 and len({ppswor_psu, ppswor_outcome, ppswor_pi}) == 3
+                and (
+                    ppswor_stratification == "Unstratified"
+                    or (
+                        ppswor_strata is not None
+                        and ppswor_strata not in (
+                            ppswor_psu, ppswor_outcome, ppswor_pi
+                        )
+                    )
+                )
                 and ppswor_matrix_file is not None
             )
             if st.button(
@@ -4599,47 +4633,116 @@ elif page == "Survey Analysis":
                 disabled=not ppswor_ready,
             ):
                 try:
-                    matrix = pd.read_csv(
-                        io.BytesIO(ppswor_matrix_file.getvalue()), index_col=0
-                    )
-                    if (
-                        matrix.empty
-                        or not matrix.index.is_unique
-                        or not matrix.columns.is_unique
-                    ):
-                        raise ValueError(
-                            "The joint-inclusion CSV must be a non-empty square matrix "
-                            "with unique PSU row and column labels."
+                    matrix_bytes = ppswor_matrix_file.getvalue()
+                    matrix_digest = hashlib.sha256(matrix_bytes).hexdigest()
+                    if ppswor_stratification == "Stratified":
+                        workbook = pd.ExcelFile(io.BytesIO(matrix_bytes))
+                        observed_strata = df[ppswor_strata].dropna().unique().tolist()
+                        expected_sheets = {str(value): value for value in observed_strata}
+                        if len(expected_sheets) != len(observed_strata):
+                            raise ValueError(
+                                "Stratum labels must have unique text representations "
+                                "to map them safely to Excel worksheet names."
+                            )
+                        missing_sheets = sorted(
+                            set(expected_sheets) - set(workbook.sheet_names)
                         )
-                    sampled_ids = df[ppswor_psu].dropna().tolist()
-                    label_lookup = {str(value): value for value in sampled_ids}
-                    matrix.index = [
-                        label_lookup.get(str(value), value) for value in matrix.index
-                    ]
-                    matrix.columns = [
-                        label_lookup.get(str(value), value) for value in matrix.columns
-                    ]
-                    if set(matrix.index) != set(matrix.columns):
-                        raise ValueError(
-                            "Joint-inclusion matrix row and column PSU labels must match."
+                        extra_sheets = sorted(
+                            set(workbook.sheet_names) - set(expected_sheets)
                         )
-                    ordered_ids = list(dict.fromkeys(sampled_ids))
-                    matrix = matrix.loc[ordered_ids, ordered_ids]
+                        if missing_sheets or extra_sheets:
+                            raise ValueError(
+                                "Workbook worksheets must match observed strata exactly. "
+                                f"Missing: {missing_sheets or 'none'}; "
+                                f"unexpected: {extra_sheets or 'none'}."
+                            )
+                        matrices = {}
+                        for sheet_name, stratum_value in expected_sheets.items():
+                            matrix = pd.read_excel(
+                                workbook, sheet_name=sheet_name, index_col=0
+                            )
+                            if (
+                                matrix.empty
+                                or not matrix.index.is_unique
+                                or not matrix.columns.is_unique
+                            ):
+                                raise ValueError(
+                                    f"Worksheet {sheet_name!r} must be a non-empty "
+                                    "matrix with unique PSU row and column labels."
+                                )
+                            stratum_ids = (
+                                df.loc[df[ppswor_strata] == stratum_value, ppswor_psu]
+                                .dropna().tolist()
+                            )
+                            label_lookup = {str(value): value for value in stratum_ids}
+                            matrix.index = [
+                                label_lookup.get(str(value), value)
+                                for value in matrix.index
+                            ]
+                            matrix.columns = [
+                                label_lookup.get(str(value), value)
+                                for value in matrix.columns
+                            ]
+                            if set(matrix.index) != set(matrix.columns):
+                                raise ValueError(
+                                    f"Worksheet {sheet_name!r} row and column PSU "
+                                    "labels must match."
+                                )
+                            ordered_ids = list(dict.fromkeys(stratum_ids))
+                            matrices[stratum_value] = matrix.loc[
+                                ordered_ids, ordered_ids
+                            ]
+                        joint_probabilities = matrices
+                    else:
+                        matrix = pd.read_csv(
+                            io.BytesIO(matrix_bytes), index_col=0
+                        )
+                        if (
+                            matrix.empty
+                            or not matrix.index.is_unique
+                            or not matrix.columns.is_unique
+                        ):
+                            raise ValueError(
+                                "The joint-inclusion CSV must be a non-empty matrix "
+                                "with unique PSU row and column labels."
+                            )
+                        sampled_ids = df[ppswor_psu].dropna().tolist()
+                        label_lookup = {str(value): value for value in sampled_ids}
+                        matrix.index = [
+                            label_lookup.get(str(value), value)
+                            for value in matrix.index
+                        ]
+                        matrix.columns = [
+                            label_lookup.get(str(value), value)
+                            for value in matrix.columns
+                        ]
+                        if set(matrix.index) != set(matrix.columns):
+                            raise ValueError(
+                                "Joint-inclusion matrix row and column PSU labels must match."
+                            )
+                        ordered_ids = list(dict.fromkeys(sampled_ids))
+                        joint_probabilities = matrix.loc[ordered_ids, ordered_ids]
                     ppswor_result = run_ppswor_total_service(
                         df, ppswor_outcome, ppswor_psu, ppswor_pi,
-                        matrix, None, ppswor_confidence,
+                        joint_probabilities, ppswor_strata, ppswor_confidence,
                     )
                     st.session_state["ppswor_total_result"] = ppswor_result
                     st.session_state["ppswor_total_result_key"] = (
                         _dataset_analysis_key(df), ppswor_psu, ppswor_outcome,
-                        ppswor_pi, ppswor_confidence, ppswor_matrix_file.name,
+                        ppswor_pi, ppswor_stratification, ppswor_strata,
+                        ppswor_confidence, matrix_digest,
                     )
-                except (TypeError, ValueError, KeyError, pd.errors.ParserError) as exc:
+                except (
+                    TypeError, ValueError, KeyError, pd.errors.ParserError,
+                    ImportError,
+                ) as exc:
                     st.error(str(exc))
             ppswor_result_key = (
                 _dataset_analysis_key(df), ppswor_psu, ppswor_outcome,
-                ppswor_pi, ppswor_confidence,
-                ppswor_matrix_file.name if ppswor_matrix_file is not None else None,
+                ppswor_pi, ppswor_stratification, ppswor_strata,
+                ppswor_confidence,
+                hashlib.sha256(ppswor_matrix_file.getvalue()).hexdigest()
+                if ppswor_matrix_file is not None else None,
             )
             saved_ppswor = st.session_state.get("ppswor_total_result")
             if (
@@ -4670,6 +4773,7 @@ elif page == "Survey Analysis":
                     )
                 for warning in saved_ppswor.limitations:
                     st.warning(warning)
+
 
         st.info(
             "Unweighted question-level frequencies above describe the imported "
