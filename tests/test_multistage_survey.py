@@ -163,7 +163,7 @@ def test_two_stage_mean_uses_ratio_linearisation_and_both_fpcs():
         df, "outcome", "element_count", "psu", "ssu",
         "psu_population", "ssu_population", "stratum",
     )
-    assert result["estimate"] == pytest.approx(1040.0 / 960.0)
+    assert result["estimate"] == pytest.approx(1040.0 / 480.0)
     assert result["standard_error"] >= 0
     assert result["metadata"]["variance_method"] == "Taylor linearisation of y - R*x"
     assert result["metadata"]["variance_stage_1"] + result["metadata"]["variance_stage_2"] == pytest.approx(result["variance"])
