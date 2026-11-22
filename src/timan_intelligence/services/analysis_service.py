@@ -1896,3 +1896,14 @@ def run_mean_confidence_interval_service(
     from timan_intelligence.core.statistical_engine import run_mean_confidence_interval
 
     return run_mean_confidence_interval(df, variable, confidence_level)
+
+
+def run_proportion_confidence_interval_service(
+    df: pd.DataFrame,
+    variable: str,
+    confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Run a Wilson score confidence interval for a binary proportion."""
+    from timan_intelligence.core.statistical_engine import run_proportion_confidence_interval
+
+    return run_proportion_confidence_interval(df, variable, confidence_level)
