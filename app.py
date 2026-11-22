@@ -44,6 +44,7 @@ from timan_intelligence.services.analysis_service import (
     run_binary_logistic_regression_service,
     run_ordinal_logistic_regression_service,
     run_multinomial_logistic_regression_service,
+    recommend_categorical_outcome_model_service,
     run_regression_diagnostics_service,
 )
 from timan_intelligence.entitlements.subscriptions import process_due_subscriptions
@@ -1745,6 +1746,87 @@ def render_multiple_linear_regression(df):
 
 
 
+
+def render_categorical_model_recommender(df):
+    """Guide users to the correct regression family for categorical outcomes."""
+    st.subheader("Choose the appropriate categorical-outcome model")
+    st.write(
+        "TimanStat first checks how many outcome categories are observed. "
+        "For three or more categories, you must confirm whether the categories "
+        "have a meaningful order. Category labels and storage order are never "
+        "used to guess this."
+    )
+    candidates = [
+        column for column in df.columns
+        if 2 <= df[column].dropna().nunique()
+    ]
+    if not candidates:
+        st.info("No outcome with at least two observed categories was detected.")
+        return
+    outcome = st.selectbox(
+        "Select the outcome you want to explain",
+        candidates,
+        key="categorical_model_recommender_outcome",
+    )
+    category_count = int(df[outcome].dropna().nunique())
+    structure = None
+    if category_count >= 3:
+        structure = st.radio(
+            "Do these categories have a meaningful order?",
+            options=["ordered", "nominal"],
+            format_func=lambda value: (
+                "Yes — ordered levels (e.g. low, moderate, high)"
+                if value == "ordered"
+                else "No — unordered categories (e.g. assistance type)"
+            ),
+            horizontal=False,
+            key="categorical_model_recommender_structure",
+        )
+    try:
+        recommendation = recommend_categorical_outcome_model_service(
+            df, outcome, structure
+        )
+    except (TypeError, ValueError) as exc:
+        st.error(str(exc))
+        return
+    metadata = recommendation.metadata
+    st.caption(
+        f"{metadata['valid_n']:,} non-missing outcome records; "
+        f"{metadata['category_count']} observed categories."
+    )
+    st.markdown("**Observed category frequencies**")
+    st.dataframe(
+        pd.DataFrame(
+            [{"Category": category, "Frequency": count}
+             for category, count in metadata["category_counts"].items()]
+        ),
+        hide_index=True,
+        use_container_width=True,
+    )
+    if metadata["status"] == "not_suitable":
+        st.warning("This outcome is not currently suitable for categorical regression.")
+    elif metadata["status"] == "needs_classification":
+        st.info(
+            "Confirm whether the outcome is ordered or nominal to receive a model recommendation."
+        )
+    else:
+        labels = {
+            "binary_logistic": "Binary logistic regression",
+            "ordinal_logistic": "Ordinal logistic regression",
+            "multinomial_logistic": "Multinomial logistic regression",
+        }
+        st.success(f"Recommended starting point: {labels[metadata['recommended_model']]}")
+    for finding in recommendation.findings:
+        st.write(f"- {finding}")
+    for warning in recommendation.limitations:
+        st.warning(warning)
+    st.caption(
+        "This is a model-family recommendation, not an automatic fit. "
+        "Predictor suitability, sample size, assumptions and study design "
+        "must still be checked before estimation."
+    )
+
+
 def render_binary_logistic_regression(df):
     """Render guided binary logistic regression for a two-category outcome."""
     st.subheader("Estimate the probability of a binary outcome")
@@ -3416,6 +3498,8 @@ elif page == "Descriptive Statistics":
             render_simple_linear_regression(df)
             st.divider()
             render_multiple_linear_regression(df)
+            st.divider()
+            render_categorical_model_recommender(df)
             st.divider()
             render_binary_logistic_regression(df)
             st.divider()
