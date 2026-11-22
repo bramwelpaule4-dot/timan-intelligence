@@ -83,6 +83,9 @@ def estimate_two_stage_ppswor_proportion(
     **kwargs: Any,
 ) -> dict[str, Any]:
     """Estimate a population proportion from a binary 0/1 SSU outcome."""
+    denominator = float(population_ssu_total)
+    if not np.isfinite(denominator) or denominator <= 0:
+        raise ValueError("Known population SSU total must be a positive finite number.")
     if outcome_variable not in df.columns:
         raise KeyError(f"Variable not found: {outcome_variable}.")
     values = pd.to_numeric(df[outcome_variable], errors="coerce")
@@ -92,7 +95,7 @@ def estimate_two_stage_ppswor_proportion(
         df, outcome_variable, *args, **kwargs
     )
     result = _scale_total_result(
-        output, float(population_ssu_total), "population proportion",
+        output, denominator, "population proportion",
         "known total number of SSUs in the target population",
     )
     result["warnings"] = list(result["warnings"]) + [
