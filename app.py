@@ -875,6 +875,11 @@ def go_to_data_management():
     st.session_state.navigation_page = "Data Management"
 
 
+def navigate_to(page_name):
+    """Navigate to a workspace page using a Streamlit callback."""
+    st.session_state.navigation_page = page_name
+
+
 # ============================================================
 # DATA LOADING AND STATISTICAL HELPERS
 # ============================================================
@@ -3010,6 +3015,17 @@ else:
 # ============================================================
 
 if page == "Home":
+    df = st.session_state.dataset
+    available_modules = sum(
+        1 for name, details in MODULES.items()
+        if name not in ("Home", "Developer Dashboard")
+        and details[0].startswith("Available")
+    )
+    total_modules = sum(
+        1 for name in MODULES
+        if name not in ("Home", "Developer Dashboard")
+    )
+
     st.markdown(
         """
         <div class="home-hero">
@@ -3024,10 +3040,10 @@ if page == "Home":
                 </div>
             </div>
             <div class="hero-divider"></div>
-            <h1 class="hero-statement">Turning data into meaningful insights.</h1>
+            <h1 class="hero-statement">Your analytical workspace</h1>
             <p class="home-description">
-                A professional platform for data management, statistical analysis,
-                research and evidence-based decision-making.
+                Manage your data, assess its quality and move from descriptive
+                exploration towards rigorous statistical analysis and reporting.
             </p>
         </div>
         """,
@@ -3035,89 +3051,124 @@ if page == "Home":
     )
 
     st.markdown(
-        '<div class="section-kicker">Explore the platform</div>',
+        '<div class="section-kicker">Workspace overview</div>',
         unsafe_allow_html=True,
     )
-    feature_columns = st.columns(4, gap="medium")
-    feature_cards = [
+    if df is None:
+        metric_columns = st.columns(4, gap="medium")
+        metric_columns[0].metric("Dataset", "Not loaded")
+        metric_columns[1].metric("Records", "—")
+        metric_columns[2].metric("Variables", "—")
+        metric_columns[3].metric("Available modules", f"{available_modules}/{total_modules}")
+        st.info(
+            "Your workspace is ready. Upload a CSV or Excel dataset to activate "
+            "dataset-specific quality checks, summaries, charts and exports."
+        )
+        st.button(
+            "Upload a dataset",
+            type="primary",
+            use_container_width=True,
+            on_click=go_to_data_management,
+        )
+    else:
+        row_count, column_count = df.shape
+        missing_cells = int(df.isna().sum().sum())
+        total_cells = row_count * column_count
+        completeness = (
+            (total_cells - missing_cells) / total_cells * 100
+            if total_cells else 100.0
+        )
+        metric_columns = st.columns(4, gap="medium")
+        metric_columns[0].metric("Dataset status", "Loaded")
+        metric_columns[1].metric("Records", f"{row_count:,}")
+        metric_columns[2].metric("Variables", f"{column_count:,}")
+        metric_columns[3].metric("Completeness", f"{completeness:.1f}%")
+        st.caption(f"Active dataset: **{st.session_state.dataset_name or 'Uploaded dataset'}**")
+        with st.expander("Preview active dataset", expanded=False):
+            st.dataframe(df.head(10), use_container_width=True)
+            st.caption("Preview limited to the first 10 records.")
+
+    st.markdown(
+        '<div class="section-kicker workspace-kicker">Quick access</div>',
+        unsafe_allow_html=True,
+    )
+    quick_access = [
         (
-            "01",
             "Data Management",
-            "Import and organise datasets.",
-            "feature-blue",
-            "▤",
+            "Upload, replace or inspect your dataset.",
+            "Open data workspace",
         ),
         (
-            "02",
-            "Statistical Analysis",
-            "Explore data and calculate statistical summaries.",
-            "feature-teal",
-            "∑",
+            "Data Quality",
+            "Review completeness, duplicates and variable structure.",
+            "Review data quality",
         ),
         (
-            "03",
+            "Descriptive Statistics",
+            "Summarise numeric and categorical variables.",
+            "Explore statistics",
+        ),
+        (
             "Survey Analysis",
-            "Examine survey findings and response patterns.",
-            "feature-gold",
-            "▥",
+            "Profile questionnaire data and Likert responses.",
+            "Analyse survey data",
         ),
         (
-            "04",
-            "Reporting",
-            "Communicate results clearly.",
-            "feature-red",
-            "▧",
+            "Visualisations",
+            "Build exploratory charts from available variables.",
+            "Create visualisations",
+        ),
+        (
+            "Reports & Exports",
+            "Export datasets and available analytical outputs.",
+            "View reports",
         ),
     ]
-    for column, (number, title, description, accent, symbol) in zip(
-        feature_columns, feature_cards
-    ):
-        with column:
+    quick_columns = st.columns(3, gap="medium")
+    for index, (target, description, button_label) in enumerate(quick_access):
+        with quick_columns[index % 3]:
             st.markdown(
                 f"""
-                <div class="feature-card {accent}">
-                    <div class="feature-card-top">
-                        <span class="feature-symbol" aria-hidden="true">{symbol}</span>
-                        <span class="feature-number">{number}</span>
-                    </div>
-                    <div class="feature-title">{title}</div>
+                <div class="feature-card {'feature-teal' if index in (1, 3) else 'feature-blue'}">
+                    <div class="feature-title">{target}</div>
                     <div class="feature-description">{description}</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
+            st.button(
+                button_label,
+                key=f"home_quick_access_{index}",
+                use_container_width=True,
+                on_click=navigate_to,
+                args=(target,),
+            )
 
     st.markdown(
-        '<div class="section-kicker workspace-kicker">Your analytical workspace</div>',
+        '<div class="section-kicker workspace-kicker">Platform capabilities</div>',
         unsafe_allow_html=True,
     )
-    df = st.session_state.dataset
-
-    if df is None:
-        a, b, c = st.columns(3)
-        a.metric("Dataset status", "Not loaded")
-        b.metric("Available formats", "CSV / Excel")
-        c.metric("Workspace", "Browser session")
-
-        st.info(
-            "Start by uploading a dataset. Your data will remain available "
-            "as you move between the platform's analytical modules in this session."
+    status_columns = st.columns(3, gap="medium")
+    status_columns[0].metric("Available modules", available_modules)
+    status_columns[1].metric("In development", total_modules - available_modules)
+    status_columns[2].metric("Supported imports", "CSV · XLSX")
+    with st.expander("View module availability", expanded=False):
+        module_rows = [
+            {
+                "Module": name,
+                "Availability": details[0],
+                "Purpose": details[1],
+            }
+            for name, details in MODULES.items()
+            if name not in ("Home", "Developer Dashboard")
+        ]
+        st.dataframe(
+            pd.DataFrame(module_rows),
+            hide_index=True,
+            use_container_width=True,
         )
-        st.button(
-            "Go to Data Management",
-            type="primary",
-            on_click=go_to_data_management,
-        )
-    else:
-        a, b, c = st.columns(3)
-        a.metric("Rows", f"{df.shape[0]:,}")
-        b.metric("Columns", f"{df.shape[1]:,}")
-        c.metric("Missing cells", f"{int(df.isna().sum().sum()):,}")
 
-        st.subheader("Dataset preview")
-        st.dataframe(df.head(10), use_container_width=True)
-        st.caption(f"Current dataset: {st.session_state.dataset_name}")
-    # ============================================================
+# ============================================================
 # DATA MANAGEMENT
 # ============================================================
 
