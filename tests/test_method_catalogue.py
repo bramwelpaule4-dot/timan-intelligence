@@ -81,7 +81,6 @@ def test_chi_square_independence_is_registered_as_conditionally_executable():
 
 
 def test_unknown_method_lookup_returns_none():
-def test_unknown_method_lookup_returns_none():
     assert get_statistical_method("method.unknown.not_registered") is None
 
 
