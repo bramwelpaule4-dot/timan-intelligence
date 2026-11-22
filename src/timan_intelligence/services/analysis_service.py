@@ -1162,7 +1162,6 @@ def run_ppswor_total_service(
         tables={
             "stratum_estimates": output["strata"],
             "pairwise_variance": output["pairwise_variance"],
-            "diagnostics": output["diagnostics"],
         },
         findings=list(output["findings"]),
         assumptions=[
@@ -1252,6 +1251,7 @@ def run_ppswor_domain_ratio_service(
         tables={
             "stratum_estimates": output["strata"],
             "pairwise_variance": output["pairwise_variance"],
+            "diagnostics": output["diagnostics"],
         },
         findings=list(output["findings"]),
         assumptions=[
@@ -1295,6 +1295,7 @@ def run_ppswor_domain_total_service(
         tables={
             "stratum_estimates": output["strata"],
             "pairwise_variance": output["pairwise_variance"],
+            "diagnostics": output["diagnostics"],
         },
         findings=list(output["findings"]),
         assumptions=[
