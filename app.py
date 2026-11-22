@@ -43,6 +43,7 @@ from timan_intelligence.services.analysis_service import (
     run_multiple_linear_regression_service,
     run_binary_logistic_regression_service,
     run_ordinal_logistic_regression_service,
+    run_poisson_regression_service,
     run_multinomial_logistic_regression_service,
     recommend_categorical_outcome_model_service,
     run_regression_diagnostics_service,
@@ -2209,6 +2210,118 @@ def render_ordinal_logistic_regression(df):
             st.warning(warning)
 
 
+
+def render_poisson_regression(df):
+    """Render guided Poisson regression for count outcomes."""
+    st.subheader("Model a count outcome")
+    st.write(
+        "Poisson regression models the expected number or rate of events, "
+        "such as household visits, referrals, incidents or service contacts."
+    )
+    numeric_columns = [
+        column for column in df.select_dtypes(include="number").columns
+        if not pd.api.types.is_bool_dtype(df[column].dtype)
+    ]
+    candidates = []
+    for column in numeric_columns:
+        values = pd.to_numeric(df[column], errors="coerce").dropna()
+        if not values.empty and (values >= 0).all() and np.allclose(
+            values.to_numpy(dtype=float),
+            np.round(values.to_numpy(dtype=float)),
+            atol=1e-10,
+        ):
+            candidates.append(column)
+    if not candidates:
+        st.info("No numeric variable with non-negative integer values was detected as a possible count outcome.")
+        return
+    outcome = st.selectbox(
+        "Count outcome variable", candidates, key="poisson_outcome"
+    )
+    exposure_options = [None] + [c for c in numeric_columns if c != outcome]
+    exposure = st.selectbox(
+        "Exposure variable (optional)",
+        exposure_options,
+        index=0,
+        format_func=lambda value: "No exposure offset" if value is None else str(value),
+        key="poisson_exposure",
+        help="Use a positive exposure measure such as person-time, population at risk or observation duration. Its log is included as an offset.",
+    )
+    predictor_options = [
+        c for c in numeric_columns if c != outcome and c != exposure
+    ]
+    if not predictor_options:
+        st.info("At least one numeric predictor is required in this guided version.")
+        return
+    predictors = st.multiselect(
+        "Numeric predictor variables",
+        predictor_options,
+        key="poisson_predictors",
+        max_selections=15,
+        help="Select numeric variables associated with the expected count or event rate.",
+    )
+    st.caption(
+        "The current guided version supports numeric predictors only. "
+        "Categorical predictors, clustered observations and complex survey "
+        "design adjustments are not yet included."
+    )
+    if not predictors:
+        st.info("Select at least one predictor to continue.")
+        return
+    dataset_key = _dataset_analysis_key(df)
+    result_key = f"timanstat_poisson_{dataset_key}"
+    if st.button("Run Poisson regression", type="primary", key="run_poisson_regression"):
+        try:
+            model = run_poisson_regression_service(
+                df, list(predictors), str(outcome), exposure
+            )
+        except (TypeError, ValueError) as exc:
+            st.error(str(exc))
+        except Exception:
+            st.error("The Poisson model could not be estimated. No inferential result has been reported.")
+        else:
+            st.session_state[result_key] = {
+                "predictors": list(predictors),
+                "outcome": outcome,
+                "exposure": exposure,
+                "result": model,
+            }
+    saved = st.session_state.get(result_key)
+    if not saved:
+        st.info("Select the count outcome and predictors, then run the model.")
+        return
+    if (
+        saved["predictors"] != list(predictors)
+        or saved["outcome"] != outcome
+        or saved["exposure"] != exposure
+    ):
+        st.info("Run the model again to apply the changed variable selection.")
+        return
+    result = saved["result"]
+    metadata = result.metadata
+    metrics = st.columns(4)
+    metrics[0].metric("Complete records", f"{metadata['valid_n']:,}")
+    metrics[1].metric("AIC", f"{metadata['aic']:.2f}")
+    metrics[2].metric("Dispersion", f"{metadata['dispersion']:.2f}")
+    metrics[3].metric("Model p-value", f"{metadata['model_p_value']:.4g}")
+    st.markdown("#### Incidence rate ratios")
+    st.dataframe(result.tables["coefficients"], hide_index=True, use_container_width=True)
+    st.caption(
+        "An IRR above 1 indicates a higher expected event rate per unit increase "
+        "in the predictor; an IRR below 1 indicates a lower expected rate. "
+        "Interpret estimates in the units of the selected predictor."
+    )
+    st.markdown("#### Observed and predicted counts")
+    st.dataframe(result.tables["fitted_data"].head(100), use_container_width=True)
+    st.caption("The fitted-count table shows up to the first 100 complete records.")
+    st.markdown("#### Interpretation")
+    for finding in result.findings:
+        st.write(f"• {finding}")
+    if result.limitations:
+        st.markdown("#### Assumptions and limitations")
+        for warning in result.limitations:
+            st.warning(warning)
+
+
 def show_under_development(page, purpose):
     """Display an honest status page for an unfinished module."""
     st.title(page)
@@ -3507,6 +3620,8 @@ elif page == "Descriptive Statistics":
             render_multinomial_logistic_regression(df)
             st.divider()
             render_ordinal_logistic_regression(df)
+            st.divider()
+            render_poisson_regression(df)
 
 
 # VISUALISATIONS
