@@ -60,6 +60,8 @@ from timan_intelligence.services.analysis_service import (
     run_two_stage_ppswor_mean_service,
     run_two_stage_ppswor_proportion_service,
     run_two_stage_ppswor_domain_total_service,
+    run_two_stage_ppswor_domain_mean_service,
+    run_two_stage_ppswor_domain_proportion_service,
     run_ppswor_total_service,
     run_ppswor_ratio_service,
     run_ppswor_domain_ratio_service,
@@ -4830,7 +4832,7 @@ elif page == "Survey Analysis":
             )
             two_pps_kind = st.selectbox(
                 "PPSWOR estimand",
-                ["Total", "Mean", "Proportion", "Domain total"],
+                ["Total", "Mean", "Proportion", "Domain total", "Domain mean", "Domain proportion"],
                 key="two_ppswor_estimand_kind",
             )
             two_pps_psu = st.selectbox(
@@ -4890,7 +4892,7 @@ elif page == "Survey Analysis":
                     "The mean/proportion estimator divides the design-based total by "
                     "this known population SSU count. Proportion inputs must be coded 0/1."
                 )
-            elif two_pps_kind == "Domain total":
+            elif two_pps_kind in ("Domain total", "Domain mean", "Domain proportion"):
                 two_pps_domain_options = [
                     x for x in ms_cols
                     if x not in two_pps_structural
@@ -4975,7 +4977,7 @@ elif page == "Survey Analysis":
                     or two_pps_denominator is not None
                 )
                 and (
-                    two_pps_kind != "Domain total"
+                    two_pps_kind not in ("Domain total", "Domain mean", "Domain proportion")
                     or (
                         two_pps_domain_variable is not None
                         and two_pps_domain_value is not None
@@ -5048,15 +5050,29 @@ elif page == "Survey Analysis":
                             two_pps_population, joint_matrix, two_pps_strata,
                             two_pps_confidence,
                         )
-                    elif two_pps_kind == "Proportion":
+                    elif two_pps_kind in ("Proportion", "Domain proportion"):
                         two_pps_result = run_two_stage_ppswor_proportion_service(
                             df, two_pps_outcome, two_pps_denominator,
                             two_pps_psu, two_pps_ssu, two_pps_pi,
                             two_pps_population, joint_matrix, two_pps_strata,
                             two_pps_confidence,
                         )
-                    else:
+                    elif two_pps_kind == "Domain total":
                         two_pps_result = run_two_stage_ppswor_domain_total_service(
+                            df, two_pps_outcome, two_pps_domain_variable,
+                            two_pps_domain_value, two_pps_psu, two_pps_ssu,
+                            two_pps_pi, two_pps_population, joint_matrix, two_pps_strata,
+                            two_pps_confidence,
+                        )
+                    elif two_pps_kind == "Domain mean":
+                        two_pps_result = run_two_stage_ppswor_domain_mean_service(
+                            df, two_pps_outcome, two_pps_domain_variable,
+                            two_pps_domain_value, two_pps_psu, two_pps_ssu,
+                            two_pps_pi, two_pps_population, joint_matrix, two_pps_strata,
+                            two_pps_confidence,
+                        )
+                    else:
+                        two_pps_result = run_two_stage_ppswor_domain_proportion_service(
                             df, two_pps_outcome, two_pps_domain_variable,
                             two_pps_domain_value, two_pps_psu, two_pps_ssu,
                             two_pps_pi, two_pps_population, joint_matrix, two_pps_strata,
@@ -5075,7 +5091,7 @@ elif page == "Survey Analysis":
                 estimate_label = (
                     f"Estimated population {two_pps_kind.lower()}"
                     if two_pps_kind != "Domain total"
-                    else f"Estimated total for {two_pps_domain_variable} = {two_pps_domain_value}"
+                    else f"Estimated {two_pps_kind.lower()} for {two_pps_domain_variable} = {two_pps_domain_value}"
                 )
                 metric_left, metric_right, metric_variance = st.columns(3)
                 estimate_display = (
