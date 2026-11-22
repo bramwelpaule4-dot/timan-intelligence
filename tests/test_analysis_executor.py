@@ -308,3 +308,36 @@ def test_proportion_confidence_interval_executor_blocks_complex_sampling():
     }
     with pytest.raises(AnalysisExecutionError, match="not validated"):
         execute_recommendation(df, recommendation, approved=True)
+
+
+def test_execution_runs_registered_welch_mean_difference_interval():
+    df = pd.DataFrame({
+        "group": ["A", "A", "A", "B", "B", "B"],
+        "score": [10.0, 12.0, 14.0, 7.0, 8.0, 9.0],
+    })
+    recommendation = {
+        "method": "Welch confidence interval for a mean difference",
+        "method_id": "method.inference.confidence_interval.mean_difference.welch",
+        "variables": ["score", "group"],
+        "status": "review_required",
+        "options": {"confidence_level": 0.90},
+    }
+    result = execute_recommendation(df, recommendation, approved=True)
+    assert result.status == "success"
+    assert result.metadata["method_id"] == "method.inference.confidence_interval.mean_difference.welch"
+    assert result.metadata["confidence_level"] == pytest.approx(0.90)
+
+
+def test_welch_mean_difference_interval_executor_blocks_complex_sampling():
+    df = pd.DataFrame({
+        "group": ["A", "A", "B", "B"],
+        "score": [10.0, 12.0, 7.0, 9.0],
+    })
+    recommendation = {
+        "method": "Welch confidence interval for a mean difference",
+        "variables": ["score", "group"],
+        "status": "review_required",
+        "design_context": {"sampling_design": "cluster"},
+    }
+    with pytest.raises(AnalysisExecutionError, match="not validated"):
+        execute_recommendation(df, recommendation, approved=True)
