@@ -36,7 +36,7 @@ def test_only_existing_execution_methods_are_marked_implemented():
     }
 
     assert implemented == IMPLEMENTED_METHODS
-    assert len(implemented) == 4
+    assert len(implemented) == 5
 
 
 def test_planned_methods_are_not_marked_executable():
@@ -142,8 +142,8 @@ def test_catalogue_summary_reports_lifecycle_and_priorities():
 
     assert summary["catalogue_version"] == CATALOGUE_VERSION
     assert summary["total_methods"] == 23
-    assert summary["implementation_status"]["implemented"] == 4
-    assert summary["implementation_status"]["planned"] == 19
+    assert summary["implementation_status"]["implemented"] == 5
+    assert summary["implementation_status"]["planned"] == 18
     assert set(summary["release_priorities"]) == {"P1", "P2", "P3"}
 
 
