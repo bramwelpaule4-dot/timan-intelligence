@@ -57,6 +57,9 @@ from timan_intelligence.services.analysis_service import (
     run_two_stage_ppswr_mean_service,
     run_two_stage_ppswr_proportion_service,
     run_two_stage_ppswor_total_service,
+    run_two_stage_ppswor_mean_service,
+    run_two_stage_ppswor_proportion_service,
+    run_two_stage_ppswor_domain_total_service,
     run_ppswor_total_service,
     run_ppswor_ratio_service,
     run_ppswor_domain_ratio_service,
@@ -4809,18 +4812,21 @@ elif page == "Survey Analysis":
 
         with st.expander("Two-stage PPS without replacement (PPSWOR) estimation"):
             st.write(
-                "Use this estimator when PSUs were selected by fixed-size PPS "
-                "without replacement and SSUs were then selected by simple random "
-                "sampling without replacement within each sampled PSU. The input "
-                "dataset must contain one row per sampled SSU."
+                "Estimate population totals, means, binary proportions or domain totals "
+                "when PSUs were selected by fixed-size PPS without replacement and SSUs "
+                "were selected by SRSWOR within sampled PSUs. Supply one row per sampled SSU."
             )
             st.warning(
                 "This interface currently accepts an unstratified first-stage design. "
-                "Enter the actual first-order PSU inclusion probabilities and the "
-                "complete symmetric matrix of second-order joint inclusion "
-                "probabilities (pi_ij) from the sampling design. Do not substitute "
-                "normalized weights, size measures or conditional draw probabilities. "
-                "The estimator does not support respondent subsampling within SSUs."
+                "Use actual first-order PSU inclusion probabilities and the complete "
+                "symmetric second-order joint inclusion matrix (pi_ij) from the design. "
+                "Do not substitute normalized weights, size measures or conditional draw "
+                "probabilities. Respondent subsampling within SSUs is not supported."
+            )
+            two_pps_kind = st.selectbox(
+                "PPSWOR estimand",
+                ["Total", "Mean", "Proportion", "Domain total"],
+                key="two_ppswor_estimand_kind",
             )
             two_pps_psu = st.selectbox(
                 "PSU identifier", ms_cols, key="two_ppswor_psu_variable"
@@ -4830,9 +4836,9 @@ elif page == "Survey Analysis":
                 "SSU identifier", two_pps_ssu_options,
                 key="two_ppswor_ssu_variable",
             )
+            two_pps_structural = {two_pps_psu, two_pps_ssu}
             two_pps_numeric = [
-                x for x in ms_numeric
-                if x not in (two_pps_psu, two_pps_ssu, ms_strata)
+                x for x in ms_numeric if x not in two_pps_structural
             ]
             two_pps_pi = st.selectbox(
                 "First-order PSU inclusion probability (pi_i)", two_pps_numeric,
@@ -4849,9 +4855,50 @@ elif page == "Survey Analysis":
                 x for x in two_pps_population_options if x != two_pps_population
             ]
             two_pps_outcome = st.selectbox(
-                "SSU outcome total", two_pps_outcome_options,
+                "SSU outcome variable", two_pps_outcome_options,
                 key="two_ppswor_outcome_variable",
             )
+            two_pps_denominator = None
+            two_pps_domain_variable = None
+            two_pps_domain_value = None
+            if two_pps_kind in ("Mean", "Proportion"):
+                two_pps_denominator = st.number_input(
+                    "Known total number of SSUs in the target population",
+                    min_value=1, value=1, step=1,
+                    key="two_ppswor_population_denominator",
+                    help=(
+                        "This is a fixed, known population SSU count—not an estimated "
+                        "denominator or a sum of sample weights."
+                    ),
+                )
+                st.caption(
+                    "The mean/proportion estimator divides the design-based total by "
+                    "this known population SSU count. Proportion inputs must be coded 0/1."
+                )
+            elif two_pps_kind == "Domain total":
+                two_pps_domain_options = [
+                    x for x in ms_cols
+                    if x not in two_pps_structural
+                    and x not in (two_pps_pi, two_pps_population, two_pps_outcome)
+                ]
+                if two_pps_domain_options:
+                    two_pps_domain_variable = st.selectbox(
+                        "Domain / subgroup variable", two_pps_domain_options,
+                        key="two_ppswor_domain_variable",
+                    )
+                    two_pps_domain_values = [
+                        value for value in df[two_pps_domain_variable].dropna().unique().tolist()
+                    ]
+                    if two_pps_domain_values:
+                        two_pps_domain_value = st.selectbox(
+                            "Domain value", two_pps_domain_values,
+                            key="two_ppswor_domain_value",
+                            format_func=lambda value: str(value),
+                        )
+                    else:
+                        st.warning("The selected domain variable has no non-missing values.")
+                else:
+                    st.warning("No eligible domain variable is available in this dataset.")
             two_pps_confidence = st.selectbox(
                 "Two-stage PPSWOR confidence level", [0.90, 0.95, 0.99],
                 index=1, format_func=lambda x: f"{x:.0%}",
@@ -4875,23 +4922,33 @@ elif page == "Survey Analysis":
                 key="two_ppswor_joint_matrix_csv",
             )
             two_pps_key = (
-                _dataset_analysis_key(df), two_pps_psu, two_pps_ssu,
+                _dataset_analysis_key(df), two_pps_kind, two_pps_psu, two_pps_ssu,
                 two_pps_pi, two_pps_population, two_pps_outcome,
+                two_pps_denominator, two_pps_domain_variable, two_pps_domain_value,
                 two_pps_confidence, two_pps_joint_text,
             )
+            two_pps_required = [
+                two_pps_psu, two_pps_ssu, two_pps_pi,
+                two_pps_population, two_pps_outcome,
+            ]
             two_pps_ready = (
-                all(value is not None for value in (
-                    two_pps_psu, two_pps_ssu, two_pps_pi,
-                    two_pps_population, two_pps_outcome,
-                ))
-                and len({
-                    two_pps_psu, two_pps_ssu, two_pps_pi,
-                    two_pps_population, two_pps_outcome,
-                }) == 5
+                all(value is not None for value in two_pps_required)
+                and len(set(two_pps_required)) == 5
                 and bool(two_pps_joint_text.strip())
+                and (
+                    two_pps_kind not in ("Mean", "Proportion")
+                    or two_pps_denominator is not None
+                )
+                and (
+                    two_pps_kind != "Domain total"
+                    or (
+                        two_pps_domain_variable is not None
+                        and two_pps_domain_value is not None
+                    )
+                )
             )
             if st.button(
-                "Run two-stage PPSWOR total",
+                f"Run two-stage PPSWOR {two_pps_kind.lower()} estimate",
                 type="primary", key="run_two_stage_ppswor",
                 disabled=not two_pps_ready,
             ):
@@ -4901,17 +4958,33 @@ elif page == "Survey Analysis":
                     )
                     joint_matrix.index = joint_matrix.index.map(str)
                     joint_matrix.columns = joint_matrix.columns.map(str)
-                    two_pps_result = run_two_stage_ppswor_total_service(
-                        df,
-                        two_pps_outcome,
-                        two_pps_psu,
-                        two_pps_ssu,
-                        two_pps_pi,
-                        two_pps_population,
-                        joint_matrix,
-                        None,
-                        two_pps_confidence,
-                    )
+                    if two_pps_kind == "Total":
+                        two_pps_result = run_two_stage_ppswor_total_service(
+                            df, two_pps_outcome, two_pps_psu, two_pps_ssu,
+                            two_pps_pi, two_pps_population, joint_matrix,
+                            None, two_pps_confidence,
+                        )
+                    elif two_pps_kind == "Mean":
+                        two_pps_result = run_two_stage_ppswor_mean_service(
+                            df, two_pps_outcome, two_pps_denominator,
+                            two_pps_psu, two_pps_ssu, two_pps_pi,
+                            two_pps_population, joint_matrix, None,
+                            two_pps_confidence,
+                        )
+                    elif two_pps_kind == "Proportion":
+                        two_pps_result = run_two_stage_ppswor_proportion_service(
+                            df, two_pps_outcome, two_pps_denominator,
+                            two_pps_psu, two_pps_ssu, two_pps_pi,
+                            two_pps_population, joint_matrix, None,
+                            two_pps_confidence,
+                        )
+                    else:
+                        two_pps_result = run_two_stage_ppswor_domain_total_service(
+                            df, two_pps_outcome, two_pps_domain_variable,
+                            two_pps_domain_value, two_pps_psu, two_pps_ssu,
+                            two_pps_pi, two_pps_population, joint_matrix, None,
+                            two_pps_confidence,
+                        )
                     st.session_state["two_stage_ppswor_result"] = two_pps_result
                     st.session_state["two_stage_ppswor_result_key"] = two_pps_key
                 except (TypeError, ValueError, KeyError, pd.errors.ParserError) as exc:
@@ -4922,21 +4995,33 @@ elif page == "Survey Analysis":
                 and st.session_state.get("two_stage_ppswor_result_key") == two_pps_key
             ):
                 meta = saved_two_pps.metadata
-                metric_left, metric_right, metric_variance = st.columns(3)
-                metric_left.metric(
-                    "Estimated population total", f"{meta['estimate']:,.4g}"
+                estimate_label = (
+                    f"Estimated population {two_pps_kind.lower()}"
+                    if two_pps_kind != "Domain total"
+                    else f"Estimated total for {two_pps_domain_variable} = {two_pps_domain_value}"
                 )
+                metric_left, metric_right, metric_variance = st.columns(3)
+                estimate_display = (
+                    f"{meta['estimate']:.2%}"
+                    if two_pps_kind == "Proportion"
+                    else f"{meta['estimate']:,.4g}"
+                )
+                metric_left.metric(estimate_label, estimate_display)
                 metric_right.metric(
                     "Design-based standard error", f"{meta['standard_error']:,.4g}"
                 )
-                metric_variance.metric(
-                    "Combined variance", f"{meta['variance']:,.4g}"
-                )
+                metric_variance.metric("Combined variance", f"{meta['variance']:,.4g}")
                 ci = meta["confidence_interval"]
-                st.write(
-                    f"{meta['confidence_level']:.0%} confidence interval: "
-                    f"[{ci[0]:,.4g}, {ci[1]:,.4g}]"
-                )
+                if two_pps_kind == "Proportion":
+                    st.write(
+                        f"{meta['confidence_level']:.0%} confidence interval: "
+                        f"[{ci[0]:.2%}, {ci[1]:.2%}]"
+                    )
+                else:
+                    st.write(
+                        f"{meta['confidence_level']:.0%} confidence interval: "
+                        f"[{ci[0]:,.4g}, {ci[1]:,.4g}]"
+                    )
                 st.caption(
                     f"Stage 1 variance: {meta['stage_1_variance']:,.4g} · "
                     f"Stage 2 variance: {meta['stage_2_variance']:,.4g}"
