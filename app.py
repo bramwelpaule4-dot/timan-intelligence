@@ -49,6 +49,9 @@ from timan_intelligence.services.analysis_service import (
     run_two_stage_survey_domain_total_service,
     run_two_stage_survey_domain_mean_service,
     run_two_stage_survey_domain_proportion_service,
+    run_two_stage_ppswr_total_service,
+    run_two_stage_ppswr_mean_service,
+    run_two_stage_ppswr_proportion_service,
     run_categorical_comparison,
     run_numeric_group_comparison_service,
     run_numeric_association_service,
@@ -4397,6 +4400,141 @@ elif page == "Survey Analysis":
                 "Domain estimation requires both stage population counts and "
                 "a domain classification variable."
             )
+
+        with st.expander("Two-stage PPS with replacement (PPSWR) estimation"):
+            st.write(
+                "Use this separate estimator when PSUs were independently selected "
+                "with replacement using known per-draw selection probabilities, "
+                "followed by SRSWOR of SSUs within each selected PSU draw. A unique "
+                "draw ID is essential when a physical PSU is selected more than once."
+            )
+            st.warning(
+                "Do not use this option for PPS without replacement, systematic PPS, "
+                "or when selection probabilities are guessed from PSU size measures. "
+                "Supply probabilities from the actual first-stage sampling design."
+            )
+            pps_identifier_options = [x for x in ms_cols if x not in (ms_ssu,)]
+            pps_psu = st.selectbox(
+                "Physical PSU identifier", pps_identifier_options,
+                key="ppswr_psu_variable",
+            )
+            pps_draw_options = [x for x in ms_cols if x not in (pps_psu, ms_ssu)]
+            pps_draw = st.selectbox(
+                "Unique PSU draw identifier", pps_draw_options,
+                key="ppswr_draw_variable",
+            )
+            pps_ssu = st.selectbox(
+                "SSU identifier", [x for x in ms_cols if x not in (pps_psu, pps_draw)],
+                key="ppswr_ssu_variable",
+            )
+            pps_probability_options = [
+                x for x in ms_numeric
+                if x not in (pps_psu, pps_draw, pps_ssu, ms_strata)
+            ]
+            pps_probability = st.selectbox(
+                "Per-draw PSU selection probability", pps_probability_options,
+                key="ppswr_probability_variable",
+            )
+            pps_ssu_population_options = [
+                x for x in pps_probability_options if x != pps_probability
+            ]
+            pps_ssu_population = st.selectbox(
+                "Population SSU count in each selected PSU", pps_ssu_population_options,
+                key="ppswr_ssu_population_variable",
+            )
+            pps_outcome_options = [
+                x for x in pps_ssu_population_options if x != pps_ssu_population
+            ]
+            pps_kind = st.selectbox(
+                "PPSWR parameter", ["Total", "Mean", "Proportion"],
+                key="ppswr_parameter_kind",
+            )
+            pps_outcome = st.selectbox(
+                "SSU outcome / numerator total", pps_outcome_options,
+                key="ppswr_outcome_variable",
+            )
+            pps_denominator_options = [
+                x for x in pps_outcome_options if x != pps_outcome
+            ]
+            pps_denominator = None
+            if pps_kind in ("Mean", "Proportion") and pps_denominator_options:
+                pps_denominator = st.selectbox(
+                    "SSU eligible-element count", pps_denominator_options,
+                    key="ppswr_denominator_variable",
+                )
+            pps_confidence = st.selectbox(
+                "PPSWR confidence level", [0.90, 0.95, 0.99],
+                index=1, format_func=lambda x: f"{x:.0%}",
+                key="ppswr_confidence_level",
+            )
+            pps_key = (
+                _dataset_analysis_key(df), pps_kind, pps_psu, pps_draw, pps_ssu,
+                pps_probability, pps_ssu_population, pps_outcome,
+                pps_denominator, ms_strata, pps_confidence,
+            )
+            pps_ready = (
+                pps_psu != pps_draw and pps_psu != pps_ssu
+                and pps_draw != pps_ssu and pps_outcome not in (
+                    pps_psu, pps_draw, pps_ssu, pps_probability, pps_ssu_population,
+                )
+                and (pps_kind == "Total" or pps_denominator is not None)
+            )
+            if st.button(
+                "Run two-stage PPSWR estimate",
+                type="primary", key="run_two_stage_ppswr",
+                disabled=not pps_ready,
+            ):
+                try:
+                    common_pps_args = (
+                        df, pps_outcome, pps_psu, pps_draw, pps_ssu,
+                        pps_ssu_population, pps_probability, ms_strata, pps_confidence,
+                    )
+                    if pps_kind == "Total":
+                        pps_result = run_two_stage_ppswr_total_service(
+                            df, pps_outcome, pps_psu, pps_draw, pps_ssu,
+                            pps_ssu_population, pps_probability, ms_strata, pps_confidence,
+                        )
+                    elif pps_kind == "Mean":
+                        pps_result = run_two_stage_ppswr_mean_service(
+                            df, pps_outcome, pps_denominator, pps_psu, pps_draw,
+                            pps_ssu, pps_ssu_population, pps_probability,
+                            ms_strata, pps_confidence,
+                        )
+                    else:
+                        pps_result = run_two_stage_ppswr_proportion_service(
+                            df, pps_outcome, pps_denominator, pps_psu, pps_draw,
+                            pps_ssu, pps_ssu_population, pps_probability,
+                            ms_strata, pps_confidence,
+                        )
+                    st.session_state["two_stage_ppswr_result"] = pps_result
+                    st.session_state["two_stage_ppswr_result_key"] = pps_key
+                except (TypeError, ValueError, KeyError) as exc:
+                    st.error(str(exc))
+            saved_pps = st.session_state.get("two_stage_ppswr_result")
+            if (
+                saved_pps is not None
+                and st.session_state.get("two_stage_ppswr_result_key") == pps_key
+            ):
+                estimate = saved_pps.metadata["estimate"]
+                st.metric(
+                    f"Estimated population {pps_kind.lower()}",
+                    f"{estimate:.2%}" if pps_kind == "Proportion" else f"{estimate:,.4g}",
+                )
+                st.metric(
+                    "Design-based standard error",
+                    f"{saved_pps.metadata['standard_error']:.4g}",
+                )
+                ci = saved_pps.metadata["confidence_interval"]
+                if pps_kind == "Proportion":
+                    st.write(f"{pps_confidence:.0%} confidence interval: [{ci[0]:.2%}, {ci[1]:.2%}]")
+                else:
+                    st.write(f"{pps_confidence:.0%} confidence interval: [{ci[0]:,.4g}, {ci[1]:,.4g}]")
+                st.dataframe(saved_pps.tables["stratum_estimates"], hide_index=True, use_container_width=True)
+                if "psu_draw_details" in saved_pps.tables:
+                    with st.expander("PSU draw-level details"):
+                        st.dataframe(saved_pps.tables["psu_draw_details"], hide_index=True, use_container_width=True)
+                for warning in saved_pps.limitations:
+                    st.warning(warning)
 
         st.info(
             "Unweighted question-level frequencies above describe the imported "
