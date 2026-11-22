@@ -582,7 +582,7 @@ def test_exact_one_sample_binomial_test_and_clopper_pearson_interval():
 
 def test_exact_binomial_supports_directional_alternative_and_missing_values():
     from timan_intelligence.core.statistical_engine import run_one_sample_binomial_test
-    frame = pd.DataFrame({"event": [1, 1, 1, 0, 0, None]})
+    frame = pd.DataFrame({"event": [1, 1, 1, 1, 0, None]})
     result = run_one_sample_binomial_test(frame, "event", 0.5, alternative="greater")
     assert result.metadata["alternative"] == "greater"
     assert result.metadata["missing_values_excluded"] == 1
