@@ -73,6 +73,7 @@ from timan_intelligence.services.analysis_service import (
     recommend_categorical_outcome_model_service,
     run_regression_diagnostics_service,
 )
+from timan_intelligence.services.survey_weighting_report import generate_survey_weighting_pdf_report
 from timan_intelligence.entitlements.subscriptions import process_due_subscriptions
 from timan_intelligence.entitlements.service import (
     DatasetLimitExceeded,
@@ -6085,6 +6086,34 @@ elif page == "Survey Analysis":
                                 file_name="timanstat_weight_diagnostics.csv",
                                 mime="text/csv", key="download_weight_diagnostics_existing",
                             )
+                            st.markdown("#### Technical report")
+                            report_col1, report_col2 = st.columns(2)
+                            with report_col1:
+                                report_project_name = st.text_input(
+                                    "Project / study name (optional)",
+                                    key="weight_report_project_name",
+                                )
+                            with report_col2:
+                                report_prepared_by = st.text_input(
+                                    "Prepared by (optional)",
+                                    key="weight_report_prepared_by",
+                                )
+                            try:
+                                weighting_pdf = generate_survey_weighting_pdf_report(
+                                    weighting_result,
+                                    project_name=report_project_name.strip() or None,
+                                    prepared_by=report_prepared_by.strip() or None,
+                                )
+                                st.download_button(
+                                    "Download survey weighting technical report (PDF)",
+                                    data=weighting_pdf,
+                                    file_name="TimanStat_Survey_Weighting_Technical_Report.pdf",
+                                    mime="application/pdf",
+                                    type="primary",
+                                    key="download_survey_weighting_technical_report",
+                                )
+                            except (TypeError, ValueError, KeyError) as exc:
+                                st.error(f"Could not generate the weighting technical report: {exc}")
                             for finding in weighting_result.findings:
                                 st.success(finding)
                             for warning in weighting_result.limitations:
