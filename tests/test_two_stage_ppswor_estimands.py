@@ -110,3 +110,28 @@ def test_two_stage_ppswor_domain_total_rejects_missing_domain_and_outcome():
         estimate_two_stage_ppswor_domain_total(
             frame, "outcome", "domain", "A", *common
         )
+
+
+
+def test_shared_services_wrap_mean_proportion_and_domain_estimands():
+    from timan_intelligence.services.analysis_service import (
+        run_two_stage_ppswor_domain_total_service,
+        run_two_stage_ppswor_mean_service,
+        run_two_stage_ppswor_proportion_service,
+    )
+
+    frame, common = fixture()
+    mean = run_two_stage_ppswor_mean_service(
+        frame, "outcome", 12, *common
+    )
+    proportion = run_two_stage_ppswor_proportion_service(
+        frame, "binary", 12, *common
+    )
+    domain = run_two_stage_ppswor_domain_total_service(
+        frame, "outcome", "domain", "A", *common
+    )
+    assert mean.status == proportion.status == domain.status == "success"
+    assert mean.metadata["estimand"] == "population mean"
+    assert proportion.metadata["estimand"] == "population proportion"
+    assert domain.metadata["estimand"] == "domain total"
+    assert "psu_details" in domain.tables
