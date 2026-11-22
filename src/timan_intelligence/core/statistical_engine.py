@@ -704,3 +704,121 @@ def run_proportion_confidence_interval(
             "inference_framework": "iid_wilson_score",
         },
     )
+
+
+def run_welch_mean_difference_confidence_interval(
+    df: pd.DataFrame,
+    outcome_variable: str,
+    group_variable: str,
+    confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Estimate the difference between two independent means using Welch's t interval.
+
+    The reported difference is mean(group 1) minus mean(group 2), where
+    group order follows first appearance in the data. Assumes independent
+    observations and does not adjust for complex survey designs.
+    """
+    from scipy.stats import t
+
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Expected a pandas DataFrame.")
+    if outcome_variable not in df.columns or group_variable not in df.columns:
+        raise ValueError("Both outcome and grouping variables must exist.")
+    if outcome_variable == group_variable:
+        raise ValueError("Outcome and grouping variables must be different.")
+    if not pd.api.types.is_numeric_dtype(df[outcome_variable]):
+        raise TypeError("The outcome variable must be numeric.")
+    if isinstance(confidence_level, bool) or not isinstance(confidence_level, (int, float)):
+        raise TypeError("Confidence level must be numeric.")
+    if not 0 < float(confidence_level) < 1:
+        raise ValueError("Confidence level must be greater than 0 and less than 1.")
+
+    groups = df[group_variable]
+    if groups.isna().any():
+        raise ValueError("The grouping variable contains missing group labels.")
+    labels = list(pd.unique(groups))
+    if len(labels) != 2:
+        raise ValueError("A Welch mean-difference interval requires exactly two groups.")
+
+    values = df[outcome_variable]
+    finite_mask = values.notna() & values.map(lambda value: pd.notna(value) and abs(float(value)) != float("inf"))
+    clean = df.loc[finite_mask, [group_variable, outcome_variable]]
+    samples = [
+        clean.loc[clean[group_variable] == label, outcome_variable].astype(float)
+        for label in labels
+    ]
+    n1, n2 = (int(sample.size) for sample in samples)
+    if n1 < 2 or n2 < 2:
+        raise ValueError("At least two finite observations are required in each group.")
+
+    mean1, mean2 = (float(sample.mean()) for sample in samples)
+    var1, var2 = (float(sample.var(ddof=1)) for sample in samples)
+    component1, component2 = var1 / n1, var2 / n2
+    se_squared = component1 + component2
+    difference = mean1 - mean2
+    if se_squared == 0:
+        raise ValueError("A finite Welch interval cannot be calculated when both groups have zero variance.")
+    standard_error = se_squared ** 0.5
+    df_denominator = component1 ** 2 / (n1 - 1) + component2 ** 2 / (n2 - 1)
+    degrees_freedom = se_squared ** 2 / df_denominator
+    critical = float(t.ppf(0.5 + float(confidence_level) / 2.0, degrees_freedom))
+    margin = critical * standard_error
+    lower, upper = difference - margin, difference + margin
+    missing_count = int(values.isna().sum())
+    infinite_count = int((values.notna() & ~finite_mask).sum())
+
+    summary = pd.DataFrame([{
+        "Group 1": str(labels[0]),
+        "Group 2": str(labels[1]),
+        "Group 1 n": n1,
+        "Group 2 n": n2,
+        "Group 1 mean": mean1,
+        "Group 2 mean": mean2,
+        "Mean difference (group 1 - group 2)": difference,
+        "Standard error": standard_error,
+        "Welch degrees of freedom": degrees_freedom,
+        "Confidence level": float(confidence_level),
+        "Lower confidence limit": lower,
+        "Upper confidence limit": upper,
+    }])
+    limitations = [
+        "Assumes independent observations within and between the two groups.",
+        "Uses Welch-Satterthwaite degrees of freedom and does not assume equal population variances.",
+        "Not adjusted for survey weights, clustering, stratification, repeated measures or finite-population corrections.",
+    ]
+    if missing_count:
+        limitations.append(f"{missing_count} missing outcome value(s) were excluded.")
+    if infinite_count:
+        limitations.append(f"{infinite_count} infinite outcome value(s) were excluded.")
+
+    return AnalysisResult(
+        title=f"Welch confidence interval for mean difference: {outcome_variable}",
+        method="Welch-Satterthwaite confidence interval for difference between two independent means",
+        status="success",
+        tables={"summary": summary},
+        findings=[
+            f"Mean difference (group {labels[0]} minus group {labels[1]}): {difference:.6g}.",
+            f"Standard error: {standard_error:.6g}; Welch degrees of freedom: {degrees_freedom:.4g}.",
+            f"{float(confidence_level):.1%} confidence interval: [{lower:.6g}, {upper:.6g}].",
+        ],
+        assumptions=[
+            "The grouping variable identifies exactly two independent groups.",
+            "The outcome is numeric and observations are independent.",
+            "Welch-Satterthwaite approximation is appropriate for the mean difference.",
+        ],
+        limitations=limitations,
+        metadata={
+            "outcome_variable": outcome_variable,
+            "group_variable": group_variable,
+            "group_1_label": str(labels[0]),
+            "group_2_label": str(labels[1]),
+            "estimate": difference,
+            "standard_error": standard_error,
+            "degrees_of_freedom": degrees_freedom,
+            "confidence_level": float(confidence_level),
+            "confidence_interval": (float(lower), float(upper)),
+            "missing_values": missing_count,
+            "infinite_values": infinite_count,
+            "sampling_design_aware": False,
+        },
+    )
