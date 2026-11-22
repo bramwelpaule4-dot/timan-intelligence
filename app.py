@@ -5735,6 +5735,105 @@ elif page == "Survey Analysis":
                 for warning in cluster_result.limitations:
                     st.warning(warning)
 
+        with st.expander("Sampling selection and fieldwork list generator", expanded=False):
+            from timan_intelligence.services.analysis_service import (
+                run_sample_selection_service,
+                run_stratified_sample_selection_service,
+            )
+
+            st.write(
+                "Upload a complete sampling frame and select units reproducibly. "
+                "Main and reserve samples are exported separately. PPSWOR here uses "
+                "successive selection; its conditional draw probabilities are not "
+                "exact first-order inclusion probabilities."
+            )
+            sampling_frame_file = st.file_uploader(
+                "Sampling frame (CSV)", type=["csv"], key="selection_frame_upload"
+            )
+            if sampling_frame_file is not None:
+                try:
+                    selection_frame = pd.read_csv(sampling_frame_file)
+                    if selection_frame.empty or len(selection_frame.columns) == 0:
+                        st.error("The uploaded sampling frame is empty.")
+                    else:
+                        selection_id = st.selectbox(
+                            "Unique sampling-unit identifier",
+                            selection_frame.columns, key="selection_id_col",
+                        )
+                        selection_method = st.selectbox(
+                            "Selection design",
+                            ["srswor", "srswr", "systematic", "ppswr", "ppswor"],
+                            format_func=lambda value: {
+                                "srswor": "Simple random — without replacement",
+                                "srswr": "Simple random — with replacement",
+                                "systematic": "Systematic random sampling",
+                                "ppswr": "PPS — with replacement",
+                                "ppswor": "PPS — successive without replacement",
+                            }[value],
+                            key="selection_method",
+                        )
+                        selection_size_col = None
+                        if selection_method.startswith("pps"):
+                            selection_size_col = st.selectbox(
+                                "Positive measure of size",
+                                [col for col in selection_frame.columns if col != selection_id],
+                                key="selection_size_col",
+                            )
+                        selection_n = st.number_input(
+                            "Main sample size", min_value=1,
+                            max_value=max(1, len(selection_frame)),
+                            value=min(30, len(selection_frame)), step=1,
+                            key="selection_sample_size",
+                        )
+                        selection_reserve_n = st.number_input(
+                            "Separate reserve sample size", min_value=0,
+                            max_value=max(0, len(selection_frame) - int(selection_n)),
+                            value=0, step=1, key="selection_reserve_size",
+                        )
+                        selection_seed = st.number_input(
+                            "Random seed (record this for reproducibility)",
+                            min_value=0, value=2026, step=1,
+                            key="selection_seed",
+                        )
+                        if st.button("Select sampling units", type="primary", key="run_sampling_selection"):
+                            try:
+                                selected_result = run_sample_selection_service(
+                                    selection_frame, selection_id, int(selection_n),
+                                    method=selection_method, seed=int(selection_seed),
+                                    size_column=selection_size_col,
+                                    reserve_size=int(selection_reserve_n),
+                                )
+                                st.session_state["sampling_selection_result"] = selected_result
+                                st.session_state["sampling_selection_frame_name"] = sampling_frame_file.name
+                            except (TypeError, ValueError, KeyError) as exc:
+                                st.error(str(exc))
+                        selected_result = st.session_state.get("sampling_selection_result")
+                        if selected_result is not None:
+                            st.metric("Main sample selected", f"{selected_result.metadata['sample_size']:,}")
+                            st.dataframe(selected_result.tables["selected_sample"], hide_index=True, use_container_width=True)
+                            st.download_button(
+                                "Download main fieldwork list (CSV)",
+                                data=selected_result.tables["selected_sample"].to_csv(index=False).encode("utf-8"),
+                                file_name="timanstat_main_fieldwork_sample.csv",
+                                mime="text/csv", key="download_main_fieldwork_sample",
+                            )
+                            if not selected_result.tables["reserve_sample"].empty:
+                                st.dataframe(selected_result.tables["reserve_sample"], hide_index=True, use_container_width=True)
+                                st.download_button(
+                                    "Download reserve list (CSV)",
+                                    data=selected_result.tables["reserve_sample"].to_csv(index=False).encode("utf-8"),
+                                    file_name="timanstat_reserve_fieldwork_sample.csv",
+                                    mime="text/csv", key="download_reserve_fieldwork_sample",
+                                )
+                            st.caption(
+                                f"Method: {selected_result.method} | Seed: {selected_result.metadata['seed']} | "
+                                f"Frame size: {selected_result.metadata['population_size']}"
+                            )
+                            for warning in selected_result.limitations:
+                                st.warning(warning)
+                except (ValueError, pd.errors.ParserError, UnicodeDecodeError) as exc:
+                    st.error(f"Could not read the sampling frame: {exc}")
+
         st.info(
             "Unweighted question-level frequencies above describe the imported "
             "records. Use the weighted estimator separately when a documented "
