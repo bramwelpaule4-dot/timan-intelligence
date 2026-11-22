@@ -1267,3 +1267,45 @@ def run_ppswor_domain_ratio_service(
             "confidence_level": output["confidence_level"],
         },
     )
+
+
+def run_ppswor_domain_total_service(
+    df: pd.DataFrame,
+    domain_name: str,
+    domain_total_variable: str,
+    psu_variable: str,
+    inclusion_probability_variable: str,
+    joint_inclusion_probabilities: pd.DataFrame | dict[Any, pd.DataFrame],
+    strata_variable: str | None = None,
+    confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Run a design-based PPSWOR Horvitz-Thompson domain total analysis."""
+    from timan_intelligence.core.ppswor_survey import estimate_ppswor_domain_total
+
+    output = estimate_ppswor_domain_total(
+        df, domain_name, domain_total_variable, psu_variable,
+        inclusion_probability_variable, joint_inclusion_probabilities,
+        strata_variable, confidence_level,
+    )
+    return AnalysisResult(
+        title=f"PPSWOR domain total: {domain_name}",
+        method=output["metadata"]["estimator"],
+        status="success",
+        tables={
+            "stratum_estimates": output["strata"],
+            "pairwise_variance": output["pairwise_variance"],
+        },
+        findings=list(output["findings"]),
+        assumptions=[
+            "Every sampled PSU is retained, including PSUs with zero domain totals.",
+            "Each row represents one sampled PSU with a fully observed domain-specific total.",
+            "The original fixed-size PPSWOR design and its actual first- and second-order inclusion probabilities are preserved.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata={
+            **output["metadata"], "estimate": output["estimate"],
+            "variance": output["variance"], "standard_error": output["standard_error"],
+            "confidence_interval": output["confidence_interval"],
+            "confidence_level": output["confidence_level"],
+        },
+    )
