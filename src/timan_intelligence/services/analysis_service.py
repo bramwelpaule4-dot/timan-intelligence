@@ -1510,6 +1510,17 @@ def run_survey_weighting_service(
     output["analysis_weight"] = 0.0
     output.loc[analysis.index, "analysis_weight"] = final_weights
     analysis_diagnostics = weight_diagnostics(final_weights)
+    stage_weight_columns = [("base_weight", output["base_weight"].loc[analysis.index])]
+    for stage_column in (
+        "nonresponse_adjusted_weight", "poststratified_weight",
+        "raked_weight", "trimmed_weight",
+    ):
+        if stage_column in analysis.columns:
+            stage_weight_columns.append((stage_column, analysis[stage_column]))
+    stage_diagnostics = pd.DataFrame([
+        {"stage": stage_name, **weight_diagnostics(stage_values)}
+        for stage_name, stage_values in stage_weight_columns
+    ])
     diagnostics = pd.DataFrame([{"stage": "final", **analysis_diagnostics}])
     findings = [
         f"Constructed final weights for {len(analysis):,} analysis-eligible records.",
@@ -1529,7 +1540,7 @@ def run_survey_weighting_service(
     return AnalysisResult(
         title="Survey weighting and adjustment",
         method=" -> ".join(stages),
-        tables={"weighted_dataset": output, "weight_diagnostics": diagnostics},
+        tables={"weighted_dataset": output, "weight_diagnostics": diagnostics, "weight_stage_diagnostics": stage_diagnostics},
         findings=findings,
         assumptions=[
             "The supplied inclusion probabilities are exact first-order inclusion probabilities for the sampled units.",
@@ -1542,5 +1553,24 @@ def run_survey_weighting_service(
             "stages": stages,
             "raking": raking_info,
             "diagnostics": analysis_diagnostics,
+            "stage_diagnostics": stage_diagnostics.to_dict(orient="records"),
+            "weighting_specification": {
+                "inclusion_probability_column": inclusion_probability_column,
+                "response_column": response_column,
+                "adjustment_cells": list(adjustment_cells or []),
+                "poststratification_variable": (
+                    poststrata_column.removeprefix("_timan_post_")
+                    if poststrata_column else None
+                ),
+                "population_totals": dict(population_totals or {}),
+                "raking_margins": {
+                    column.removeprefix("_timan_rake_"): dict(targets)
+                    for column, targets in (raking_margins or {}).items()
+                },
+                "trimming_quantiles": list(trim_quantiles) if trim_quantiles is not None else None,
+                "records_in_input": int(len(output)),
+                "records_in_weighted_analysis": int(len(analysis)),
+                "records_with_zero_analysis_weight": int(len(output) - len(analysis)),
+            },
         },
     )
