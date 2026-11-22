@@ -4238,8 +4238,10 @@ elif page == "Survey Analysis":
         st.info(
             "Unweighted question-level frequencies above describe the imported "
             "records. Use the weighted estimator separately when a documented "
-            "survey weight is available. Complex-design inference is not yet "
-            "supported."
+            "survey weight is available. Two-stage design-based totals, means "
+            "and proportions are available when their sampling-frame counts and "
+            "SSU-level aggregates are supplied; other complex designs remain "
+            "unsupported."
         )
     else:
         st.info("Upload and import a survey dataset in Data Management to begin.")
