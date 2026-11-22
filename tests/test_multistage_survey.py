@@ -203,3 +203,60 @@ def test_two_stage_ratio_rejects_zero_population_denominator():
             df, "outcome", "element_count", "psu", "ssu",
             "psu_population", "ssu_population", "stratum",
         )
+
+
+def test_two_stage_domain_mean_retains_non_domain_ssus_in_variance():
+    from timan_intelligence.core.multistage_survey import estimate_two_stage_domain_mean
+    df = estimator_sample()
+    df["domain"] = ["target", "other"] * 4
+    df["element_count"] = [10] * len(df)
+    result = estimate_two_stage_domain_mean(
+        df, "outcome", "element_count", "domain", "target", "psu", "ssu",
+        "psu_population", "ssu_population", "stratum",
+    )
+    assert result["estimate"] == pytest.approx(520 / 160)
+    assert result["metadata"]["sampled_domain_ssus"] == 4
+    assert result["metadata"]["sampled_non_domain_ssus"] == 4
+    assert len(result["psu_details"]) == 4
+    assert result["standard_error"] >= 0
+
+
+def test_two_stage_domain_proportion_and_total_are_supported():
+    from timan_intelligence.core.multistage_survey import (
+        estimate_two_stage_domain_proportion, estimate_two_stage_domain_total,
+    )
+    df = estimator_sample()
+    df["domain"] = ["target", "other"] * 4
+    df["eligible"] = [10] * len(df)
+    df["successes"] = [1, 8, 2, 7, 3, 6, 4, 5]
+    proportion = estimate_two_stage_domain_proportion(
+        df, "successes", "eligible", "domain", "target", "psu", "ssu",
+        "psu_population", "ssu_population", "stratum",
+    )
+    total = estimate_two_stage_domain_total(
+        df, "outcome", "domain", "target", "psu", "ssu",
+        "psu_population", "ssu_population", "stratum",
+    )
+    assert proportion["estimate"] == pytest.approx(10 / 40)
+    assert 0 <= proportion["confidence_interval"][0] <= 1
+    assert 0 <= proportion["confidence_interval"][1] <= 1
+    assert total["estimate"] == pytest.approx(260)
+    assert len(total["psu_details"]) == 4
+
+
+def test_two_stage_domain_rejects_missing_or_absent_domain():
+    from timan_intelligence.core.multistage_survey import estimate_two_stage_domain_total
+    df = estimator_sample()
+    df["domain"] = ["target"] * len(df)
+    df.loc[0, "domain"] = None
+    with pytest.raises(ValueError, match="cannot be missing"):
+        estimate_two_stage_domain_total(
+            df, "outcome", "domain", "target", "psu", "ssu",
+            "psu_population", "ssu_population", "stratum",
+        )
+    df["domain"] = ["other"] * len(df)
+    with pytest.raises(ValueError, match="no sampled SSUs"):
+        estimate_two_stage_domain_total(
+            df, "outcome", "domain", "target", "psu", "ssu",
+            "psu_population", "ssu_population", "stratum",
+        )
