@@ -45,11 +45,11 @@ def adjust_nonresponse(
         raise ValueError("No respondents are present.")
     if frame[adjustment_cells].isna().any().any():
         raise ValueError("Nonresponse adjustment-cell variables cannot contain missing values.")
-    grouped = frame.groupby(adjustment_cells, sort=False).groups
+    grouped = frame.reset_index(drop=True).groupby(adjustment_cells, sort=False).groups
     rate_map = {}
     for key, index in grouped.items():
         normalized_key = key if isinstance(key, tuple) else (key,)
-        positions = frame.index.get_indexer(index)
+        positions = np.asarray(index, dtype=int)
         cell_weight = weights[positions]
         cell_response = response[positions]
         rate_map[normalized_key] = float(np.dot(cell_weight, cell_response) / cell_weight.sum())
