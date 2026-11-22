@@ -341,3 +341,30 @@ def test_welch_mean_difference_interval_executor_blocks_complex_sampling():
     }
     with pytest.raises(AnalysisExecutionError, match="not validated"):
         execute_recommendation(df, recommendation, approved=True)
+
+
+def test_execution_runs_registered_paired_mean_change_interval():
+    df = pd.DataFrame({"before": [10.0, 12.0, 14.0, 16.0], "after": [12.0, 15.0, 15.0, 20.0]})
+    recommendation = {
+        "method": "Paired mean-change confidence interval",
+        "method_id": "method.inference.confidence_interval.mean_difference.paired",
+        "variables": ["before", "after"],
+        "status": "review_required",
+        "design_context": {"study_design": "paired"},
+        "options": {"confidence_level": 0.90},
+    }
+    result = execute_recommendation(df, recommendation, approved=True)
+    assert result.status == "success"
+    assert result.metadata["method_id"] == "method.inference.confidence_interval.mean_difference.paired"
+    assert result.metadata["confidence_level"] == pytest.approx(0.90)
+
+def test_paired_mean_change_executor_blocks_complex_sampling():
+    df = pd.DataFrame({"before": [1.0, 2.0, 3.0], "after": [2.0, 3.0, 5.0]})
+    recommendation = {
+        "method": "Paired mean-change confidence interval",
+        "variables": ["before", "after"],
+        "status": "review_required",
+        "design_context": {"sampling_design": "cluster"},
+    }
+    with pytest.raises(AnalysisExecutionError, match="not validated"):
+        execute_recommendation(df, recommendation, approved=True)
