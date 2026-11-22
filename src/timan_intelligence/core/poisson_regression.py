@@ -103,8 +103,17 @@ def run_poisson_regression(
 
     null_rate = y.sum() / np.exp(offset).sum()
     null_mu = np.exp(offset) * null_rate
-    null_deviance = 2 * np.sum(np.where(y > 0, y * np.log(y / null_mu), 0) - (y - null_mu))
-    fitted_deviance = 2 * np.sum(np.where(y > 0, y * np.log(y / mu), 0) - (y - mu))
+    def poisson_deviance(observed, expected):
+        terms = expected - observed
+        positive = observed > 0
+        terms = terms.astype(float, copy=True)
+        terms[positive] += observed[positive] * np.log(
+            observed[positive] / expected[positive]
+        )
+        return float(2 * np.sum(terms))
+
+    null_deviance = poisson_deviance(y, null_mu)
+    fitted_deviance = poisson_deviance(y, mu)
     pearson_chi2 = float(np.sum((y - mu) ** 2 / np.maximum(mu, 1e-12)))
     residual_df = max(n - p - 1, 1)
     dispersion = pearson_chi2 / residual_df
