@@ -1956,3 +1956,9 @@ def run_paired_samples_t_test_service(
     """Run a paired-samples Student-t test through the shared analysis service."""
     from timan_intelligence.core.statistical_engine import run_paired_samples_t_test
     return run_paired_samples_t_test(df, before_variable, after_variable, confidence_level, alternative)
+
+
+def run_chi_square_test_of_independence_service(df: pd.DataFrame, row_variable: str, column_variable: str) -> AnalysisResult:
+    """Run Pearson's chi-square test through the shared analysis service."""
+    from timan_intelligence.core.statistical_engine import run_chi_square_test_of_independence
+    return run_chi_square_test_of_independence(df, row_variable, column_variable)

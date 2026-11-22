@@ -14,6 +14,69 @@ from scipy.stats import f_oneway, ttest_ind
 from timan_intelligence.core.contracts import AnalysisResult
 
 
+
+def run_chi_square_test_of_independence(df: pd.DataFrame, row_variable: str, column_variable: str) -> AnalysisResult:
+    """Test association between two categorical variables using Pearson's chi-square test."""
+    from scipy.stats import chi2_contingency
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Expected a pandas DataFrame.")
+    for variable, label in ((row_variable, "first"), (column_variable, "second")):
+        if not isinstance(variable, str) or variable not in df.columns:
+            raise ValueError(f"Select a valid {label} categorical variable.")
+        if pd.api.types.is_numeric_dtype(df[variable]):
+            raise TypeError("Both variables must be categorical. Recode numeric category codes as categorical variables before testing.")
+    if row_variable == column_variable:
+        raise ValueError("Choose two different categorical variables.")
+    pair = df[[row_variable, column_variable]]
+    complete = pair.dropna()
+    excluded = int(len(pair) - len(complete))
+    if complete.empty:
+        raise ValueError("No complete observations remain for the contingency table.")
+    observed = pd.crosstab(complete[row_variable], complete[column_variable])
+    if observed.shape[0] < 2 or observed.shape[1] < 2:
+        raise ValueError("The chi-square test requires at least two observed categories in each variable.")
+    statistic, p_value, dfree, expected_values = chi2_contingency(observed.to_numpy(), correction=False)
+    expected = pd.DataFrame(expected_values, index=observed.index, columns=observed.columns)
+    n = int(observed.to_numpy().sum())
+    minimum_expected = float(expected_values.min())
+    small = int((expected_values < 5).sum())
+    cells = int(expected_values.size)
+    r, k = observed.shape
+    cramers_v = float((statistic / (n * min(r - 1, k - 1))) ** 0.5)
+    residuals = (observed - expected) / expected.pow(0.5)
+    summary = pd.DataFrame([{"Chi-square statistic": float(statistic), "Degrees of freedom": int(dfree),
+        "p-value": float(p_value), "Cramer's V": cramers_v, "Complete observations": n,
+        "Excluded missing pairs": excluded, "Minimum expected count": minimum_expected,
+        "Expected cells below 5": small, "Expected cell count": cells}])
+    findings = [f"Pearson chi-square statistic is {statistic:.4g} with {dfree} degrees of freedom (p = {p_value:.4g}).",
+        f"Cramer's V is {cramers_v:.4g}; interpret its magnitude in the context of the table and subject matter.",
+        f"The table contains {n:,} complete observations across {r} by {k} categories."]
+    limitations = [
+        "The ordinary Pearson chi-square test assumes independent observational units and is not adjusted for survey weights, clustering, stratification or finite-population corrections.",
+        "The test identifies evidence of association, not causation or the direction of a relationship.",
+        "Cramer's V is an uncorrected effect-size estimate; interpret it in context."]
+    if small:
+        limitations.append(f"{small} of {cells} expected cells ({small / cells:.1%}) are below 5; the asymptotic chi-square approximation may be unreliable.")
+    if minimum_expected < 1:
+        limitations.append("At least one expected cell count is below 1; do not rely on the asymptotic p-value. Consider an appropriate exact or Monte Carlo procedure.")
+    if excluded:
+        limitations.append(f"{excluded:,} rows with missing values in either variable were excluded using complete-case analysis.")
+    return AnalysisResult(title=f"Chi-square test of independence: {row_variable} × {column_variable}",
+        method="Pearson chi-square test of independence", status="success",
+        tables={"contingency_table": observed.reset_index(), "expected_counts": expected.reset_index(),
+            "pearson_residuals": residuals.reset_index(), "test_summary": summary},
+        findings=findings, assumptions=["Both variables are categorical with mutually exclusive categories.",
+            "Each observational unit contributes to exactly one cell.",
+            "Observations are independent under the ordinary Pearson chi-square model.",
+            "Expected cell counts are adequate for the asymptotic chi-square approximation."],
+        limitations=limitations, metadata={"row_variable": row_variable, "column_variable": column_variable,
+            "chi_square": float(statistic), "degrees_of_freedom": int(dfree), "p_value": float(p_value),
+            "cramers_v": cramers_v, "n_observations": n, "missing_pairs_excluded": excluded,
+            "minimum_expected_count": minimum_expected, "expected_cells_below_5": small,
+            "expected_cell_count": cells, "sampling_design_aware": False,
+            "study_design": "independent_observations", "continuity_correction": False})
+
+
 def run_descriptive_statistics(
     df: pd.DataFrame,
     variable: str,

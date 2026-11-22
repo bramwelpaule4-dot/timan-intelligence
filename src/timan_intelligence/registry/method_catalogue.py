@@ -25,6 +25,7 @@ IMPLEMENTED_METHODS = frozenset(
         "method.inference.confidence_interval.mean",
         "method.inference.comparison.t_test.one_sample",
         "method.inference.comparison.t_test.paired",
+        "method.inference.association.chi_square.independence",
         "method.inference.confidence_interval.proportion",
         "method.inference.confidence_interval.mean_difference.welch",
         "method.inference.confidence_interval.mean_difference.paired",
@@ -387,6 +388,9 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             assumptions=["Observations are independent for the ordinary test.", "Expected cell counts are assessed.", "Sampling design is compatible with the ordinary test."],
             outputs=["Contingency table", "Expected counts", "Chi-square statistic", "Degrees of freedom", "P-value", "Association effect size"],
             use_cases=["Test association between categorical variables", "Examine relationships between demographic groups and outcomes"],
+            aliases=["Pearson chi-square test", "Chi-square association test"],
+            implementation_status="implemented", verification_status="unit_tested", execution_eligibility="conditional",
+            limitations=["Requires independent observational units and adequate expected cell counts.", "Not adjusted for complex survey sampling or repeated-measures data.", "Association does not establish causation."],
         ),
         _method(
             entity_id="method.inference.association.fisher_exact",

@@ -22,6 +22,7 @@ from timan_intelligence.core.statistical_engine import (
     run_welch_mean_difference_confidence_interval,
     run_paired_mean_difference_confidence_interval,
     run_paired_samples_t_test,
+    run_chi_square_test_of_independence,
     run_one_way_anova,
 )
 
@@ -38,6 +39,7 @@ _EXECUTOR_BY_METHOD_ID = {
     "method.inference.confidence_interval.mean_difference.welch": "welch_mean_difference_ci",
     "method.inference.confidence_interval.mean_difference.paired": "paired_mean_difference_ci",
     "method.inference.comparison.t_test.paired": "paired_t",
+    "method.inference.association.chi_square.independence": "chi_square_independence",
     "method.inference.comparison.t_test.independent.welch": "welch_t",
     "method.inference.comparison.anova.one_way": "anova",
 }
@@ -89,7 +91,7 @@ def _validate_design_compatibility(
         "paired", "repeated_measure", "repeated_measures",
         "longitudinal", "time_series",
     }
-    if executor in {"welch_t", "anova", "welch_mean_difference_ci"} and study_design in repeated_designs:
+    if executor in {"welch_t", "anova", "welch_mean_difference_ci", "chi_square_independence"} and study_design in repeated_designs:
         raise AnalysisExecutionError(
             "Execution blocked: this executor assumes independent groups and "
             "is not validated for paired, repeated-measures, longitudinal or "
@@ -237,6 +239,10 @@ def execute_recommendation(
         result = run_proportion_confidence_interval(
             df, variables[0], confidence_level=confidence_level
         )
+    elif executor == "chi_square_independence":
+        if len(variables) != 2:
+            raise AnalysisExecutionError("A chi-square test of independence requires exactly two categorical variables.")
+        result = run_chi_square_test_of_independence(df, variables[0], variables[1])
     elif executor == "paired_t":
         if len(variables) != 2:
             raise AnalysisExecutionError("A paired-samples t-test requires before and after measurement variables.")
