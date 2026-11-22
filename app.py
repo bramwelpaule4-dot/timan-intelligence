@@ -4968,8 +4968,9 @@ elif page == "Survey Analysis":
                 "with Sen–Yates–Grundy (SYG) variance."
             )
             st.warning(
-                "This is a PSU-level estimator. It requires fully observed PSU totals "
-                "and does not support SSU subsampling or two-stage PPSWOR. "
+                "This PSU-level option requires fully observed PSU totals and "
+                "does not support SSU subsampling. For PPSWOR of PSUs followed by "
+                "SRSWOR of SSUs, use the separate two-stage PPSWOR estimator above. "
                 "Mean, proportion and domain ratio estimators are provided separately. "
                 "Supply actual design inclusion probabilities; do not derive them "
                 "from size measures or normalized weights."
