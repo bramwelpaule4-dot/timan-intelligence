@@ -3451,13 +3451,31 @@ elif page == "Data Management":
 # ============================================================
 
 elif page == "Data Quality":
-    st.title("Data Quality")
+    st.markdown(
+        """
+        <section class="analysis-page-header">
+            <div class="analysis-page-eyebrow">DATA INTEGRITY · WORKSPACE 02</div>
+            <div class="analysis-page-title">Data Quality Assessment</div>
+            <div class="analysis-page-description">
+                Identify completeness gaps, duplicate records, inconsistent
+                fields and potential numeric anomalies before analysis.
+                Findings are review flags; source data is never changed automatically.
+            </div>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
     st.caption(status_text(MODULES[page][0]))
-    st.write(
-        "Assess completeness, uniqueness, consistency and potential "
-        "numeric anomalies before using the dataset for reporting or "
-        "statistical analysis. Checks flag issues for review; they do "
-        "not automatically change or delete source data."
+    st.markdown(
+        """
+        <div class="analysis-workflow">
+            <div><strong>01</strong><b>Inspect</b><small>Dataset structure</small></div>
+            <div><strong>02</strong><b>Measure</b><small>Quality indicators</small></div>
+            <div><strong>03</strong><b>Review</b><small>Flagged records</small></div>
+            <div><strong>04</strong><b>Improve</b><small>Plan corrections</small></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
     df = get_dataset()
@@ -3491,7 +3509,10 @@ elif page == "Data Quality":
             if total_cells else 0.0
         )
 
-        st.subheader("Dataset-level quality overview")
+        st.markdown("#### Dataset quality snapshot")
+        st.caption(
+            f"Active dataset · {row_count:,} records · {column_count:,} variables"
+        )
         a, b, c, d = st.columns(4)
         a.metric("Records", f"{row_count:,}")
         b.metric("Variables", f"{column_count:,}")
@@ -3654,13 +3675,31 @@ elif page == "Data Quality":
 # ============================================================
 
 elif page == "Survey Analysis":
-    st.title("Survey Analysis")
+    st.markdown(
+        """
+        <section class="analysis-page-header">
+            <div class="analysis-page-eyebrow">SURVEY INTELLIGENCE · WORKSPACE 03</div>
+            <div class="analysis-page-title">Survey Analysis</div>
+            <div class="analysis-page-description">
+                Explore respondent records, question structures, response
+                distributions, multiple-response items, Likert scales and
+                documented survey weights.
+            </div>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
     st.caption(status_text(MODULES[page][0]))
-    st.write(
-        "TimanStat first inspects the imported dataset for questionnaire-style "
-        "structure, respondent records, response types and missing-response "
-        "patterns. Recognition is advisory; confirm the findings against the "
-        "questionnaire and codebook before proceeding."
+    st.markdown(
+        """
+        <div class="analysis-workflow">
+            <div><strong>01</strong><b>Profile</b><small>Recognise structure</small></div>
+            <div><strong>02</strong><b>Explore</b><small>Inspect responses</small></div>
+            <div><strong>03</strong><b>Analyse</b><small>Estimate patterns</small></div>
+            <div><strong>04</strong><b>Interpret</b><small>Check limitations</small></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
     df = get_dataset()
@@ -3681,6 +3720,11 @@ elif page == "Survey Analysis":
                 "and confirm its structure."
             )
 
+        st.markdown("#### Survey structure snapshot")
+        st.caption(
+            f"Active dataset · {len(df):,} imported records · "
+            f"{len(df.columns):,} source variables"
+        )
         metric_columns = st.columns(3)
         metric_columns[0].metric("Respondent records", f"{metadata['respondents']:,}")
         metric_columns[1].metric("Variables", f"{metadata['variable_count']:,}")
