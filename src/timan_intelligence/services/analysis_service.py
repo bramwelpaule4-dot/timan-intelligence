@@ -2,6 +2,7 @@
 
 import pandas as pd
 from timan_intelligence.core.poisson_regression import run_poisson_regression
+from timan_intelligence.core.negative_binomial_regression import run_negative_binomial_regression
 
 from timan_intelligence.core.contracts import AnalysisResult, AnalysisRequest
 from timan_intelligence.core.data_quality import profile_dataframe
@@ -409,6 +410,38 @@ def run_poisson_regression_service(
         assumptions=[
             "The outcome is a non-negative integer count.",
             "Conditional on the predictors and any offset, the Poisson model assumes the count mean equals its variance.",
+            "Observations are independent and the log expected count is correctly specified.",
+            "An exposure offset, when supplied, is assumed to have a coefficient fixed at one.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata=metadata,
+    )
+
+
+
+def run_negative_binomial_regression_service(
+    df: pd.DataFrame,
+    predictor_variables: list[str],
+    outcome_variable: str,
+    exposure_variable: str | None = None,
+) -> AnalysisResult:
+    """Run a shared NB2 count regression with optional log exposure offset."""
+    output = run_negative_binomial_regression(
+        df, predictor_variables, outcome_variable, exposure_variable
+    )
+    metadata = output["metadata"]
+    return AnalysisResult(
+        title=f"Negative binomial regression: {outcome_variable}",
+        method="NB2 log-link negative binomial regression by maximum likelihood",
+        status="success",
+        tables={
+            "coefficients": output["coefficients"],
+            "fitted_data": output["fitted_data"],
+        },
+        findings=list(output["findings"]),
+        assumptions=[
+            "The outcome is a non-negative integer count.",
+            "The conditional variance follows the NB2 form: Var(Y|X) = mu + alpha × mu².",
             "Observations are independent and the log expected count is correctly specified.",
             "An exposure offset, when supplied, is assumed to have a coefficient fixed at one.",
         ],
