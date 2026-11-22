@@ -65,6 +65,7 @@ from timan_intelligence.services.analysis_service import (
     run_mean_confidence_interval_service,
     run_proportion_confidence_interval_service,
     run_welch_mean_difference_confidence_interval_service,
+    run_paired_mean_difference_confidence_interval_service,
     run_ppswor_total_service,
     run_ppswor_ratio_service,
     run_ppswor_domain_ratio_service,
@@ -7134,6 +7135,7 @@ elif page == "Statistical Inference":
                 "Confidence interval for a mean",
                 "Confidence interval for a proportion",
                 "Welch confidence interval for a mean difference",
+                "Paired mean-change confidence interval",
                 "Welch's independent-samples t-test",
                 "One-way ANOVA",
             ],
@@ -7162,6 +7164,19 @@ elif page == "Statistical Inference":
                 outcome_variable = None
                 st.warning("No numeric variables are available for a mean interval.")
             group_variable = None
+        elif inference_method == "Paired mean-change confidence interval":
+            before_variable = (
+                st.selectbox("Before measurement", numeric_cols, key="inference_paired_before")
+                if numeric_cols else None
+            )
+            after_options = [column for column in numeric_cols if column != before_variable]
+            after_variable = (
+                st.selectbox("After measurement", after_options, key="inference_paired_after")
+                if after_options else None
+            )
+            outcome_variable = before_variable
+            group_variable = after_variable
+            st.caption("Each row must represent the same participant, household, facility or other matched unit at both time points. The reported change is after minus before.")
         elif inference_method == "Confidence interval for a proportion":
             binary_cols = [
                 column for column in numeric_cols
@@ -7204,8 +7219,13 @@ elif page == "Statistical Inference":
             else:
                 st.caption("Tests whether at least one group mean differs across two or more independent groups.")
 
+        design_confirmation_label = (
+            "I confirm that each row is one correctly matched pair and that pair-level differences are independent; this is not a complex survey."
+            if inference_method == "Paired mean-change confidence interval"
+            else "I confirm that each row represents an independent observational unit and that this is not a complex survey or repeated-measures design."
+        )
         independence_confirmed = st.checkbox(
-            "I confirm that each row represents an independent observational unit and that this is not a complex survey or repeated-measures design.",
+            design_confirmation_label,
             key="inference_independence_confirmed",
         )
         can_run = (
@@ -7236,6 +7256,10 @@ elif page == "Statistical Inference":
                     )
                 elif inference_method == "Welch confidence interval for a mean difference":
                     inference_result = run_welch_mean_difference_confidence_interval_service(
+                        inference_df, outcome_variable, group_variable, confidence_level
+                    )
+                elif inference_method == "Paired mean-change confidence interval":
+                    inference_result = run_paired_mean_difference_confidence_interval_service(
                         inference_df, outcome_variable, group_variable, confidence_level
                     )
                 elif inference_method == "Welch's independent-samples t-test":
