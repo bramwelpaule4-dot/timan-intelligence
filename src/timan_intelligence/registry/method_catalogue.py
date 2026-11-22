@@ -23,6 +23,7 @@ IMPLEMENTED_METHODS = frozenset(
     {
         "method.descriptive.numeric.summary",
         "method.inference.confidence_interval.mean",
+        "method.inference.confidence_interval.proportion",
         "method.inference.comparison.t_test.independent.welch",
         "method.inference.comparison.anova.one_way",
     }
@@ -208,6 +209,14 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             assumptions=["The outcome definition is valid.", "The sampling design is reflected in the selected interval procedure."],
             outputs=["Estimated proportion", "Standard error", "Confidence level", "Lower confidence limit", "Upper confidence limit"],
             use_cases=["Estimate prevalence", "Estimate coverage", "Report programme indicator proportions"],
+            aliases=["Wilson proportion confidence interval", "Binary proportion confidence interval"],
+            implementation_status="implemented",
+            verification_status="unit_tested",
+            execution_eligibility="conditional",
+            limitations=[
+                "The current implementation assumes independent Bernoulli observations.",
+                "It is not design-adjusted for complex survey samples, clustering, stratification or sampling weights.",
+            ],
         ),
         _method(
             entity_id="method.inference.comparison.t_test.independent.welch",
