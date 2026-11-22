@@ -36,7 +36,7 @@ def test_only_existing_execution_methods_are_marked_implemented():
     }
 
     assert implemented == IMPLEMENTED_METHODS
-    assert len(implemented) == 13
+    assert len(implemented) == 14
 
 
 def test_exact_binomial_is_registered_as_conditionally_executable():
