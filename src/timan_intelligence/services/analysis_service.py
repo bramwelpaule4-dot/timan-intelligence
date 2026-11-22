@@ -1847,3 +1847,41 @@ def run_two_stage_ppswor_domain_total_service(
     return _two_stage_ppswor_estimand_result(
         output, f"Two-stage PPSWOR domain total: {domain_variable}={domain_value}"
     )
+
+
+def run_two_stage_ppswor_domain_mean_service(
+    df: pd.DataFrame, outcome_variable: str, domain_variable: str,
+    domain_value: Any, psu_variable: str, ssu_variable: str,
+    psu_inclusion_probability_variable: str, ssu_population_count_variable: str,
+    joint_psu_inclusion_probabilities: pd.DataFrame | dict[Any, pd.DataFrame],
+    strata_variable: str | None = None, confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Run a Taylor-linearised two-stage PPSWOR domain mean."""
+    from timan_intelligence.core.two_stage_ppswor_estimands import estimate_two_stage_ppswor_domain_mean
+    output = estimate_two_stage_ppswor_domain_mean(
+        df, outcome_variable, domain_variable, domain_value, psu_variable,
+        ssu_variable, psu_inclusion_probability_variable, ssu_population_count_variable,
+        joint_psu_inclusion_probabilities, strata_variable, confidence_level,
+    )
+    return _two_stage_ppswor_estimand_result(
+        output, f"Two-stage PPSWOR domain mean: {domain_variable}={domain_value}"
+    )
+
+
+def run_two_stage_ppswor_domain_proportion_service(
+    df: pd.DataFrame, outcome_variable: str, domain_variable: str,
+    domain_value: Any, psu_variable: str, ssu_variable: str,
+    psu_inclusion_probability_variable: str, ssu_population_count_variable: str,
+    joint_psu_inclusion_probabilities: pd.DataFrame | dict[Any, pd.DataFrame],
+    strata_variable: str | None = None, confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Run a Taylor-linearised two-stage PPSWOR domain proportion."""
+    from timan_intelligence.core.two_stage_ppswor_estimands import estimate_two_stage_ppswor_domain_proportion
+    output = estimate_two_stage_ppswor_domain_proportion(
+        df, outcome_variable, domain_variable, domain_value, psu_variable,
+        ssu_variable, psu_inclusion_probability_variable, ssu_population_count_variable,
+        joint_psu_inclusion_probabilities, strata_variable, confidence_level,
+    )
+    return _two_stage_ppswor_estimand_result(
+        output, f"Two-stage PPSWOR domain proportion: {domain_variable}={domain_value}"
+    )
