@@ -11,6 +11,7 @@ from timan_intelligence.core.simple_regression import run_simple_linear_regressi
 from timan_intelligence.core.multiple_regression import run_multiple_linear_regression
 from timan_intelligence.core.binary_logistic_regression import run_binary_logistic_regression
 from timan_intelligence.core.ordinal_logistic_regression import run_ordinal_logistic_regression
+from timan_intelligence.core.multinomial_logistic_regression import run_multinomial_logistic_regression
 from timan_intelligence.core.regression_diagnostics import run_regression_diagnostics
 from timan_intelligence.core.survey_profiler import (
     profile_survey_dataframe,
@@ -347,6 +348,40 @@ def run_ordinal_logistic_regression_service(
         limitations=list(output["warnings"]),
         metadata=metadata,
     )
+
+
+
+def run_multinomial_logistic_regression_service(
+    df: pd.DataFrame,
+    predictor_variables: list[str],
+    outcome_variable: str,
+    reference_category=None,
+) -> AnalysisResult:
+    """Run a shared baseline-category multinomial logistic regression model."""
+    output = run_multinomial_logistic_regression(
+        df, predictor_variables, outcome_variable, reference_category
+    )
+    metadata = output["metadata"]
+    return AnalysisResult(
+        title=f"Multinomial logistic regression: {outcome_variable}",
+        method="Baseline-category multinomial logistic regression",
+        status="success",
+        tables={
+            "coefficients": output["coefficients"],
+            "fitted_data": output["fitted_data"],
+            "category_probabilities": output["category_probabilities"],
+        },
+        findings=list(output["findings"]),
+        assumptions=[
+            "The outcome has three or more mutually exclusive nominal categories.",
+            "One category is selected as the reference; coefficients compare each other category against it.",
+            "Observations are independent and the selected numeric predictors are appropriately specified.",
+            "The multinomial-logit model assumes independence of irrelevant alternatives; assess whether this is reasonable for the application.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata=metadata,
+    )
+
 
 
 def run_regression_diagnostics_service(
