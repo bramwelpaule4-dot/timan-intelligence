@@ -80,6 +80,15 @@ def test_weighted_descriptive_domain_has_point_estimate_but_no_inference():
     assert any("Weights alone" in item for item in result["warnings"])
 
 
+def test_weighted_descriptive_domain_category_proportions_support_text_outcomes():
+    result = estimate_domain_survey(
+        _stratified(), "uptake", "weight", "area", "Target", "proportion",
+    )
+    assert set(result["table"]["category"]) == {"Yes", "No"}
+    assert result["table"]["estimate"].sum() == pytest.approx(1.0)
+    assert result["table"]["standard_error"].isna().all()
+
+
 def test_domain_validation_and_service_wrapper():
     frame = _stratified()
     with pytest.raises(ValueError, match="No records"):
