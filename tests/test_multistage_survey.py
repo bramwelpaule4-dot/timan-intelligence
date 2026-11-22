@@ -8,7 +8,7 @@ def sample():
     return pd.DataFrame({
         "stratum": ["A"] * 8 + ["B"] * 8,
         "psu": [1] * 4 + [2] * 4 + [3] * 4 + [4] * 4,
-        "ssu": [1, 1, 2, 2] * 4,
+        "ssu": [1, 1, 2, 2, 3, 3, 4, 4] * 2,
         "weight": [2.0] * 8 + [3.0] * 8,
         "psu_population": [10] * 8 + [20] * 8,
         "ssu_population": [5, 5, 5, 5] * 4,
