@@ -368,11 +368,10 @@ def estimate_two_stage_total(
             "SSUs are assumed to be selected by SRSWOR within each sampled PSU.",
             "Each row must represent one sampled SSU with its fully enumerated SSU outcome total; respondent subsampling within SSUs is not supported.",
             "The variance uses first- and second-stage finite population corrections and a Taylor two-stage decomposition.",
-            "Confidence interval uses a t critical value with sum_h(n_h - 1) design degrees of freedom; small-sample coverage may be approximate.",
-            "Certainty PSUs are treated as take-all first-stage units when explicitly flagged; remaining non-certainty PSUs are assumed to be sampled by SRSWOR within stratum.",
+            "Confidence intervals use a t critical value with degrees of freedom based on sampled non-certainty PSUs; when all sampled PSUs are certainty units, within-PSU SSU degrees of freedom are used. Small-sample coverage may be approximate.",
         ],
         "metadata": {
-            "estimator": "Stratified two-stage SRSWOR total estimator with stage-specific FPCs",
+            "estimator": "Stratified two-stage SRSWOR total estimator with certainty-PSU handling and stage-specific FPCs",
             "number_of_strata": int(len(strata_results)),
             "number_of_psus": int(sum(x["sampled_psus"] for x in strata_results)),
             "number_of_ssus": int(len(data)),
