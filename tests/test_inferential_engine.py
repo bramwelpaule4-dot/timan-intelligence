@@ -271,3 +271,51 @@ def test_mean_confidence_interval_service_uses_shared_result_contract():
     )
     assert result.status == "success"
     assert result.metadata["confidence_level"] == pytest.approx(0.90)
+
+
+def test_proportion_confidence_interval_uses_wilson_score_and_binary_data():
+    from timan_intelligence.core.statistical_engine import run_proportion_confidence_interval
+
+    result = run_proportion_confidence_interval(
+        pd.DataFrame({"covered": [1, 1, 1, 0, 0, 0, 0, 0, 0, 0]}),
+        "covered",
+        0.95,
+    )
+    assert result.status == "success"
+    assert result.metadata["estimate"] == pytest.approx(0.3)
+    lower, upper = result.metadata["confidence_interval"]
+    assert 0 < lower < 0.3 < upper < 1
+    assert result.method == "Wilson score confidence interval for a proportion"
+
+
+def test_proportion_confidence_interval_handles_all_successes_and_missing_values():
+    from timan_intelligence.core.statistical_engine import run_proportion_confidence_interval
+
+    result = run_proportion_confidence_interval(
+        pd.DataFrame({"event": [1, 1, 1, None]}), "event"
+    )
+    assert result.metadata["estimate"] == pytest.approx(1.0)
+    assert result.metadata["observations"] == 3
+    assert result.metadata["missing_values"] == 1
+    lower, upper = result.metadata["confidence_interval"]
+    assert 0 < lower < 1
+    assert upper == pytest.approx(1.0)
+
+
+def test_proportion_confidence_interval_rejects_non_binary_and_empty_data():
+    from timan_intelligence.core.statistical_engine import run_proportion_confidence_interval
+
+    with pytest.raises(ValueError, match="only 0 and 1"):
+        run_proportion_confidence_interval(pd.DataFrame({"x": [0, 1, 2]}), "x")
+    with pytest.raises(ValueError, match="at least one"):
+        run_proportion_confidence_interval(pd.DataFrame({"x": [None, None]}), "x")
+
+
+def test_proportion_confidence_interval_service_returns_shared_result():
+    from timan_intelligence.services.analysis_service import run_proportion_confidence_interval_service
+
+    result = run_proportion_confidence_interval_service(
+        pd.DataFrame({"event": [1, 0, 1, 0, 1]}), "event", 0.90
+    )
+    assert result.status == "success"
+    assert result.metadata["confidence_level"] == pytest.approx(0.90)
