@@ -6718,6 +6718,139 @@ elif page == "Survey Analysis":
 
 
 # ============================================================
+# STATISTICAL INFERENCE
+# ============================================================
+
+elif page == "Statistical Inference":
+    st.markdown(
+        """
+        <section class="analysis-page-header">
+            <div class="analysis-page-eyebrow">STATISTICAL WORKSPACE · MODULE 02</div>
+            <div class="analysis-page-title">Statistical Inference</div>
+            <div class="analysis-page-description">
+                Move beyond describing the observed data to estimate population
+                parameters, quantify uncertainty and evaluate statistical evidence.
+                Analysis methods will be made available here as they are validated.
+            </div>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.caption(status_text(MODULES[page][0]))
+    st.markdown(
+        """
+        <div class="analysis-workflow">
+            <div><strong>01</strong><b>Prepare</b><small>Check variables and design</small></div>
+            <div><strong>02</strong><b>Specify</b><small>State hypotheses</small></div>
+            <div><strong>03</strong><b>Estimate</b><small>Quantify uncertainty</small></div>
+            <div><strong>04</strong><b>Interpret</b><small>Assess evidence</small></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    inference_df = get_dataset()
+    if inference_df is None:
+        st.info(
+            "Load a dataset in Data Management to prepare for inferential analysis."
+        )
+        st.button(
+            "Open Data Management",
+            key="inference_open_data_management",
+            type="primary",
+            on_click=navigate_to,
+            args=("Data Management",),
+        )
+    else:
+        numeric_count = len(
+            inference_df.select_dtypes(include="number").columns
+        )
+        categorical_count = len(inference_df.columns) - numeric_count
+        missing_count = int(inference_df.isna().sum().sum())
+        total_count = int(inference_df.shape[0] * inference_df.shape[1])
+        completeness = (
+            (total_count - missing_count) / total_count * 100
+            if total_count else 0.0
+        )
+        st.markdown("#### Dataset readiness")
+        st.caption(
+            f"Active dataset · {len(inference_df):,} records · "
+            f"{len(inference_df.columns):,} variables"
+        )
+        readiness = st.columns(4)
+        readiness[0].metric("Records", f"{len(inference_df):,}")
+        readiness[1].metric("Numeric variables", f"{numeric_count:,}")
+        readiness[2].metric("Other variables", f"{categorical_count:,}")
+        readiness[3].metric("Completeness", f"{completeness:.1f}%")
+        with st.expander("Review variables available for future inference", expanded=False):
+            variable_inventory = pd.DataFrame(
+                {
+                    "Variable": [str(column) for column in inference_df.columns],
+                    "Data type": [str(inference_df[column].dtype) for column in inference_df.columns],
+                    "Observed values": [int(inference_df[column].notna().sum()) for column in inference_df.columns],
+                    "Missing values": [int(inference_df[column].isna().sum()) for column in inference_df.columns],
+                    "Distinct values": [int(inference_df[column].nunique(dropna=True)) for column in inference_df.columns],
+                }
+            )
+            st.dataframe(
+                variable_inventory,
+                hide_index=True,
+                use_container_width=True,
+            )
+
+    st.markdown("#### Planned inference capabilities")
+    inference_cards = [
+        (
+            "Estimation and confidence intervals",
+            "Estimate means, proportions and differences with uncertainty intervals.",
+            "Parameter estimation",
+        ),
+        (
+            "Hypothesis testing",
+            "Evaluate pre-specified hypotheses using suitable test assumptions and effect sizes.",
+            "Statistical tests",
+        ),
+        (
+            "Association and group comparisons",
+            "Assess relationships and differences between independent or paired groups.",
+            "Comparative inference",
+        ),
+        (
+            "Assumption diagnostics",
+            "Check distributional, independence and variance assumptions before interpreting results.",
+            "Model diagnostics",
+        ),
+    ]
+    for card_start in range(0, len(inference_cards), 2):
+        card_columns = st.columns(2)
+        for offset, card in enumerate(inference_cards[card_start:card_start + 2]):
+            with card_columns[offset]:
+                st.markdown(
+                    f"""
+                    <div class="feature-card">
+                        <div class="feature-number">{card[2].upper()}</div>
+                        <div class="feature-title">{card[0]}</div>
+                        <div class="feature-description">{card[1]}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+    st.info(
+        "This workspace is currently an interface and preparation view. "
+        "Inferential calculations are not enabled here yet. Methods will be "
+        "released only after validation of assumptions, statistical outputs "
+        "and interpretation safeguards."
+    )
+    st.button(
+        "Open Descriptive Statistics",
+        key="inference_open_descriptive",
+        on_click=navigate_to,
+        args=("Descriptive Statistics",),
+    )
+
+
+# ============================================================
 # DESCRIPTIVE STATISTICS
 # ============================================================
 
