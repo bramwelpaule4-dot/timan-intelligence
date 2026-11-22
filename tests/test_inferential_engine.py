@@ -674,7 +674,7 @@ def test_two_proportions_confidence_interval_rejects_invalid_inputs():
 
 def test_mann_whitney_u_test_reports_rank_test_and_directional_effect_size():
     from timan_intelligence.core.statistical_engine import run_mann_whitney_u_test
-    frame = pd.DataFrame({"score": [1, 2, 3, 4, 5, 6], "group": ["A", "A", "A", "B", "B", "B"]})
+    frame = pd.DataFrame({"score": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], "group": ["A", "A", "A", "A", "A", "B", "B", "B", "B", "B"]})
     result = run_mann_whitney_u_test(frame, "score", "group")
     row = result.tables["test"].iloc[0]
     assert result.status == "success"
@@ -687,7 +687,7 @@ def test_mann_whitney_u_test_reports_rank_test_and_directional_effect_size():
 
 def test_mann_whitney_supports_alternatives_and_excludes_missing_and_infinite_outcomes():
     from timan_intelligence.core.statistical_engine import run_mann_whitney_u_test
-    frame = pd.DataFrame({"score": [8, 9, 10, 1, 2, 3, None, float("inf")], "group": ["A", "A", "A", "B", "B", "B", "A", "B"]})
+    frame = pd.DataFrame({"score": [8, 9, 10, 11, 12, 1, 2, 3, 4, 5, None, float("inf")], "group": ["A", "A", "A", "A", "A", "B", "B", "B", "B", "B", "A", "B"]})
     result = run_mann_whitney_u_test(frame, "score", "group", alternative="greater")
     assert result.metadata["alternative"] == "greater"
     assert result.metadata["missing_outcomes"] == 1

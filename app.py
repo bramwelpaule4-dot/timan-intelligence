@@ -7381,7 +7381,6 @@ elif page == "Statistical Inference":
                     "Exact one-sample binomial test",
 
                     "One-sample Student's t-test",
-                    "Mann–Whitney U test",
                 }
                 or group_variable is not None
             )
