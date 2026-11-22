@@ -4473,7 +4473,11 @@ elif page == "Survey Analysis":
                 pps_denominator, ms_strata, pps_confidence,
             )
             pps_ready = (
-                pps_psu != pps_draw and pps_psu != pps_ssu
+                all(value is not None for value in (
+                    pps_psu, pps_draw, pps_ssu, pps_probability,
+                    pps_ssu_population, pps_outcome,
+                ))
+                and pps_psu != pps_draw and pps_psu != pps_ssu
                 and pps_draw != pps_ssu and pps_outcome not in (
                     pps_psu, pps_draw, pps_ssu, pps_probability, pps_ssu_population,
                 )
