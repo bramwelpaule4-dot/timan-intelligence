@@ -12,6 +12,7 @@ from timan_intelligence.core.multiple_regression import run_multiple_linear_regr
 from timan_intelligence.core.binary_logistic_regression import run_binary_logistic_regression
 from timan_intelligence.core.ordinal_logistic_regression import run_ordinal_logistic_regression
 from timan_intelligence.core.multinomial_logistic_regression import run_multinomial_logistic_regression
+from timan_intelligence.core.categorical_model_recommender import recommend_categorical_outcome_model
 from timan_intelligence.core.regression_diagnostics import run_regression_diagnostics
 from timan_intelligence.core.survey_profiler import (
     profile_survey_dataframe,
@@ -444,4 +445,23 @@ def run_frequency(df: pd.DataFrame, column: str) -> AnalysisResult:
         tables={"frequency_table": table},
         findings=[f"Frequency distribution calculated for '{column}'."],
         limitations=["Percentages are unweighted unless a future survey-design module is explicitly used."],
+    )
+
+
+def recommend_categorical_outcome_model_service(
+    df: pd.DataFrame,
+    outcome_variable: str,
+    category_structure: str | None = None,
+) -> AnalysisResult:
+    """Return a transparent recommendation for a categorical outcome model."""
+    output = recommend_categorical_outcome_model(
+        df, outcome_variable, category_structure
+    )
+    return AnalysisResult(
+        title=f"Categorical outcome model recommendation: {outcome_variable}",
+        method="Rule-based categorical outcome classification",
+        status="success" if output["status"] in ("ready", "needs_classification") else "warning",
+        findings=list(output["rationale"]),
+        limitations=list(output["warnings"]),
+        metadata=output,
     )
