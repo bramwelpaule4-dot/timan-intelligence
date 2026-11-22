@@ -271,7 +271,17 @@ def estimate_domain_survey(
     in_domain = df[domain_variable].eq(domain_value).to_numpy()
     if not in_domain.any():
         raise ValueError(f"No records belong to domain {domain_value!r}.")
-    y, w = _numeric_columns(df, outcome_variable, weight_variable)
+    if weight_variable not in df.columns:
+        raise KeyError(f"Weight variable not found: {weight_variable}.")
+    weight_series = pd.to_numeric(df[weight_variable], errors="coerce")
+    if weight_series.isna().any() or not np.isfinite(weight_series.to_numpy(float)).all() or (weight_series <= 0).any():
+        raise ValueError("Survey weights must be positive, finite and complete.")
+    w = weight_series.to_numpy(float)
+    y = None
+    if estimand in {"total", "mean"}:
+        y, w = _numeric_columns(df, outcome_variable, weight_variable)
+    elif outcome_variable not in df.columns:
+        raise KeyError(f"Outcome variable not found: {outcome_variable}.")
     domain_weights = w * in_domain
     denominator = float(domain_weights.sum())
     if denominator <= 0:
