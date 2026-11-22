@@ -5834,6 +5834,140 @@ elif page == "Survey Analysis":
                 except (ValueError, pd.errors.ParserError, UnicodeDecodeError) as exc:
                     st.error(f"Could not read the sampling frame: {exc}")
 
+        with st.expander("Survey weighting and adjustment engine", expanded=False):
+            import json
+            from timan_intelligence.services.analysis_service import run_survey_weighting_service
+
+            st.write(
+                "Construct inverse-probability base weights, adjust for nonresponse, "
+                "calibrate to population controls, rake across margins and optionally "
+                "trim extreme weights. Supply exact first-order inclusion probabilities."
+            )
+            weighting_file = st.file_uploader(
+                "Respondent / sampled-unit dataset (CSV)",
+                type=["csv"], key="survey_weighting_upload",
+            )
+            if weighting_file is not None:
+                try:
+                    weighting_frame = pd.read_csv(weighting_file)
+                    if weighting_frame.empty:
+                        st.error("The uploaded weighting dataset is empty.")
+                    else:
+                        weight_pi_col = st.selectbox(
+                            "Exact first-order inclusion probability column",
+                            weighting_frame.columns, key="weight_pi_col",
+                        )
+                        use_nonresponse = st.checkbox(
+                            "Apply nonresponse adjustment", value=False,
+                            key="weight_use_nonresponse",
+                        )
+                        weight_response_col = None
+                        weight_cells = []
+                        if use_nonresponse:
+                            weight_response_col = st.selectbox(
+                                "Response indicator (1 = respondent, 0 = nonrespondent)",
+                                weighting_frame.columns, key="weight_response_col",
+                            )
+                            weight_cells = st.multiselect(
+                                "Nonresponse adjustment-cell variables",
+                                [c for c in weighting_frame.columns if c not in {weight_pi_col, weight_response_col}],
+                                key="weight_adjustment_cells",
+                            )
+                        use_poststrat = st.checkbox(
+                            "Apply post-stratification", value=False,
+                            key="weight_use_poststrat",
+                        )
+                        poststrata_col, population_totals = None, None
+                        if use_poststrat:
+                            poststrata_col = st.selectbox(
+                                "Post-stratification variable",
+                                weighting_frame.columns, key="weight_poststrata_col",
+                            )
+                            population_json = st.text_area(
+                                'Population totals as JSON, e.g. {"Female": 520, "Male": 480}',
+                                key="weight_population_totals",
+                            )
+                            if population_json.strip():
+                                try:
+                                    population_totals = json.loads(population_json)
+                                except json.JSONDecodeError as exc:
+                                    st.error(f"Invalid population-totals JSON: {exc}")
+                        use_raking = st.checkbox(
+                            "Apply raking (iterative proportional fitting)",
+                            value=False, key="weight_use_raking",
+                        )
+                        raking_margins = None
+                        if use_raking:
+                            raking_json = st.text_area(
+                                'Raking margins as JSON, e.g. {"sex":{"Female":520,"Male":480},"area":{"Rural":600,"Urban":400}}',
+                                key="weight_raking_margins",
+                            )
+                            if raking_json.strip():
+                                try:
+                                    raking_margins = json.loads(raking_json)
+                                except json.JSONDecodeError as exc:
+                                    st.error(f"Invalid raking-margins JSON: {exc}")
+                        use_trimming = st.checkbox(
+                            "Trim extreme weights (winsorisation)", value=False,
+                            key="weight_use_trimming",
+                        )
+                        trim_limits = None
+                        if use_trimming:
+                            trim_low, trim_high = st.columns(2)
+                            low_q = trim_low.number_input(
+                                "Lower trimming quantile", min_value=0.0,
+                                max_value=0.49, value=0.01, step=0.01,
+                                key="weight_trim_low",
+                            )
+                            high_q = trim_high.number_input(
+                                "Upper trimming quantile", min_value=0.51,
+                                max_value=1.0, value=0.99, step=0.01,
+                                key="weight_trim_high",
+                            )
+                            trim_limits = (float(low_q), float(high_q))
+                        if st.button("Calculate survey weights", type="primary", key="run_survey_weighting"):
+                            try:
+                                if use_poststrat and population_totals is None:
+                                    raise ValueError("Enter valid population totals before running post-stratification.")
+                                if use_raking and not raking_margins:
+                                    raise ValueError("Enter valid raking margins before running raking.")
+                                weighting_result = run_survey_weighting_service(
+                                    weighting_frame,
+                                    weight_pi_col,
+                                    response_column=weight_response_col,
+                                    adjustment_cells=weight_cells,
+                                    poststrata_column=poststrata_col,
+                                    population_totals=population_totals,
+                                    raking_margins=raking_margins,
+                                    trim_quantiles=trim_limits,
+                                )
+                                st.session_state["survey_weighting_result"] = weighting_result
+                            except (TypeError, ValueError, KeyError) as exc:
+                                st.error(str(exc))
+                        weighting_result = st.session_state.get("survey_weighting_result")
+                        if weighting_result is not None:
+                            st.dataframe(
+                                weighting_result.tables["weight_diagnostics"],
+                                hide_index=True, use_container_width=True,
+                            )
+                            st.write("Weighting stages:", " → ".join(weighting_result.metadata["stages"]))
+                            st.dataframe(
+                                weighting_result.tables["weighted_dataset"].head(100),
+                                hide_index=True, use_container_width=True,
+                            )
+                            st.download_button(
+                                "Download weighted dataset (CSV)",
+                                data=weighting_result.tables["weighted_dataset"].to_csv(index=False).encode("utf-8"),
+                                file_name="timanstat_weighted_survey_dataset.csv",
+                                mime="text/csv", key="download_weighted_survey_dataset",
+                            )
+                            for finding in weighting_result.findings:
+                                st.success(finding)
+                            for warning in weighting_result.limitations:
+                                st.warning(warning)
+                except (ValueError, pd.errors.ParserError, UnicodeDecodeError) as exc:
+                    st.error(f"Could not read the weighting dataset: {exc}")
+
         st.info(
             "Unweighted question-level frequencies above describe the imported "
             "records. Use the weighted estimator separately when a documented "
