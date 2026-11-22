@@ -24,6 +24,7 @@ IMPLEMENTED_METHODS = frozenset(
         "method.descriptive.numeric.summary",
         "method.inference.confidence_interval.mean",
         "method.inference.confidence_interval.proportion",
+        "method.inference.confidence_interval.mean_difference.welch",
         "method.inference.comparison.t_test.independent.welch",
         "method.inference.comparison.anova.one_way",
     }
@@ -216,6 +217,28 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             limitations=[
                 "The current implementation assumes independent Bernoulli observations.",
                 "It is not design-adjusted for complex survey samples, clustering, stratification or sampling weights.",
+            ],
+        ),
+        _method(
+            entity_id="method.inference.confidence_interval.mean_difference.welch",
+            name="Welch confidence interval for a mean difference",
+            description="Estimates the difference between two independent group means using a Welch-Satterthwaite confidence interval.",
+            family="estimation",
+            purpose="inference",
+            priority="P1",
+            outcome_types=["numeric"],
+            required_roles=["numeric_outcome", "two_group_factor"],
+            data_requirements=["A numeric outcome.", "A grouping variable with exactly two observed groups.", "At least two finite observations in each group."],
+            assumptions=["The groups are independent.", "Observations are independent within groups.", "Welch-Satterthwaite approximation is appropriate."],
+            outputs=["Group means", "Mean difference", "Standard error", "Welch degrees of freedom", "Confidence interval"],
+            use_cases=["Quantify an intervention-versus-comparison mean difference", "Estimate uncertainty around a difference between two independent means"],
+            aliases=["Welch mean difference confidence interval", "Independent means difference interval"],
+            implementation_status="implemented",
+            verification_status="unit_tested",
+            execution_eligibility="conditional",
+            limitations=[
+                "Assumes independent observations and does not assume equal group variances.",
+                "Not adjusted for complex survey designs, clustering, stratification or sampling weights.",
             ],
         ),
         _method(
