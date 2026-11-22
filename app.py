@@ -864,9 +864,10 @@ MODULES = {
     ),
     "Statistical Inference": (
         "Partially available — initial independent-sample procedures",
-        "Model-based mean and proportion confidence intervals, a Welch confidence interval "
-        "for a mean difference, Welch's independent-samples t-test and one-way ANOVA are available for independent observations. "
-        "Complex survey inference and other planned methods remain under development.",
+        "Model-based mean and proportion confidence intervals, one-sample Student's t-test, "
+        "Welch mean-difference confidence intervals, paired mean-change intervals, Welch's "
+        "independent-samples t-test and one-way ANOVA are available for their stated study "
+        "designs. Complex survey inference and other planned methods remain under development.",
     ),
     "Research & Modelling": (
         "Under development",
