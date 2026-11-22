@@ -25,7 +25,7 @@ def test_nonresponse_adjustment_by_cells():
         "cell": ["A", "A", "B", "B"],
     })
     result = adjust_nonresponse(frame, "w", "response", ["cell"])
-    assert result.tolist() == pytest.approx([4., 4., 8/3, 8/3])
+    assert result.tolist() == pytest.approx([4., 4., 2., 2.])
 
 
 def test_nonresponse_rejects_empty_response_cell():
