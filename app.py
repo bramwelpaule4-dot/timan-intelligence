@@ -64,6 +64,7 @@ from timan_intelligence.services.analysis_service import (
     run_two_stage_ppswor_domain_proportion_service,
     run_mean_confidence_interval_service,
     run_proportion_confidence_interval_service,
+    run_welch_mean_difference_confidence_interval_service,
     run_ppswor_total_service,
     run_ppswor_ratio_service,
     run_ppswor_domain_ratio_service,
@@ -861,8 +862,8 @@ MODULES = {
     ),
     "Statistical Inference": (
         "Partially available — initial independent-sample procedures",
-        "A model-based mean confidence interval, Welch's independent-samples t-test "
-        "and one-way ANOVA are available for independent observations. "
+        "Model-based mean and proportion confidence intervals, a Welch confidence interval "
+        "for a mean difference, Welch's independent-samples t-test and one-way ANOVA are available for independent observations. "
         "Complex survey inference and other planned methods remain under development.",
     ),
     "Research & Modelling": (
@@ -7132,6 +7133,7 @@ elif page == "Statistical Inference":
             [
                 "Confidence interval for a mean",
                 "Confidence interval for a proportion",
+                "Welch confidence interval for a mean difference",
                 "Welch's independent-samples t-test",
                 "One-way ANOVA",
             ],
@@ -7195,7 +7197,9 @@ elif page == "Statistical Inference":
                 )
                 if categorical_cols else None
             )
-            if inference_method == "Welch's independent-samples t-test":
+            if inference_method == "Welch confidence interval for a mean difference":
+                st.caption("Estimates group 1 minus group 2 with a Welch-Satterthwaite interval; group order follows first appearance in the data.")
+            elif inference_method == "Welch's independent-samples t-test":
                 st.caption("Compares the means of exactly two independent groups without assuming equal variances.")
             else:
                 st.caption("Tests whether at least one group mean differs across two or more independent groups.")
@@ -7229,6 +7233,10 @@ elif page == "Statistical Inference":
                 elif inference_method == "Confidence interval for a proportion":
                     inference_result = run_proportion_confidence_interval_service(
                         inference_df, outcome_variable, confidence_level
+                    )
+                elif inference_method == "Welch confidence interval for a mean difference":
+                    inference_result = run_welch_mean_difference_confidence_interval_service(
+                        inference_df, outcome_variable, group_variable, confidence_level
                     )
                 elif inference_method == "Welch's independent-samples t-test":
                     inference_result = run_independent_samples_t_test(
