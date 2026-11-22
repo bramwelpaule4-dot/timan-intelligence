@@ -628,12 +628,12 @@ def run_proportion_confidence_interval(
     if not 0 < float(confidence_level) < 1:
         raise ValueError("Confidence level must be greater than 0 and less than 1.")
     series = df[variable]
-    if not pd.api.types.is_numeric_dtype(series):
-        raise TypeError(f"Variable '{variable}' must be numeric and coded 0/1.")
-
-    observed = series.dropna().astype(float)
-    if observed.empty:
+    observed_raw = series.dropna()
+    if observed_raw.empty:
         raise ValueError("A proportion confidence interval requires at least one observed value.")
+    if not pd.api.types.is_numeric_dtype(observed_raw):
+        raise TypeError(f"Variable '{variable}' must be numeric and coded 0/1.")
+    observed = observed_raw.astype(float)
     if not observed.isin([0.0, 1.0]).all():
         raise ValueError(f"Variable '{variable}' must contain only 0 and 1 (and optional missing values).")
 
