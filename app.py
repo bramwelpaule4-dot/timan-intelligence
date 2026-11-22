@@ -7079,32 +7079,6 @@ elif page == "Descriptive Statistics":
             key="descriptive_upload_dataset",
             on_click=go_to_data_management,
         )
-            st.divider()
-            render_numeric_group_comparison(df)
-            st.divider()
-            render_numeric_association(df)
-            st.divider()
-            render_simple_linear_regression(df)
-            st.divider()
-            render_multiple_linear_regression(df)
-            st.divider()
-            render_categorical_model_recommender(df)
-            st.divider()
-            render_binary_logistic_regression(df)
-            st.divider()
-            render_multinomial_logistic_regression(df)
-            st.divider()
-            render_ordinal_logistic_regression(df)
-            st.divider()
-            render_poisson_regression(df)
-            st.divider()
-            render_negative_binomial_regression(df)
-            st.divider()
-            render_kaplan_meier_analysis(df)
-            st.divider()
-            render_cox_survival_regression(df)
-
-
 # VISUALISATIONS
 # ============================================================
 
