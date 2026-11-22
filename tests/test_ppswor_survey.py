@@ -212,3 +212,73 @@ def test_ppswor_domain_ratio_service_returns_domain_metadata():
     assert result.status == "success"
     assert result.metadata["domain_name"] == "Youth"
     assert result.metadata["domain_estimation"] is True
+
+
+def test_ppswor_domain_variance_uses_all_psus_including_zero_domain_units():
+    from timan_intelligence.core.ppswor_survey import estimate_ppswor_domain_ratio
+
+    df, joint = ppswor_fixture()
+    df["domain_num"] = [10.0, 0.0, 30.0]
+    df["domain_den"] = [5.0, 0.0, 10.0]
+    result = estimate_ppswor_domain_ratio(
+        df, "Women", "domain_num", "domain_den", "psu", "pi",
+        joint, "stratum", parameter="mean",
+    )
+    ratio = result["estimate"]
+    denominator_hat = 5 / .5 + 0 / .7 + 10 / .8
+    z = np.array([10.0, 0.0, 30.0]) - ratio * np.array([5.0, 0.0, 10.0])
+    pi = np.array([.5, .7, .8])
+    pij = joint.to_numpy(dtype=float)
+    expected_linearised_variance = 0.0
+    for i in range(3):
+        for j in range(i + 1, 3):
+            expected_linearised_variance += -(
+                (pij[i, j] - pi[i] * pi[j]) / pij[i, j]
+            ) * (z[i] / pi[i] - z[j] / pi[j]) ** 2
+    expected_ratio_variance = expected_linearised_variance / denominator_hat**2
+
+    assert result["variance"] == pytest.approx(expected_ratio_variance)
+    assert len(result["pairwise_variance"]) == 3
+    assert set(result["pairwise_variance"]["psu_i"]) | set(
+        result["pairwise_variance"]["psu_j"]
+    ) == {"P1", "P2", "P3"}
+
+
+def test_ppswor_domain_ratio_rejects_zero_estimated_domain_denominator():
+    from timan_intelligence.core.ppswor_survey import estimate_ppswor_domain_ratio
+
+    df, joint = ppswor_fixture()
+    df["domain_num"] = [0.0, 0.0, 0.0]
+    df["domain_den"] = [0.0, 0.0, 0.0]
+    with pytest.raises(ValueError, match="denominator must be positive"):
+        estimate_ppswor_domain_ratio(
+            df, "No members", "domain_num", "domain_den",
+            "psu", "pi", joint, "stratum", parameter="mean",
+        )
+
+
+def test_ppswor_stratified_domain_ratio_combines_strata_and_full_pair_sets():
+    from timan_intelligence.core.ppswor_survey import estimate_ppswor_domain_ratio
+
+    df_a, joint_a = ppswor_fixture()
+    df_b, joint_b = ppswor_fixture()
+    df_a["domain_num"] = [2.0, 0.0, 8.0]
+    df_a["domain_den"] = [10.0, 0.0, 20.0]
+    df_b["stratum"] = "B"
+    df_b["psu"] = ["Q1", "Q2", "Q3"]
+    df_b["domain_num"] = [1.0, 3.0, 0.0]
+    df_b["domain_den"] = [5.0, 15.0, 0.0]
+    joint_b.index = ["Q1", "Q2", "Q3"]
+    joint_b.columns = ["Q1", "Q2", "Q3"]
+    combined = pd.concat([df_a, df_b], ignore_index=True)
+
+    result = estimate_ppswor_domain_ratio(
+        combined, "Youth", "domain_num", "domain_den", "psu", "pi",
+        {"A": joint_a, "B": joint_b}, "stratum", parameter="proportion",
+    )
+    expected_num = (2 / .5 + 0 / .7 + 8 / .8) + (1 / .5 + 3 / .7 + 0 / .8)
+    expected_den = (10 / .5 + 0 / .7 + 20 / .8) + (5 / .5 + 15 / .7 + 0 / .8)
+
+    assert result["estimate"] == pytest.approx(expected_num / expected_den)
+    assert result["metadata"]["number_of_strata"] == 2
+    assert len(result["pairwise_variance"]) == 6
