@@ -4003,9 +4003,30 @@ elif page == "Survey Analysis":
                     )
                 else:
                     st.info("No unused numeric variable is available for SSU population counts.")
+            ms_certainty_options = [
+                x for x in ms_cols
+                if x not in (
+                    ms_weight, ms_psu, ms_ssu, ms_strata,
+                    ms_psu_population, ms_ssu_population,
+                )
+            ]
+            ms_use_certainty = st.checkbox(
+                "The sample includes certainty (take-all) PSUs",
+                value=False, key="multistage_use_certainty_psus",
+            )
+            ms_certainty_psu = None
+            if ms_use_certainty:
+                if ms_certainty_options:
+                    ms_certainty_psu = st.selectbox(
+                        "PSU certainty indicator (true/false or yes/no)",
+                        ms_certainty_options,
+                        key="multistage_certainty_psu_variable",
+                    )
+                else:
+                    st.info("Add a variable identifying certainty PSUs.")
             ms_design_key = (
                 _dataset_analysis_key(df), ms_weight, ms_psu, ms_ssu,
-                ms_strata, ms_psu_population, ms_ssu_population,
+                ms_strata, ms_psu_population, ms_ssu_population, ms_certainty_psu,
             )
             if st.button(
                 "Validate two-stage sample design",
@@ -4075,7 +4096,7 @@ elif page == "Survey Analysis":
                     ms_total_key = (
                         _dataset_analysis_key(df), ms_outcome, ms_psu, ms_ssu,
                         ms_strata, ms_psu_population, ms_ssu_population,
-                        ms_confidence,
+                        ms_confidence, ms_certainty_psu,
                     )
                     if st.button(
                         "Estimate two-stage population total",
@@ -4085,7 +4106,7 @@ elif page == "Survey Analysis":
                             total_result = run_two_stage_survey_total_service(
                                 df, ms_outcome, ms_psu, ms_ssu,
                                 ms_psu_population, ms_ssu_population,
-                                ms_strata, ms_confidence,
+                                ms_strata, ms_confidence, ms_certainty_psu,
                             )
                             st.session_state["two_stage_total_result"] = total_result
                             st.session_state["two_stage_total_result_key"] = ms_total_key
@@ -4146,7 +4167,7 @@ elif page == "Survey Analysis":
                         mean_key = (
                             _dataset_analysis_key(df), ms_outcome, mean_denominator,
                             ms_psu, ms_ssu, ms_strata, ms_psu_population,
-                            ms_ssu_population, ms_confidence,
+                            ms_ssu_population, ms_confidence, ms_certainty_psu,
                         )
                         if st.button(
                             "Estimate two-stage population mean",
@@ -4156,7 +4177,7 @@ elif page == "Survey Analysis":
                                 mean_result = run_two_stage_survey_mean_service(
                                     df, ms_outcome, mean_denominator, ms_psu, ms_ssu,
                                     ms_psu_population, ms_ssu_population,
-                                    ms_strata, ms_confidence,
+                                    ms_strata, ms_confidence, ms_certainty_psu,
                                 )
                                 st.session_state["two_stage_mean_result"] = mean_result
                                 st.session_state["two_stage_mean_result_key"] = mean_key
@@ -4204,6 +4225,7 @@ elif page == "Survey Analysis":
                                 _dataset_analysis_key(df), proportion_successes,
                                 proportion_denominator, ms_psu, ms_ssu, ms_strata,
                                 ms_psu_population, ms_ssu_population, ms_confidence,
+                                ms_certainty_psu,
                             )
                             if st.button(
                                 "Estimate two-stage population proportion",
@@ -4214,6 +4236,7 @@ elif page == "Survey Analysis":
                                         df, proportion_successes, proportion_denominator,
                                         ms_psu, ms_ssu, ms_psu_population,
                                         ms_ssu_population, ms_strata, ms_confidence,
+                                        ms_certainty_psu,
                                     )
                                     st.session_state["two_stage_proportion_result"] = proportion_result
                                     st.session_state["two_stage_proportion_result_key"] = proportion_key
@@ -4252,7 +4275,7 @@ elif page == "Survey Analysis":
         )
         domain_excluded = {
             ms_weight, ms_psu, ms_ssu, ms_strata,
-            ms_psu_population, ms_ssu_population,
+            ms_psu_population, ms_ssu_population, ms_certainty_psu,
         }
         domain_variable_options = [x for x in ms_cols if x not in domain_excluded]
         if ms_psu_population is not None and ms_ssu_population is not None and domain_variable_options:
@@ -4294,7 +4317,7 @@ elif page == "Survey Analysis":
                         _dataset_analysis_key(df), domain_kind, domain_variable,
                         str(domain_value), domain_outcome, domain_denominator,
                         ms_psu, ms_ssu, ms_strata, ms_psu_population,
-                        ms_ssu_population, ms_confidence,
+                        ms_ssu_population, ms_confidence, ms_certainty_psu,
                     )
                     can_run_domain = domain_kind == "Total" or domain_denominator is not None
                     if can_run_domain and st.button(
@@ -4316,14 +4339,14 @@ elif page == "Survey Analysis":
                                     df, domain_outcome, domain_denominator,
                                     domain_variable, domain_value, ms_psu, ms_ssu,
                                     ms_psu_population, ms_ssu_population,
-                                    ms_strata, ms_confidence,
+                                    ms_strata, ms_confidence, ms_certainty_psu,
                                 )
                             else:
                                 domain_result = run_two_stage_survey_domain_proportion_service(
                                     df, domain_outcome, domain_denominator,
                                     domain_variable, domain_value, ms_psu, ms_ssu,
                                     ms_psu_population, ms_ssu_population,
-                                    ms_strata, ms_confidence,
+                                    ms_strata, ms_confidence, ms_certainty_psu,
                                 )
                             st.session_state["two_stage_domain_result"] = domain_result
                             st.session_state["two_stage_domain_result_key"] = domain_key
