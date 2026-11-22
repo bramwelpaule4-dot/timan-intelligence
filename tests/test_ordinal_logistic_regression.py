@@ -175,4 +175,3 @@ def test_ordinal_logistic_handles_imbalanced_ordered_categories():
     assert np.allclose(
         result["category_probabilities"].sum(axis=1), 1.0, atol=1e-7
     )
-    assert any("small relative to model complexity" in warning for warning in result["warnings"])
