@@ -1958,6 +1958,12 @@ def run_mann_whitney_u_test_service(
     return run_mann_whitney_u_test(df, outcome_variable, group_variable, alternative)
 
 
+def run_kruskal_wallis_test_service(df: pd.DataFrame, outcome_variable: str, group_variable: str) -> AnalysisResult:
+    """Run Kruskal–Wallis through the shared analysis service."""
+    from timan_intelligence.core.statistical_engine import run_kruskal_wallis_test
+    return run_kruskal_wallis_test(df, outcome_variable, group_variable)
+
+
 def run_paired_samples_t_test_service(
     df: pd.DataFrame, before_variable: str, after_variable: str,
     confidence_level: float = 0.95, alternative: str = "two-sided",

@@ -74,6 +74,7 @@ from timan_intelligence.services.analysis_service import (
     run_two_independent_proportions_test_service,
     run_two_proportions_confidence_interval_service,
     run_mann_whitney_u_test_service,
+    run_kruskal_wallis_test_service,
     run_ppswor_total_service,
     run_ppswor_ratio_service,
     run_ppswor_domain_ratio_service,
@@ -872,7 +873,7 @@ MODULES = {
     "Statistical Inference": (
         "Partially available — initial independent-sample procedures",
         "Model-based mean and proportion confidence intervals, one-sample Student's t-test and exact binomial test, two-independent-proportions comparisons and difference-in-proportions confidence intervals, "
-        "Welch mean-difference confidence intervals, paired mean-change intervals, paired t-tests, Mann–Whitney U rank tests, chi-square tests and Fisher's exact tests for categorical association, Welch's "
+        "Welch mean-difference confidence intervals, paired mean-change intervals, paired t-tests, Mann–Whitney U and Kruskal–Wallis rank tests, chi-square tests and Fisher's exact tests for categorical association, Welch's "
         "independent-samples t-test and one-way ANOVA are available for their stated study "
         "designs. Complex survey inference and other planned methods remain under development.",
     ),
@@ -7155,6 +7156,7 @@ elif page == "Statistical Inference":
                 "Welch's independent-samples t-test",
                 "One-way ANOVA",
                 "Mann–Whitney U test",
+                "Kruskal–Wallis test",
             ],
             key="inference_method_choice",
         )
@@ -7338,6 +7340,10 @@ elif page == "Statistical Inference":
                 key="inference_mann_whitney_alternative",
             )
             st.caption("Uses ranks rather than comparing means. Reports group medians, U statistic, p-value and directional rank-biserial effect size. Group order follows first appearance in the data.")
+        elif inference_method == "Kruskal–Wallis test":
+            outcome_variable = st.selectbox("Numeric or ordinal outcome (ordinal categories must be encoded in order)", numeric_cols, key="inference_kruskal_outcome") if numeric_cols else None
+            group_variable = st.selectbox("Independent grouping variable (at least three groups)", categorical_cols, key="inference_kruskal_group") if categorical_cols else None
+            st.caption("Compares rank distributions across three or more independent groups. Reports the H statistic, p-value, group sizes, medians, mean ranks and epsilon-squared effect size. A significant result requires a separate post-hoc analysis to identify which groups differ.")
         else:
             outcome_variable = (
                 st.selectbox(
@@ -7419,6 +7425,8 @@ elif page == "Statistical Inference":
                     inference_result = run_mann_whitney_u_test_service(
                         inference_df, outcome_variable, group_variable, mann_whitney_alternative
                     )
+                elif inference_method == "Kruskal–Wallis test":
+                    inference_result = run_kruskal_wallis_test_service(inference_df, outcome_variable, group_variable)
                 elif inference_method == "Welch confidence interval for a mean difference":
                     inference_result = run_welch_mean_difference_confidence_interval_service(
                         inference_df, outcome_variable, group_variable, confidence_level

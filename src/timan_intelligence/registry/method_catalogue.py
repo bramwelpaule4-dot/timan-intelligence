@@ -36,6 +36,7 @@ IMPLEMENTED_METHODS = frozenset(
         "method.inference.comparison.t_test.independent.welch",
         "method.inference.comparison.anova.one_way",
         "method.inference.comparison.mann_whitney",
+        "method.inference.comparison.kruskal_wallis",
     }
 )
 
@@ -422,7 +423,9 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             assumptions=["Independent observations.", "Outcome values are at least ordinal.", "Group distribution shapes are reviewed."],
             outputs=["H statistic", "P-value", "Group sizes", "Post-hoc analysis requirement"],
             use_cases=["Compare several independent groups using a rank-based procedure"],
-            limitations=["A significant result does not identify which groups differ."],
+            aliases=["Kruskal Wallis", "Kruskal-Wallis H test", "Non-parametric one-way group comparison"],
+            implementation_status="implemented", verification_status="unit_tested", execution_eligibility="conditional",
+            limitations=["A significant result does not identify which groups differ; use a justified post-hoc procedure with multiplicity control.", "It is not automatically a test of medians; location-shift interpretation requires similarly shaped distributions.", "Not adjusted for complex survey sampling, weights, clustering, stratification or repeated-measures designs."],
         ),
         _method(
             entity_id="method.inference.association.chi_square.independence",

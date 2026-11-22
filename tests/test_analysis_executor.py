@@ -501,3 +501,22 @@ def test_mann_whitney_executor_blocks_cluster_and_repeated_measures_designs():
     recommendation["design_context"] = {"study_design": "paired"}
     with pytest.raises(AnalysisExecutionError, match="repeated-measures"):
         execute_recommendation(frame, recommendation, approved=True)
+
+
+def test_execution_runs_registered_kruskal_wallis_test():
+    frame = pd.DataFrame({"score":[1,2,3,5,6,7,9,10,11],"group":["A"]*3+["B"]*3+["C"]*3})
+    rec = {"method":"Kruskal–Wallis test","method_id":"method.inference.comparison.kruskal_wallis","variables":["score","group"],"status":"review_required"}
+    result = execute_recommendation(frame, rec, approved=True)
+    assert result.status == "success"
+    assert result.metadata["method_id"] == "method.inference.comparison.kruskal_wallis"
+    assert result.metadata["group_count"] == 3
+
+
+def test_kruskal_wallis_executor_blocks_complex_and_repeated_measures_designs():
+    frame = pd.DataFrame({"score":[1,2,3,5,6,7,9,10,11],"group":["A"]*3+["B"]*3+["C"]*3})
+    rec = {"method":"Kruskal–Wallis test","variables":["score","group"],"status":"review_required","design_context":{"sampling_design":"cluster"}}
+    with pytest.raises(AnalysisExecutionError, match="not validated"):
+        execute_recommendation(frame, rec, approved=True)
+    rec["design_context"] = {"study_design":"repeated_measures"}
+    with pytest.raises(AnalysisExecutionError, match="repeated-measures"):
+        execute_recommendation(frame, rec, approved=True)

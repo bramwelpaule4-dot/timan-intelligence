@@ -526,6 +526,93 @@ def run_mann_whitney_u_test(
     )
 
 
+
+def run_kruskal_wallis_test(df: pd.DataFrame, outcome_variable: str, group_variable: str) -> AnalysisResult:
+    """Compare three or more independent groups using the Kruskal–Wallis H test."""
+    from scipy.stats import kruskal, rankdata
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Expected a pandas DataFrame.")
+    if outcome_variable not in df.columns or group_variable not in df.columns:
+        raise ValueError("Both outcome and grouping variables must exist.")
+    if outcome_variable == group_variable:
+        raise ValueError("Choose different outcome and grouping variables.")
+    if not pd.api.types.is_numeric_dtype(df[outcome_variable]):
+        raise TypeError("The outcome must be numeric or ordinal values encoded numerically.")
+    if df[group_variable].isna().any():
+        raise ValueError("The grouping variable contains missing group labels.")
+    labels = list(pd.unique(df[group_variable]))
+    if len(labels) < 3:
+        raise ValueError("The Kruskal–Wallis test requires at least three independent groups.")
+    outcome = df[outcome_variable]
+    missing = int(outcome.isna().sum())
+    numeric = pd.to_numeric(outcome, errors="coerce")
+    finite = outcome.notna() & numeric.map(lambda x: bool(pd.notna(x) and abs(float(x)) != float("inf")))
+    infinite = int((outcome.notna() & ~finite).sum())
+    valid = df.loc[finite, [group_variable, outcome_variable]].copy()
+    valid[outcome_variable] = pd.to_numeric(valid[outcome_variable], errors="coerce").astype(float)
+    samples = [valid.loc[valid[group_variable] == label, outcome_variable].to_numpy(float) for label in labels]
+    if any(len(x) < 2 for x in samples):
+        raise ValueError("The Kruskal–Wallis test requires at least two finite observations in each group.")
+    try:
+        test = kruskal(*samples, nan_policy="raise")
+    except ValueError as exc:
+        if "identical" in str(exc).casefold():
+            raise ValueError("The Kruskal–Wallis statistic is undefined when all observations are identical.") from exc
+        raise
+    h, p = float(test.statistic), float(test.pvalue)
+    k, n = len(samples), int(sum(map(len, samples)))
+    valid["_rank"] = rankdata(valid[outcome_variable].to_numpy(float), method="average")
+    group_summary = pd.DataFrame([{
+        "Group": str(label), "Valid n": int(len(sample)),
+        "Median": float(pd.Series(sample).median()),
+        "Mean rank": float(valid.loc[valid[group_variable] == label, "_rank"].mean()),
+    } for label, sample in zip(labels, samples)])
+    eps2 = max(0.0, float((h - k + 1) / (n - k)))
+    findings = [
+        f"The Kruskal–Wallis H statistic is {h:.4g} with {k-1} degrees of freedom (p = {p:.4g}).",
+        f"The analysis includes {n:,} observations across {k} independent groups.",
+        f"Epsilon-squared effect-size estimate is {eps2:.3f}; interpret its magnitude in context.",
+    ]
+    if p < 0.05:
+        findings.append("There is evidence that at least one group rank distribution differs; this omnibus test does not identify which groups differ.")
+    else:
+        findings.append("The omnibus test does not provide sufficient evidence of a difference in rank distributions at the 0.05 level.")
+    limitations = [
+        "This is an omnibus comparison of rank distributions, not automatically a test of medians. A location-shift interpretation requires similarly shaped group distributions.",
+        "A significant result does not identify which pairs differ; use a justified post-hoc procedure with multiplicity control.",
+        "The ordinary test is not adjusted for survey weights, clustering, stratification, finite-population corrections or repeated-measures designs.",
+        "The chi-square approximation for H may be unreliable with very small group samples.",
+        "Missing and infinite outcome values are excluded; missing group labels are rejected.",
+    ]
+    if missing: limitations.append(f"{missing:,} missing outcome value(s) were excluded.")
+    if infinite: limitations.append(f"{infinite:,} infinite outcome value(s) were excluded.")
+    return AnalysisResult(
+        title=f"Kruskal–Wallis test: {outcome_variable} by {group_variable}",
+        status="success", method="Kruskal–Wallis test",
+        tables={"group_summary": group_summary, "test": pd.DataFrame([{
+            "H statistic": h, "Degrees of freedom": k-1, "P-value": p,
+            "Epsilon-squared": eps2, "Total observations": n, "Groups": k,
+            "Missing outcomes excluded": missing, "Infinite outcomes excluded": infinite,
+        }])},
+        findings=findings,
+        assumptions=[
+            "Groups and observations within groups are independent.",
+            "The outcome is at least ordinal and numeric coding preserves its ordering.",
+            "The test compares rank distributions; a location-shift interpretation requires similarly shaped distributions.",
+            "The H statistic uses its large-sample chi-square approximation.",
+        ],
+        limitations=limitations,
+        metadata={
+            "outcome_variable": outcome_variable, "group_variable": group_variable,
+            "group_labels": [str(x) for x in labels], "group_count": k,
+            "group_sizes": [int(len(x)) for x in samples], "h_statistic": h,
+            "degrees_of_freedom": k-1, "p_value": p, "epsilon_squared": eps2,
+            "n_observations": n, "missing_outcomes": missing, "infinite_outcomes": infinite,
+            "sampling_design_aware": False, "study_design": "independent_groups",
+        },
+    )
+
+
 def run_one_way_anova(
     df: pd.DataFrame,
     outcome_variable: str,

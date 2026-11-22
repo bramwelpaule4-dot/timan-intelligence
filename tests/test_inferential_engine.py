@@ -711,3 +711,41 @@ def test_mann_whitney_service_returns_shared_analysis_result():
     result = run_mann_whitney_u_test_service(frame, "y", "g")
     assert result.status == "success"
     assert result.method == "Mann–Whitney U test"
+
+
+def test_kruskal_wallis_compares_three_independent_groups_and_reports_effect_size():
+    from timan_intelligence.core.statistical_engine import run_kruskal_wallis_test
+    frame = pd.DataFrame({"score": [1, 2, 3, 5, 6, 7, 9, 10, 11], "group": ["A"]*3 + ["B"]*3 + ["C"]*3})
+    result = run_kruskal_wallis_test(frame, "score", "group")
+    assert result.status == "success"
+    assert result.method == "Kruskal–Wallis test"
+    assert result.metadata["group_count"] == 3
+    assert result.metadata["degrees_of_freedom"] == 2
+    assert result.metadata["p_value"] < 0.05
+    assert result.metadata["epsilon_squared"] > 0
+    assert list(result.tables["group_summary"]["Group"]) == ["A", "B", "C"]
+
+
+def test_kruskal_wallis_excludes_missing_and_infinite_outcomes():
+    from timan_intelligence.core.statistical_engine import run_kruskal_wallis_test
+    frame = pd.DataFrame({"score": [1,2,3,5,6,7,9,10,11,None,float("inf")], "group": ["A"]*3+["B"]*3+["C"]*3+["A","B"]})
+    result = run_kruskal_wallis_test(frame, "score", "group")
+    assert result.metadata["missing_outcomes"] == 1
+    assert result.metadata["infinite_outcomes"] == 1
+    assert result.metadata["n_observations"] == 9
+
+
+def test_kruskal_wallis_rejects_two_groups_small_groups_and_all_ties():
+    from timan_intelligence.core.statistical_engine import run_kruskal_wallis_test
+    with pytest.raises(ValueError, match="at least three"):
+        run_kruskal_wallis_test(pd.DataFrame({"y":[1,2,3,4],"g":["A","A","B","B"]}),"y","g")
+    with pytest.raises(ValueError, match="at least two"):
+        run_kruskal_wallis_test(pd.DataFrame({"y":[1,2,3,4,5],"g":["A","A","B","C","C"]}),"y","g")
+    with pytest.raises(ValueError, match="identical"):
+        run_kruskal_wallis_test(pd.DataFrame({"y":[1]*6,"g":["A","A","B","B","C","C"]}),"y","g")
+
+
+def test_kruskal_wallis_service_returns_shared_analysis_result():
+    from timan_intelligence.services.analysis_service import run_kruskal_wallis_test_service
+    frame = pd.DataFrame({"y":[1,2,3,5,6,7,9,10,11],"g":["A"]*3+["B"]*3+["C"]*3})
+    assert run_kruskal_wallis_test_service(frame,"y","g").status == "success"
