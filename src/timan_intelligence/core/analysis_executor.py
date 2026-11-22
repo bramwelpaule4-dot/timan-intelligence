@@ -19,6 +19,7 @@ from timan_intelligence.core.statistical_engine import (
     run_mean_confidence_interval,
     run_one_sample_t_test,
     run_one_sample_binomial_test,
+    run_two_independent_proportions_test,
     run_proportion_confidence_interval,
     run_welch_mean_difference_confidence_interval,
     run_paired_mean_difference_confidence_interval,
@@ -38,6 +39,7 @@ _EXECUTOR_BY_METHOD_ID = {
     "method.inference.confidence_interval.mean": "mean_ci",
     "method.inference.comparison.t_test.one_sample": "one_sample_t",
     "method.inference.comparison.binomial.one_sample": "one_sample_binomial",
+    "method.inference.comparison.proportions.independent": "two_proportions",
     "method.inference.confidence_interval.proportion": "proportion_ci",
     "method.inference.confidence_interval.mean_difference.welch": "welch_mean_difference_ci",
     "method.inference.confidence_interval.mean_difference.paired": "paired_mean_difference_ci",
@@ -95,7 +97,7 @@ def _validate_design_compatibility(
         "paired", "repeated_measure", "repeated_measures",
         "longitudinal", "time_series",
     }
-    if executor in {"welch_t", "anova", "welch_mean_difference_ci", "chi_square_independence", "fisher_exact"} and study_design in repeated_designs:
+    if executor in {"welch_t", "anova", "welch_mean_difference_ci", "chi_square_independence", "fisher_exact", "two_proportions"} and study_design in repeated_designs:
         raise AnalysisExecutionError(
             "Execution blocked: this executor assumes independent groups and "
             "is not validated for paired, repeated-measures, longitudinal or "
@@ -240,6 +242,15 @@ def execute_recommendation(
             raise AnalysisExecutionError("An exact binomial test requires a user-specified reference_proportion.")
         result = run_one_sample_binomial_test(df, variables[0], options["reference_proportion"],
             alternative=options.get("alternative", "two-sided"), confidence_level=options.get("confidence_level", 0.95))
+    elif executor == "two_proportions":
+        if len(variables) != 2:
+            raise AnalysisExecutionError("A two-proportion comparison requires a binary outcome and a two-group variable.")
+        options = recommendation.get("options") or {}
+        result = run_two_independent_proportions_test(
+            df, variables[0], variables[1],
+            confidence_level=options.get("confidence_level", 0.95),
+            alternative=options.get("alternative", "two-sided"),
+        )
     elif executor == "proportion_ci":
         if len(variables) != 1:
             raise AnalysisExecutionError(
