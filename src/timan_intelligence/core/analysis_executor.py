@@ -18,6 +18,7 @@ from timan_intelligence.core.statistical_engine import (
     run_independent_samples_t_test,
     run_mean_confidence_interval,
     run_proportion_confidence_interval,
+    run_welch_mean_difference_confidence_interval,
     run_one_way_anova,
 )
 
@@ -30,6 +31,7 @@ _EXECUTOR_BY_METHOD_ID = {
     "method.descriptive.numeric.summary": "descriptive",
     "method.inference.confidence_interval.mean": "mean_ci",
     "method.inference.confidence_interval.proportion": "proportion_ci",
+    "method.inference.confidence_interval.mean_difference.welch": "welch_mean_difference_ci",
     "method.inference.comparison.t_test.independent.welch": "welch_t",
     "method.inference.comparison.anova.one_way": "anova",
 }
@@ -212,6 +214,17 @@ def execute_recommendation(
         )
         result = run_proportion_confidence_interval(
             df, variables[0], confidence_level=confidence_level
+        )
+    elif executor == "welch_mean_difference_ci":
+        if len(variables) != 2:
+            raise AnalysisExecutionError(
+                "A Welch mean-difference interval requires an outcome and a grouping variable."
+            )
+        confidence_level = (recommendation.get("options") or {}).get(
+            "confidence_level", 0.95
+        )
+        result = run_welch_mean_difference_confidence_interval(
+            df, variables[0], variables[1], confidence_level=confidence_level
         )
     elif executor == "welch_t":
         if len(variables) != 2:
