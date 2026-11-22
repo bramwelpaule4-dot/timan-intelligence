@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from timan_intelligence.core.two_stage_ppswor import estimate_two_stage_ppswor_total
 from timan_intelligence.core.two_stage_ppswor_estimands import (
     estimate_two_stage_ppswor_domain_total,
     estimate_two_stage_ppswor_mean,
