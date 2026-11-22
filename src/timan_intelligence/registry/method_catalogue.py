@@ -181,7 +181,7 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             entity_id="method.inference.comparison.t_test.one_sample",
             name="One-sample Student's t-test",
             description="Tests whether a numeric population mean differs from a specified reference value using a one-sample Student-t statistic.",
-            family="group_comparison",
+            family="estimation",
             purpose="inference",
             priority="P1",
             outcome_types=["numeric"],
