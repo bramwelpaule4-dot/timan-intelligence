@@ -8,7 +8,7 @@ import pandas as pd
 
 
 def _positive_numeric(values: pd.Series, label: str) -> np.ndarray:
-    array = pd.to_numeric(values, errors="coerce").to_numpy(dtype=float)
+    array = pd.to_numeric(values, errors="coerce").to_numpy(dtype=float, copy=True)
     if not np.isfinite(array).all() or (array <= 0).any():
         raise ValueError(f"{label} must contain positive finite values.")
     return array
