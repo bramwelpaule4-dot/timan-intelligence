@@ -848,7 +848,7 @@ def run_two_stage_survey_total_service(
         },
         findings=list(output["findings"]),
         assumptions=[
-            "PSUs are selected by independent simple random sampling without replacement within each stratum.",
+            "Non-certainty PSUs are selected by independent SRSWOR within each stratum; any flagged certainty PSUs are take-all units.",
             "SSUs are selected by simple random sampling without replacement within each sampled PSU.",
             "Each row represents one sampled SSU and contains its fully enumerated outcome total.",
             "Population PSU counts are constant within strata and population SSU counts are constant within PSUs.",
@@ -893,7 +893,7 @@ def run_two_stage_survey_mean_service(
         findings=list(output["findings"]),
         assumptions=[
             "Each sampled SSU supplies a fully enumerated outcome total and eligible-element count.",
-            "PSUs and SSUs are independently selected by SRSWOR at their respective stages.",
+            "Non-certainty PSUs are selected by SRSWOR within strata; flagged certainty PSUs are take-all units. SSUs are selected by SRSWOR within PSUs.",
             "Population frame counts are constant within the relevant sampling units.",
         ],
         limitations=list(output["warnings"]),
