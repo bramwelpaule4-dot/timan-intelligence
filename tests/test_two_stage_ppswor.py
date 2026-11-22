@@ -150,3 +150,21 @@ def test_two_stage_ppswor_rejects_missing_joint_probability_pairs():
             data, "outcome", "psu", "ssu", "pi", "ssu_population",
             joint, "stratum",
         )
+
+
+
+def test_shared_service_wraps_two_stage_ppswor_result():
+    from timan_intelligence.services.analysis_service import (
+        run_two_stage_ppswor_total_service,
+    )
+
+    data, joint = fixture()
+    result = run_two_stage_ppswor_total_service(
+        data, "outcome", "psu", "ssu", "pi", "ssu_population",
+        joint, "stratum",
+    )
+    assert result.status == "success"
+    assert result.metadata["number_of_sampled_psus"] == 3
+    assert "stratum_estimates" in result.tables
+    assert "psu_details" in result.tables
+    assert "pairwise_variance" in result.tables
