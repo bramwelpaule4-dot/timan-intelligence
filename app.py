@@ -7362,7 +7362,7 @@ elif page == "Statistical Inference":
                     "Confidence interval for a mean",
                     "Confidence interval for a proportion",
                     "Exact one-sample binomial test",
-                    "Confidence interval for difference in two proportions",
+
                     "One-sample Student's t-test",
                 }
                 or group_variable is not None
