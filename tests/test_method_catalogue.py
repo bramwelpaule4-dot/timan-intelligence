@@ -36,7 +36,7 @@ def test_only_existing_execution_methods_are_marked_implemented():
     }
 
     assert implemented == IMPLEMENTED_METHODS
-    assert len(implemented) == 12
+    assert len(implemented) == 13
 
 
 def test_exact_binomial_is_registered_as_conditionally_executable():
@@ -174,8 +174,8 @@ def test_catalogue_summary_reports_lifecycle_and_priorities():
     summary = get_statistical_method_summary()
 
     assert summary["catalogue_version"] == CATALOGUE_VERSION
-    assert summary["total_methods"] == 27
-    assert summary["implementation_status"]["implemented"] == 12
+    assert summary["total_methods"] == 28
+    assert summary["implementation_status"]["implemented"] == 13
     assert summary["implementation_status"]["planned"] == 15
     assert set(summary["release_priorities"]) == {"P1", "P2", "P3"}
 
@@ -227,4 +227,12 @@ def test_one_sample_t_test_is_registered_as_implemented():
     assert method is not None
     assert method.name == "One-sample Student's t-test"
     assert method.implementation_status == "implemented"
+    assert method.execution_eligibility == "conditional"
+
+
+def test_two_independent_proportions_is_registered_as_conditionally_executable():
+    method = get_statistical_method("method.inference.comparison.proportions.independent")
+    assert method is not None
+    assert method.implementation_status == "implemented"
+    assert method.verification_status == "unit_tested"
     assert method.execution_eligibility == "conditional"
