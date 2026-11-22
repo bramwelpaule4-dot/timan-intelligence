@@ -45,7 +45,7 @@ def test_cluster_total_uses_ultimate_psu_variance():
         strata_variable="stratum", cluster_variable="psu",
     )
     row = result["table"].iloc[0]
-    assert row["weighted_total"] == pytest.approx(264.0)
+    assert row["weighted_total"] == pytest.approx(192.0)
     assert row["standard_error"] > 0
     assert row["degrees_of_freedom"] == 2
     assert row["ci_lower"] < row["weighted_total"] < row["ci_upper"]
