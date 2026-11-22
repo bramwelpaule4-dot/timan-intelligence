@@ -3936,7 +3936,7 @@ elif page == "Survey Analysis":
             "Validate a two-stage sample hierarchy: respondents or sampled "
             "secondary units (SSUs) nested within primary sampling units (PSUs). "
             "This tool checks design metadata and optional stage sampling "
-            "fractions and design-based totals, means and proportions with Taylor-linearised standard errors."
+            "fractions and design-based totals, means and proportions with Taylor-linearised standard errors. You can flag certainty (take-all) PSUs for correct first-stage variance handling."
         )
         ms_numeric = list(df.select_dtypes(include="number").columns)
         ms_cols = list(df.columns)
@@ -4078,7 +4078,7 @@ elif page == "Survey Analysis":
                     x for x in ms_numeric
                     if x not in (
                         ms_weight, ms_psu_population, ms_ssu_population,
-                        ms_psu, ms_ssu,
+                        ms_psu, ms_ssu, ms_certainty_psu,
                     )
                 ]
                 if ms_strata in outcome_options:
@@ -4155,7 +4155,7 @@ elif page == "Survey Analysis":
                         x for x in ms_numeric
                         if x not in (
                             ms_weight, ms_psu_population, ms_ssu_population,
-                            ms_psu, ms_ssu, ms_strata, ms_outcome,
+                            ms_psu, ms_ssu, ms_strata, ms_outcome, ms_certainty_psu,
                         )
                     ]
                     if ratio_denominator_options:
