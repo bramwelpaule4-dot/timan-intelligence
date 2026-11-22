@@ -55,9 +55,6 @@ def inspect_two_stage_design(
         raise ValueError("Survey weights must be strictly positive.")
 
     hierarchy = pd.DataFrame({"stratum": strata, "psu": psu, "ssu": ssu})
-    parent_counts = hierarchy.groupby(["stratum", "ssu"], sort=False)["psu"].nunique()
-    if (parent_counts > 1).any():
-        raise ValueError("Each SSU identifier must belong to only one PSU within its stratum.")
     psu_keys = ["stratum", "psu"]
     ssu_counts = hierarchy.groupby(psu_keys, sort=False)["ssu"].nunique()
     psu_counts = hierarchy[psu_keys].drop_duplicates().groupby("stratum", sort=False).size()
@@ -210,8 +207,6 @@ def estimate_two_stage_total(
         raise ValueError("First-stage PSU population count must be constant within each stratum.")
     if (data.groupby(ssu_keys)[ssu_population_count_variable].nunique() != 1).any():
         raise ValueError("Second-stage SSU population count must be constant within each PSU.")
-    if (data.groupby([stratum_key, ssu_variable])[psu_variable].nunique() > 1).any():
-        raise ValueError("Each SSU identifier must belong to only one PSU within its stratum.")
 
     strata_results = []
     total_estimate = 0.0
