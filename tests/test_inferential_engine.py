@@ -401,3 +401,57 @@ def test_paired_mean_change_interval_validates_pair_count_and_variables():
         run_paired_mean_difference_confidence_interval(pd.DataFrame({"b": [1.0, None], "a": [2.0, 3.0]}), "b", "a")
     with pytest.raises(ValueError, match="different variables"):
         run_paired_mean_difference_confidence_interval(pd.DataFrame({"b": [1.0, 2.0]}), "b", "b")
+
+
+def test_one_sample_t_test_reports_statistic_p_value_and_confidence_interval():
+    from timan_intelligence.core.statistical_engine import run_one_sample_t_test
+
+    df = pd.DataFrame({"score": [8, 9, 10, 11, 12]})
+    result = run_one_sample_t_test(df, "score", reference_value=8)
+
+    row = result.tables["test"].iloc[0]
+    assert result.status == "success"
+    assert result.method == "One-sample Student's t-test"
+    assert row["Sample mean"] == pytest.approx(10)
+    assert row["Mean difference"] == pytest.approx(2)
+    assert row["Degrees of freedom"] == 4
+    assert 0 <= row["p-value"] <= 1
+    assert row["p-value"] < 0.05
+    assert row["Lower confidence limit"] < 10 < row["Upper confidence limit"]
+
+
+def test_one_sample_t_test_supports_directional_alternatives_and_exclusions():
+    from timan_intelligence.core.statistical_engine import run_one_sample_t_test
+
+    df = pd.DataFrame({"score": [10, 11, 12, None, float("inf")]})
+    result = run_one_sample_t_test(df, "score", 8, alternative="greater")
+    assert result.metadata["alternative"] == "greater"
+    assert result.metadata["observations"] == 3
+    assert result.metadata["missing_values"] == 1
+    assert result.metadata["infinite_values"] == 1
+    assert result.metadata["p_value"] < 0.05
+
+
+@pytest.mark.parametrize(
+    "reference,alternative",
+    [(float("nan"), "two-sided"), (1, "invalid")],
+)
+def test_one_sample_t_test_rejects_invalid_reference_or_alternative(reference, alternative):
+    from timan_intelligence.core.statistical_engine import run_one_sample_t_test
+
+    with pytest.raises(ValueError):
+        run_one_sample_t_test(
+            pd.DataFrame({"score": [1, 2, 3]}),
+            "score",
+            reference,
+            alternative=alternative,
+        )
+
+
+def test_one_sample_t_test_rejects_constant_sample_equal_to_reference():
+    from timan_intelligence.core.statistical_engine import run_one_sample_t_test
+
+    with pytest.raises(ValueError, match="undefined"):
+        run_one_sample_t_test(
+            pd.DataFrame({"score": [5, 5, 5]}), "score", 5
+        )
