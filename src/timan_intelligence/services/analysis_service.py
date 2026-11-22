@@ -1177,3 +1177,47 @@ def run_ppswor_total_service(
             "confidence_level": output["confidence_level"],
         },
     )
+
+
+def run_ppswor_ratio_service(
+    df: pd.DataFrame,
+    numerator_variable: str,
+    denominator_variable: str,
+    psu_variable: str,
+    inclusion_probability_variable: str,
+    joint_inclusion_probabilities: pd.DataFrame | dict[Any, pd.DataFrame],
+    strata_variable: str | None = None,
+    confidence_level: float = 0.95,
+    parameter: str = "mean",
+) -> AnalysisResult:
+    """Run a PSU-level PPSWOR ratio mean/proportion with Taylor-SYG variance."""
+    from timan_intelligence.core.ppswor_survey import estimate_ppswor_ratio
+
+    output = estimate_ppswor_ratio(
+        df, numerator_variable, denominator_variable, psu_variable,
+        inclusion_probability_variable, joint_inclusion_probabilities,
+        strata_variable, confidence_level, parameter,
+    )
+    return AnalysisResult(
+        title=f"PPSWOR survey {parameter}: {numerator_variable} / {denominator_variable}",
+        method=output["metadata"]["estimator"],
+        status="success",
+        tables={
+            "stratum_estimates": output["strata"],
+            "pairwise_variance": output["pairwise_variance"],
+        },
+        findings=list(output["findings"]),
+        assumptions=[
+            "Each row represents one sampled PSU with fully observed numerator and denominator totals.",
+            "The design is fixed-size PPS without replacement within each stratum.",
+            "First- and second-order inclusion probabilities are supplied from the actual sampling design.",
+            "Variance is estimated by first-order Taylor linearisation and the Sen-Yates-Grundy estimator.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata={
+            **output["metadata"], "estimate": output["estimate"],
+            "variance": output["variance"], "standard_error": output["standard_error"],
+            "confidence_interval": output["confidence_interval"],
+            "confidence_level": output["confidence_level"],
+        },
+    )
