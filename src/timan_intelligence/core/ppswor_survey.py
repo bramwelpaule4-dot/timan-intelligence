@@ -93,6 +93,11 @@ def estimate_ppswor_total(
             raise ValueError("Joint inclusion probabilities must lie between zero and one.")
         if np.any(values - np.minimum.outer(p, p) > 1e-10):
             raise ValueError("A joint inclusion probability cannot exceed either corresponding first-order probability.")
+        off_diagonal = values[~np.eye(n, dtype=bool)]
+        if np.any(off_diagonal <= 0):
+            raise ValueError(
+                "The SYG variance estimator requires positive joint inclusion probabilities for every sampled PSU pair; this design has a zero-probability pair."
+            )
         lower_bounds = np.maximum(0.0, p[:, None] + p[None, :] - 1.0)
         if np.any(values + 1e-10 < lower_bounds):
             raise ValueError("A joint inclusion probability is below its probability-theory lower bound.")
