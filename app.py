@@ -4817,7 +4817,7 @@ elif page == "Survey Analysis":
                 "were selected by SRSWOR within sampled PSUs. Supply one row per sampled SSU."
             )
             st.warning(
-                "This interface currently accepts an unstratified first-stage design. "
+                "For stratified designs, upload one joint-inclusion matrix worksheet per stratum. "
                 "Use actual first-order PSU inclusion probabilities and the complete "
                 "symmetric second-order joint inclusion matrix (pi_ij) from the design. "
                 "Do not substitute normalized weights, size measures or conditional draw "
@@ -5039,13 +5039,13 @@ elif page == "Survey Analysis":
                         two_pps_result = run_two_stage_ppswor_total_service(
                             df, two_pps_outcome, two_pps_psu, two_pps_ssu,
                             two_pps_pi, two_pps_population, joint_matrix,
-                            None, two_pps_confidence,
+                            two_pps_strata, two_pps_confidence,
                         )
                     elif two_pps_kind == "Mean":
                         two_pps_result = run_two_stage_ppswor_mean_service(
                             df, two_pps_outcome, two_pps_denominator,
                             two_pps_psu, two_pps_ssu, two_pps_pi,
-                            two_pps_population, joint_matrix, None,
+                            two_pps_population, joint_matrix, two_pps_strata,
                             two_pps_confidence,
                         )
                     elif two_pps_kind == "Proportion":
@@ -5064,7 +5064,7 @@ elif page == "Survey Analysis":
                         )
                     st.session_state["two_stage_ppswor_result"] = two_pps_result
                     st.session_state["two_stage_ppswor_result_key"] = two_pps_key
-                except (TypeError, ValueError, KeyError, pd.errors.ParserError) as exc:
+                except (TypeError, ValueError, KeyError, pd.errors.ParserError, ImportError) as exc:
                     st.error(str(exc))
             saved_two_pps = st.session_state.get("two_stage_ppswor_result")
             if (
