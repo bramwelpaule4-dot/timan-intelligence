@@ -6021,8 +6021,8 @@ elif page == "Survey Analysis":
                             type="primary", key="run_survey_weighting",
                         ):
                             try:
-                                if use_nonresponse and not weight_cells:
-                                    raise ValueError("Select at least one nonresponse adjustment-cell variable.")
+                                if use_nonresponse and (weight_response_col is None or not weight_cells):
+                                    raise ValueError("Select a valid numeric 0/1 response indicator and at least one nonresponse adjustment-cell variable.")
                                 weighting_result = run_survey_weighting_service(
                                     analysis_frame,
                                     weight_pi_col,
