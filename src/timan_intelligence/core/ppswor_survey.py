@@ -287,3 +287,57 @@ def estimate_ppswor_ratio(
             "denominator_estimate": float(denominator_hat),
         },
     }
+
+
+def estimate_ppswor_domain_ratio(
+    df: pd.DataFrame,
+    domain_name: str,
+    domain_numerator_variable: str,
+    domain_denominator_variable: str,
+    psu_variable: str,
+    inclusion_probability_variable: str,
+    joint_inclusion_probabilities: pd.DataFrame | dict[Any, pd.DataFrame],
+    strata_variable: str | None = None,
+    confidence_level: float = 0.95,
+    parameter: str = "mean",
+) -> dict[str, Any]:
+    """Estimate a domain mean/proportion from PSU-level domain aggregates.
+
+    Domain numerator and denominator columns must contain domain-specific
+    PSU totals for every sampled PSU, including explicit zeros for PSUs with
+    no units in the domain. This preserves the original PPSWOR sample and
+    pairwise SYG variance; filtering the sample to domain-positive PSUs is
+    not valid for this estimator.
+    """
+    if not isinstance(domain_name, str) or not domain_name.strip():
+        raise ValueError("A non-empty domain name is required.")
+    output = estimate_ppswor_ratio(
+        df=df,
+        numerator_variable=domain_numerator_variable,
+        denominator_variable=domain_denominator_variable,
+        psu_variable=psu_variable,
+        inclusion_probability_variable=inclusion_probability_variable,
+        joint_inclusion_probabilities=joint_inclusion_probabilities,
+        strata_variable=strata_variable,
+        confidence_level=confidence_level,
+        parameter=parameter,
+    )
+    output["findings"] = [
+        f"Domain: {domain_name.strip()}.",
+        *output["findings"],
+    ]
+    output["warnings"] = [
+        *output["warnings"],
+        "Domain estimation requires domain-specific PSU totals for every sampled PSU, with zero totals retained for PSUs containing no domain units. Do not filter those PSUs out.",
+        "The estimate is a ratio of design-weighted domain totals; domain-specific numerator and denominator aggregates must be correctly constructed from the full sampled PSU records.",
+    ]
+    output["metadata"].update({
+        "estimator": output["metadata"]["estimator"].replace(
+            "PPSWOR HT ratio", "PPSWOR domain HT ratio"
+        ),
+        "domain_name": domain_name.strip(),
+        "domain_estimation": True,
+        "domain_numerator_variable": domain_numerator_variable,
+        "domain_denominator_variable": domain_denominator_variable,
+    })
+    return output
