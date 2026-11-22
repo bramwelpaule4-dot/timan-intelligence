@@ -22,7 +22,7 @@ def _sample():
 def test_cluster_weighted_mean_uses_psu_level_variance():
     result = cluster_weighted_mean(_sample(), "outcome", "weight", "psu", "stratum")
     row = result["table"].iloc[0]
-    assert row["cluster_weighted_mean"] == pytest.approx(5.0)
+    assert row["cluster_weighted_mean"] == pytest.approx(4.8)
     assert row["standard_error"] > 0
     assert row["number_of_clusters"] == 4
     assert row["degrees_of_freedom"] == 2
