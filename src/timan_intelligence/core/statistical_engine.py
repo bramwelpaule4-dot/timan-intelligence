@@ -553,7 +553,9 @@ def run_kruskal_wallis_test(df: pd.DataFrame, outcome_variable: str, group_varia
     samples = [valid.loc[valid[group_variable] == label, outcome_variable].to_numpy(float) for label in labels]
     if any(len(x) < 2 for x in samples):
         raise ValueError("The Kruskal–Wallis test requires at least two finite observations in each group.")
-    try:
+    if valid[outcome_variable].nunique(dropna=True) < 2:
+        raise ValueError("The Kruskal–Wallis statistic is undefined when all observations are identical.")
+    try
         test = kruskal(*samples, nan_policy="raise")
     except ValueError as exc:
         if "identical" in str(exc).casefold():

@@ -218,7 +218,7 @@ def test_execution_blocks_catalogued_but_unimplemented_method():
         "group": ["A", "A", "A", "B", "B", "B"],
     })
     recommendation = {
-        "method": "Kruskal–Wallis test",
+        "method": "Tukey's honestly significant difference",
         "variables": ["score", "group"],
         "status": "review_required",
     }
