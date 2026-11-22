@@ -42,6 +42,7 @@ from timan_intelligence.services.analysis_service import (
     run_stratified_weighted_frequency_service,
     run_cluster_weighted_mean_service,
     run_cluster_weighted_frequency_service,
+    run_two_stage_survey_design_inspection_service,
     run_categorical_comparison,
     run_numeric_group_comparison_service,
     run_numeric_association_service,
@@ -3922,6 +3923,115 @@ elif page == "Survey Analysis":
                         "using a with-replacement ultimate-cluster method. "
                         "At least two PSUs per stratum are required."
                     )
+
+        st.divider()
+        st.subheader("Two-stage survey design inspection")
+        st.write(
+            "Validate a two-stage sample hierarchy: respondents or sampled "
+            "secondary units (SSUs) nested within primary sampling units (PSUs). "
+            "This tool checks design metadata and optional stage sampling "
+            "fractions; it does not yet calculate multistage standard errors."
+        )
+        ms_numeric = list(df.select_dtypes(include="number").columns)
+        ms_cols = list(df.columns)
+        if len(ms_cols) < 3 or not ms_numeric:
+            st.info("A numeric final weight, PSU identifier and SSU identifier are required.")
+        else:
+            ms_weight = st.selectbox(
+                "Final survey weight", ms_numeric, key="multistage_weight"
+            )
+            ms_psu_options = [x for x in ms_cols if x != ms_weight]
+            ms_psu = st.selectbox(
+                "First-stage unit (PSU)", ms_psu_options, key="multistage_psu"
+            )
+            ms_ssu_options = [
+                x for x in ms_cols if x not in (ms_weight, ms_psu)
+            ]
+            ms_ssu = st.selectbox(
+                "Second-stage unit (SSU)", ms_ssu_options, key="multistage_ssu"
+            )
+            ms_use_strata = st.checkbox(
+                "The first-stage sample is stratified",
+                value=True, key="multistage_use_strata",
+            )
+            if ms_use_strata:
+                ms_strata_options = [
+                    x for x in ms_cols if x not in (ms_weight, ms_psu, ms_ssu)
+                ]
+                ms_strata = st.selectbox(
+                    "Stratum identifier", ms_strata_options,
+                    key="multistage_strata",
+                ) if ms_strata_options else None
+            else:
+                ms_strata = None
+            ms_remaining = [
+                x for x in ms_numeric
+                if x not in (ms_weight, ms_psu, ms_ssu, ms_strata)
+            ]
+            ms_use_psu_population = st.checkbox(
+                "I have the population number of PSUs in each stratum",
+                value=False, key="multistage_use_psu_population",
+            )
+            ms_psu_population = None
+            if ms_use_psu_population:
+                if ms_remaining:
+                    ms_psu_population = st.selectbox(
+                        "Population PSU count per stratum",
+                        ms_remaining, key="multistage_psu_population",
+                    )
+                else:
+                    st.info("No unused numeric variable is available for PSU population counts.")
+            ms_ssu_remaining = [
+                x for x in ms_remaining if x != ms_psu_population
+            ]
+            ms_use_ssu_population = st.checkbox(
+                "I have the population number of SSUs in each PSU",
+                value=False, key="multistage_use_ssu_population",
+            )
+            ms_ssu_population = None
+            if ms_use_ssu_population:
+                if ms_ssu_remaining:
+                    ms_ssu_population = st.selectbox(
+                        "Population SSU count per PSU",
+                        ms_ssu_remaining, key="multistage_ssu_population",
+                    )
+                else:
+                    st.info("No unused numeric variable is available for SSU population counts.")
+            ms_design_key = (
+                _dataset_analysis_key(df), ms_weight, ms_psu, ms_ssu,
+                ms_strata, ms_psu_population, ms_ssu_population,
+            )
+            if st.button(
+                "Validate two-stage sample design",
+                type="primary", key="run_multistage_design_inspection",
+            ):
+                try:
+                    ms_result = run_two_stage_survey_design_inspection_service(
+                        df, ms_psu, ms_ssu, ms_weight, ms_strata,
+                        ms_psu_population, ms_ssu_population,
+                    )
+                    st.session_state["multistage_design_result"] = ms_result
+                    st.session_state["multistage_design_result_key"] = ms_design_key
+                except (TypeError, ValueError, KeyError) as exc:
+                    st.error(str(exc))
+            saved_ms_result = st.session_state.get("multistage_design_result")
+            if (
+                saved_ms_result is not None
+                and st.session_state.get("multistage_design_result_key") == ms_design_key
+            ):
+                st.dataframe(
+                    saved_ms_result.tables["psu_summary"],
+                    hide_index=True, use_container_width=True,
+                )
+                with st.expander("Secondary sampling unit summary"):
+                    st.dataframe(
+                        saved_ms_result.tables["ssu_summary"],
+                        hide_index=True, use_container_width=True,
+                    )
+                for finding in saved_ms_result.findings:
+                    st.write(f"• {finding}")
+                for warning in saved_ms_result.limitations:
+                    st.warning(warning)
 
         st.info(
             "Unweighted question-level frequencies above describe the imported "
