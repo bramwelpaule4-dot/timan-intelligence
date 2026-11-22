@@ -54,6 +54,7 @@ from timan_intelligence.services.analysis_service import (
     run_two_stage_ppswr_proportion_service,
     run_ppswor_total_service,
     run_ppswor_ratio_service,
+    run_ppswor_domain_ratio_service,
     run_categorical_comparison,
     run_numeric_group_comparison_service,
     run_numeric_association_service,
@@ -4550,8 +4551,9 @@ elif page == "Survey Analysis":
                 "with Sen–Yates–Grundy (SYG) variance."
             )
             st.warning(
-                "This is a PSU-level total estimator only. It does not support "
-                "SSU subsampling, two-stage PPSWOR, means, proportions, or PPSWR. "
+                "This is a PSU-level estimator. It requires fully observed PSU totals "
+                "and does not support SSU subsampling or two-stage PPSWOR. "
+                "Mean, proportion and domain ratio estimators are provided separately. "
                 "Supply actual design inclusion probabilities; do not derive them "
                 "from size measures or normalized weights."
             )
@@ -5007,6 +5009,249 @@ elif page == "Survey Analysis":
                     for warning in saved_ppswor_ratio.limitations:
                         st.warning(warning)
 
+
+            with st.expander("PPSWOR domain mean and proportion estimation"):
+                st.write(
+                    "Estimate a mean or proportion for a subpopulation using "
+                    "domain-specific PSU numerator and denominator totals. The "
+                    "original sample and full joint-inclusion matrices are retained "
+                    "for Taylor-linearised SYG variance estimation."
+                )
+                st.warning(
+                    "Prepare domain-specific numerator and denominator totals for "
+                    "every sampled PSU, including explicit zeros where a PSU has no "
+                    "members of the domain. Do not filter the dataset to domain "
+                    "members or remove zero-domain PSUs. This interface expects "
+                    "PSU-level aggregates, not respondent-level domain flags."
+                )
+                ppswor_domain_name = st.text_input(
+                    "Domain label (e.g. Women aged 18–24)",
+                    key="ppswor_domain_name",
+                )
+                ppswor_domain_num_options = [
+                    x for x in ppswor_numeric if x != ppswor_pi
+                ]
+                ppswor_domain_num = st.selectbox(
+                    "Domain-specific PSU numerator total",
+                    ppswor_domain_num_options,
+                    key="ppswor_domain_numerator",
+                )
+                ppswor_domain_den_options = [
+                    x for x in ppswor_numeric
+                    if x not in (ppswor_pi, ppswor_domain_num)
+                ]
+                ppswor_domain_den = st.selectbox(
+                    "Domain-specific PSU denominator total",
+                    ppswor_domain_den_options,
+                    key="ppswor_domain_denominator",
+                )
+                ppswor_domain_parameter = st.radio(
+                    "Domain parameter", ["Mean", "Proportion"],
+                    horizontal=True, key="ppswor_domain_parameter",
+                )
+                ppswor_domain_ready = (
+                    bool(ppswor_domain_name.strip())
+                    and ppswor_matrix_file is not None
+                    and ppswor_domain_num is not None
+                    and ppswor_domain_den is not None
+                    and len({
+                        ppswor_psu, ppswor_pi,
+                        ppswor_domain_num, ppswor_domain_den,
+                    }) == 4
+                    and (
+                        ppswor_stratification == "Unstratified"
+                        or ppswor_strata is not None
+                    )
+                )
+                if st.button(
+                    "Run PPSWOR domain estimate",
+                    type="primary", key="run_ppswor_domain",
+                    disabled=not ppswor_domain_ready,
+                ):
+                    try:
+                        domain_matrix_bytes = ppswor_matrix_file.getvalue()
+                        domain_matrix_digest = hashlib.sha256(
+                            domain_matrix_bytes
+                        ).hexdigest()
+                        if ppswor_stratification == "Stratified":
+                            domain_workbook = pd.ExcelFile(
+                                io.BytesIO(domain_matrix_bytes)
+                            )
+                            domain_strata_values = (
+                                df[ppswor_strata].dropna().unique().tolist()
+                            )
+                            domain_sheet_map = {
+                                str(value): value for value in domain_strata_values
+                            }
+                            if len(domain_sheet_map) != len(domain_strata_values):
+                                raise ValueError(
+                                    "Stratum labels must have unique text "
+                                    "representations for worksheet matching."
+                                )
+                            if set(domain_workbook.sheet_names) != set(domain_sheet_map):
+                                raise ValueError(
+                                    "Workbook worksheets must match observed strata "
+                                    "exactly for domain estimation."
+                                )
+                            domain_matrices = {}
+                            for sheet_name, stratum_value in domain_sheet_map.items():
+                                domain_matrix = pd.read_excel(
+                                    domain_workbook, sheet_name=sheet_name, index_col=0
+                                )
+                                if (
+                                    domain_matrix.empty
+                                    or not domain_matrix.index.is_unique
+                                    or not domain_matrix.columns.is_unique
+                                ):
+                                    raise ValueError(
+                                        f"Worksheet {sheet_name!r} must have unique "
+                                        "PSU row and column labels."
+                                    )
+                                domain_ids = (
+                                    df.loc[
+                                        df[ppswor_strata] == stratum_value,
+                                        ppswor_psu,
+                                    ].dropna().tolist()
+                                )
+                                domain_lookup = {
+                                    str(value): value for value in domain_ids
+                                }
+                                domain_matrix.index = [
+                                    domain_lookup.get(str(value), value)
+                                    for value in domain_matrix.index
+                                ]
+                                domain_matrix.columns = [
+                                    domain_lookup.get(str(value), value)
+                                    for value in domain_matrix.columns
+                                ]
+                                unique_domain_ids = list(dict.fromkeys(domain_ids))
+                                if (
+                                    domain_matrix.shape != (
+                                        len(unique_domain_ids), len(unique_domain_ids)
+                                    )
+                                    or set(domain_matrix.index) != set(unique_domain_ids)
+                                    or set(domain_matrix.columns) != set(unique_domain_ids)
+                                ):
+                                    raise ValueError(
+                                        f"Worksheet {sheet_name!r} must be square "
+                                        "and cover every sampled PSU in that stratum, "
+                                        "including PSUs with zero domain totals."
+                                    )
+                                domain_matrices[stratum_value] = domain_matrix.loc[
+                                    unique_domain_ids, unique_domain_ids
+                                ]
+                            domain_joint_probabilities = domain_matrices
+                        else:
+                            domain_matrix = pd.read_csv(
+                                io.BytesIO(domain_matrix_bytes), index_col=0
+                            )
+                            if (
+                                domain_matrix.empty
+                                or not domain_matrix.index.is_unique
+                                or not domain_matrix.columns.is_unique
+                            ):
+                                raise ValueError(
+                                    "The joint-inclusion CSV must have unique PSU "
+                                    "row and column labels."
+                                )
+                            domain_ids = df[ppswor_psu].dropna().tolist()
+                            domain_lookup = {
+                                str(value): value for value in domain_ids
+                            }
+                            domain_matrix.index = [
+                                domain_lookup.get(str(value), value)
+                                for value in domain_matrix.index
+                            ]
+                            domain_matrix.columns = [
+                                domain_lookup.get(str(value), value)
+                                for value in domain_matrix.columns
+                            ]
+                            unique_domain_ids = list(dict.fromkeys(domain_ids))
+                            if (
+                                domain_matrix.shape != (
+                                    len(unique_domain_ids), len(unique_domain_ids)
+                                )
+                                or set(domain_matrix.index) != set(unique_domain_ids)
+                                or set(domain_matrix.columns) != set(unique_domain_ids)
+                            ):
+                                raise ValueError(
+                                    "The joint-inclusion CSV must be square and cover "
+                                    "every sampled PSU, including zero-domain PSUs."
+                                )
+                            domain_joint_probabilities = domain_matrix.loc[
+                                unique_domain_ids, unique_domain_ids
+                            ]
+                        domain_result = run_ppswor_domain_ratio_service(
+                            df, ppswor_domain_name.strip(),
+                            ppswor_domain_num, ppswor_domain_den,
+                            ppswor_psu, ppswor_pi, domain_joint_probabilities,
+                            ppswor_strata, ppswor_confidence,
+                            ppswor_domain_parameter.lower(),
+                        )
+                        st.session_state["ppswor_domain_result"] = domain_result
+                        st.session_state["ppswor_domain_result_key"] = (
+                            _dataset_analysis_key(df), ppswor_domain_name.strip(),
+                            ppswor_psu, ppswor_pi, ppswor_domain_num,
+                            ppswor_domain_den, ppswor_domain_parameter,
+                            ppswor_stratification, ppswor_strata,
+                            ppswor_confidence, domain_matrix_digest,
+                        )
+                    except (
+                        TypeError, ValueError, KeyError, pd.errors.ParserError,
+                        ImportError,
+                    ) as exc:
+                        st.error(str(exc))
+                ppswor_domain_result_key = (
+                    _dataset_analysis_key(df), ppswor_domain_name.strip(),
+                    ppswor_psu, ppswor_pi, ppswor_domain_num,
+                    ppswor_domain_den, ppswor_domain_parameter,
+                    ppswor_stratification, ppswor_strata, ppswor_confidence,
+                    hashlib.sha256(ppswor_matrix_file.getvalue()).hexdigest()
+                    if ppswor_matrix_file is not None else None,
+                )
+                saved_ppswor_domain = st.session_state.get("ppswor_domain_result")
+                if (
+                    saved_ppswor_domain is not None
+                    and st.session_state.get("ppswor_domain_result_key")
+                    == ppswor_domain_result_key
+                ):
+                    domain_estimate = saved_ppswor_domain.metadata["estimate"]
+                    if ppswor_domain_parameter == "Proportion":
+                        st.metric(
+                            f"Estimated proportion — {ppswor_domain_name.strip()}",
+                            f"{domain_estimate:.2%}",
+                        )
+                    else:
+                        st.metric(
+                            f"Estimated mean — {ppswor_domain_name.strip()}",
+                            f"{domain_estimate:,.4g}",
+                        )
+                    st.metric(
+                        "Domain Taylor-linearised SYG standard error",
+                        f"{saved_ppswor_domain.metadata['standard_error']:,.4g}",
+                    )
+                    domain_ci = saved_ppswor_domain.metadata["confidence_interval"]
+                    if ppswor_domain_parameter == "Proportion":
+                        st.write(
+                            f"{ppswor_confidence:.0%} confidence interval: "
+                            f"[{domain_ci[0]:.2%}, {domain_ci[1]:.2%}]"
+                        )
+                    else:
+                        st.write(
+                            f"{ppswor_confidence:.0%} confidence interval: "
+                            f"[{domain_ci[0]:,.4g}, {domain_ci[1]:,.4g}]"
+                        )
+                    st.dataframe(
+                        saved_ppswor_domain.tables["stratum_estimates"],
+                        hide_index=True, use_container_width=True,
+                    )
+                    with st.expander("Domain pairwise SYG variance contributions"):
+                        st.dataframe(
+                            saved_ppswor_domain.tables["pairwise_variance"],
+                            hide_index=True, use_container_width=True,
+                        )
+                    for warning in saved_ppswor_domain.limitations:
+                        st.warning(warning)
 
         st.info(
             "Unweighted question-level frequencies above describe the imported "
