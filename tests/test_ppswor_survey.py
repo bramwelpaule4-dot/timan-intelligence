@@ -430,3 +430,19 @@ def test_ppswor_domain_total_service_exposes_diagnostics_table():
     )
     assert "diagnostics" in result.tables
     assert result.tables["diagnostics"].iloc[0]["psus_with_zero_domain_value"] == 1
+
+
+
+def test_ppswor_domain_ratio_service_exposes_precision_diagnostics():
+    from timan_intelligence.services.analysis_service import run_ppswor_domain_ratio_service
+
+    df, joint = ppswor_fixture()
+    df["domain_num"] = [2.0, 0.0, 8.0]
+    df["domain_den"] = [10.0, 0.0, 20.0]
+    result = run_ppswor_domain_ratio_service(
+        df, "Youth", "domain_num", "domain_den", "psu", "pi",
+        joint, "stratum", parameter="proportion",
+    )
+    assert "diagnostics" in result.tables
+    assert result.tables["diagnostics"].iloc[0]["sampled_psus"] == 3
+    assert "coefficient_of_variation_percent" in result.metadata["precision_diagnostics"]
