@@ -50,11 +50,12 @@ def test_allows_reused_ssu_labels_under_different_psus():
     assert result["metadata"]["number_of_ssus"] == 8
 
 
-def test_rejects_ssu_assigned_to_multiple_psus_within_stratum():
+def test_allows_ssu_labels_to_repeat_across_psus_within_stratum():
     df = sample()
+    # SSU labels are local to each PSU; the same label can occur in PSU 1 and PSU 2.
     df.loc[4, "ssu"] = 1
-    with pytest.raises(ValueError, match="only one PSU"):
-        inspect_two_stage_design(df, "psu", "ssu", "weight", "stratum")
+    result = inspect_two_stage_design(df, "psu", "ssu", "weight", "stratum")
+    assert result["metadata"]["number_of_ssus"] == 8
 
 
 def test_rejects_missing_psu_or_ssu_identifiers():
