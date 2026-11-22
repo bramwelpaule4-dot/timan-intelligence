@@ -1970,6 +1970,12 @@ def run_fisher_exact_test_service(df: pd.DataFrame, row_variable: str, column_va
     return run_fisher_exact_test(df, row_variable, column_variable, alternative)
 
 
+
+def run_two_independent_proportions_test_service(df: pd.DataFrame, outcome_variable: str, group_variable: str, confidence_level: float = 0.95, alternative: str = "two-sided") -> AnalysisResult:
+    """Compare two independent proportions through the shared analysis service."""
+    from timan_intelligence.core.statistical_engine import run_two_independent_proportions_test
+    return run_two_independent_proportions_test(df, outcome_variable, group_variable, confidence_level, alternative)
+
 def run_one_sample_binomial_test_service(df: pd.DataFrame, variable: str, reference_proportion: float, alternative: str = "two-sided", confidence_level: float = 0.95) -> AnalysisResult:
     """Run an exact one-sample binomial test through the shared service."""
     from timan_intelligence.core.statistical_engine import run_one_sample_binomial_test
