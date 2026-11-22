@@ -1136,3 +1136,44 @@ def run_two_stage_ppswr_proportion_service(
                   "numerator_total": output["numerator_total"],
                   "denominator_total": output["denominator_total"]},
     )
+
+
+def run_ppswor_total_service(
+    df: pd.DataFrame,
+    outcome_total_variable: str,
+    psu_variable: str,
+    inclusion_probability_variable: str,
+    joint_inclusion_probabilities: pd.DataFrame | dict[Any, pd.DataFrame],
+    strata_variable: str | None = None,
+    confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Run a PSU-level PPSWOR Horvitz-Thompson total with SYG variance."""
+    from timan_intelligence.core.ppswor_survey import estimate_ppswor_total
+
+    output = estimate_ppswor_total(
+        df, outcome_total_variable, psu_variable,
+        inclusion_probability_variable, joint_inclusion_probabilities,
+        strata_variable, confidence_level,
+    )
+    return AnalysisResult(
+        title=f"PPSWOR survey total: {outcome_total_variable}",
+        method=output["metadata"]["estimator"],
+        status="success",
+        tables={
+            "stratum_estimates": output["strata"],
+            "pairwise_variance": output["pairwise_variance"],
+        },
+        findings=list(output["findings"]),
+        assumptions=[
+            "Each row represents one sampled PSU with a fully observed PSU outcome total.",
+            "The design is fixed-size PPS without replacement within each stratum.",
+            "First- and second-order inclusion probabilities are supplied from the actual sampling design.",
+        ],
+        limitations=list(output["warnings"]),
+        metadata={
+            **output["metadata"], "estimate": output["estimate"],
+            "variance": output["variance"], "standard_error": output["standard_error"],
+            "confidence_interval": output["confidence_interval"],
+            "confidence_level": output["confidence_level"],
+        },
+    )
