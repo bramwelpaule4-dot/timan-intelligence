@@ -432,3 +432,28 @@ def test_executor_runs_fisher_exact_and_blocks_complex_sampling():
     blocked = {**recommendation, "design_context": {"sampling_design": "cluster"}}
     with pytest.raises(AnalysisExecutionError, match="not validated"):
         execute_recommendation(frame, blocked, approved=True)
+
+
+def test_execution_runs_registered_two_independent_proportions_comparison():
+    df = pd.DataFrame({"event": [1, 1, 1, 0, 0, 1, 0, 0], "group": ["A", "A", "A", "A", "B", "B", "B", "B"]})
+    recommendation = {
+        "method": "Two-independent-proportions comparison",
+        "method_id": "method.inference.comparison.proportions.independent",
+        "variables": ["event", "group"], "status": "review_required",
+        "options": {"confidence_level": 0.90, "alternative": "greater"},
+    }
+    result = execute_recommendation(df, recommendation, approved=True)
+    assert result.status == "success"
+    assert result.metadata["method_id"] == "method.inference.comparison.proportions.independent"
+    assert result.metadata["alternative"] == "greater"
+
+
+def test_two_independent_proportions_executor_blocks_cluster_sampling():
+    df = pd.DataFrame({"event": [1, 0, 1, 0], "group": ["A", "A", "B", "B"]})
+    recommendation = {
+        "method": "Two-independent-proportions comparison",
+        "variables": ["event", "group"], "status": "review_required",
+        "design_context": {"sampling_design": "cluster"},
+    }
+    with pytest.raises(AnalysisExecutionError, match="not validated"):
+        execute_recommendation(df, recommendation, approved=True)
