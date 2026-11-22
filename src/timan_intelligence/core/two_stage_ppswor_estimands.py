@@ -154,3 +154,133 @@ def estimate_two_stage_ppswor_domain_total(
         "variance_method": "Two-stage PPSWOR total variance with zero contributions for out-of-domain SSUs",
     }
     return result
+
+
+def _estimate_two_stage_ppswor_domain_ratio(
+    df: pd.DataFrame,
+    numerator_variable: str,
+    domain_variable: str,
+    domain_value: Any,
+    psu_variable: str,
+    ssu_variable: str,
+    psu_inclusion_probability_variable: str,
+    ssu_population_count_variable: str,
+    joint_psu_inclusion_probabilities: pd.DataFrame | dict[Any, pd.DataFrame],
+    strata_variable: str | None = None,
+    confidence_level: float = 0.95,
+    binary_numerator: bool = False,
+) -> dict[str, Any]:
+    """Estimate a domain mean/proportion using Taylor linearisation of an HT ratio."""
+    from scipy import stats
+
+    if domain_variable not in df.columns:
+        raise KeyError(f"Variable not found: {domain_variable}.")
+    if df[domain_variable].isna().any():
+        raise ValueError("Domain identifiers cannot be missing.")
+    mask = df[domain_variable].eq(domain_value)
+    if not mask.any():
+        raise ValueError("The selected domain has no sampled SSUs.")
+    if numerator_variable not in df.columns:
+        raise KeyError(f"Variable not found: {numerator_variable}.")
+    y = pd.to_numeric(df[numerator_variable], errors="coerce")
+    if y.loc[mask].isna().any() or not np.isfinite(y.loc[mask].to_numpy(dtype=float)).all():
+        raise ValueError("Outcome values within the selected domain must be complete, numeric and finite.")
+    if binary_numerator and not y.loc[mask].isin([0, 1]).all():
+        raise ValueError("Domain proportion outcomes must be complete binary values coded 0 and 1.")
+
+    # Retain every sampled SSU. Estimate the domain population count with the
+    # same two-stage HT design, then linearise the ratio using y - R*I(domain).
+    indicator_name = "__timan_domain_indicator__"
+    numerator_name = "__timan_domain_numerator__"
+    residual_name = "__timan_domain_ratio_residual__"
+    if any(name in df.columns for name in (indicator_name, numerator_name, residual_name)):
+        raise ValueError("Dataset contains a reserved internal variable name used by this estimator.")
+    work = df.copy()
+    work[indicator_name] = mask.astype(float)
+    work[numerator_name] = y.where(mask, 0.0)
+    design_args = (
+        psu_variable, ssu_variable, psu_inclusion_probability_variable,
+        ssu_population_count_variable, joint_psu_inclusion_probabilities,
+        strata_variable, confidence_level,
+    )
+    denominator_output = estimate_two_stage_ppswor_total(
+        work, indicator_name, *design_args
+    )
+    denominator = float(denominator_output["estimate"])
+    if not np.isfinite(denominator) or denominator <= 0:
+        raise ValueError("Estimated domain population count must be positive and finite for ratio estimation.")
+    numerator_output = estimate_two_stage_ppswor_total(
+        work, numerator_name, *design_args
+    )
+    estimate = float(numerator_output["estimate"] / denominator)
+    work[residual_name] = work[numerator_name] - estimate * work[indicator_name]
+    linearised = estimate_two_stage_ppswor_total(
+        work, residual_name, *design_args
+    )
+    variance_stage_1 = float(linearised["variance_stage_1"] / denominator**2)
+    variance_stage_2 = float(linearised["variance_stage_2"] / denominator**2)
+    variance = max(0.0, variance_stage_1 + variance_stage_2)
+    standard_error = float(np.sqrt(variance))
+    df_total = int(linearised["degrees_of_freedom"])
+    critical = float(stats.t.ppf(0.5 + confidence_level / 2.0, df_total))
+    interval = (
+        float(estimate - critical * standard_error),
+        float(estimate + critical * standard_error),
+    )
+    label = "domain proportion" if binary_numerator else "domain mean"
+    result = dict(linearised)
+    result.update({
+        "estimate": estimate,
+        "variance": variance,
+        "variance_stage_1": variance_stage_1,
+        "variance_stage_2": variance_stage_2,
+        "standard_error": standard_error,
+        "confidence_interval": interval,
+        "confidence_level": float(confidence_level),
+        "findings": [
+            f"Two-stage PPSWOR {label} for {domain_variable}={domain_value}: {estimate:,.6g}.",
+            f"Estimated domain population SSUs: {denominator:,.6g}.",
+            f"Taylor-linearised design-based standard error: {standard_error:,.6g}.",
+            f"{confidence_level:.0%} confidence interval: [{interval[0]:,.6g}, {interval[1]:,.6g}].",
+        ],
+        "warnings": list(linearised["warnings"]) + [
+            "The domain denominator is estimated using the two-stage Horvitz-Thompson estimator. Variance uses first-order Taylor linearisation of the numerator-to-denominator ratio, including the covariance through the linearised residual y - R*I(domain).",
+            "All sampled SSUs, including those outside the selected domain, remain in the original sampling design.",
+            "The ratio estimator is not design-unbiased in finite samples; its variance and confidence interval are Taylor approximations.",
+        ],
+        "metadata": {
+            **linearised["metadata"],
+            "estimand": label,
+            "domain_variable": domain_variable,
+            "domain_value": str(domain_value),
+            "estimated_domain_population_ssus": denominator,
+            "estimated_domain_numerator_total": float(numerator_output["estimate"]),
+            "variance_method": "Two-stage PPSWOR Taylor linearisation using the HT domain count and residual y - R*I(domain)",
+        },
+    })
+    if binary_numerator:
+        result["warnings"].append(
+            "The domain proportion and confidence interval are not clipped to [0, 1]; clipping would alter the ratio estimate."
+        )
+    return result
+
+
+def estimate_two_stage_ppswor_domain_mean(
+    df: pd.DataFrame, outcome_variable: str, domain_variable: str,
+    domain_value: Any, *args: Any, **kwargs: Any,
+) -> dict[str, Any]:
+    """Estimate a domain mean as a ratio of HT outcome and domain-count totals."""
+    return _estimate_two_stage_ppswor_domain_ratio(
+        df, outcome_variable, domain_variable, domain_value, *args, **kwargs
+    )
+
+
+def estimate_two_stage_ppswor_domain_proportion(
+    df: pd.DataFrame, outcome_variable: str, domain_variable: str,
+    domain_value: Any, *args: Any, **kwargs: Any,
+) -> dict[str, Any]:
+    """Estimate a domain proportion using binary outcomes and ratio linearisation."""
+    return _estimate_two_stage_ppswor_domain_ratio(
+        df, outcome_variable, domain_variable, domain_value,
+        *args, binary_numerator=True, **kwargs
+    )
