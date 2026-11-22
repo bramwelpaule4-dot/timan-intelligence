@@ -4130,7 +4130,7 @@ elif page == "Survey Analysis":
                         x for x in ms_numeric
                         if x not in (
                             ms_weight, ms_psu_population, ms_ssu_population,
-                            ms_psu, ms_ssu, ms_strata,
+                            ms_psu, ms_ssu, ms_strata, ms_outcome,
                         )
                     ]
                     if ratio_denominator_options:
