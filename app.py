@@ -562,11 +562,63 @@ st.markdown(
         .home-hero { padding: 1.35rem 1.2rem; }
         .feature-card { min-height: 145px; }
         .block-container {
-        .block-container {
             padding-top: 1.2rem;
             padding-left: 1rem;
             padding-right: 1rem;
         }
+        .sidebar-wordmark { font-size: 22px; }
+    }
+
+    /* Refined application shell */
+    [data-testid="stAppViewContainer"] .main .block-container {
+        max-width: 1500px;
+    }
+    section[data-testid="stSidebar"] {
+        box-shadow: 5px 0 24px rgba(16,45,80,.08);
+    }
+    section[data-testid="stSidebar"] [data-testid="stExpander"] {
+        background: rgba(255,255,255,.045);
+        border: 1px solid rgba(255,255,255,.12);
+        border-radius: 11px;
+        margin: 0 0 9px 0;
+        transition: background .18s ease, border-color .18s ease;
+    }
+    section[data-testid="stSidebar"] [data-testid="stExpander"]:hover {
+        background: rgba(255,255,255,.075);
+        border-color: rgba(117,196,242,.32);
+    }
+    section[data-testid="stSidebar"] [data-testid="stExpander"] summary {
+        min-height: 2.8rem;
+        padding: .45rem .7rem;
+    }
+    section[data-testid="stSidebar"] [data-testid="stExpander"] summary p {
+        color: #DCEAF7;
+        font-size: .68rem;
+        letter-spacing: .10em;
+        font-weight: 800;
+    }
+    section[data-testid="stSidebar"] .stButton > button {
+        min-height: 2.45rem;
+        margin: 2px 0;
+        padding: .48rem .75rem;
+        border-radius: 8px;
+        font-size: .86rem;
+    }
+    section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h4 {
+        color: #9FCBEA;
+        font-size: .68rem;
+        font-weight: 800;
+        letter-spacing: .13em;
+        margin: .25rem 0 .5rem;
+    }
+    section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {
+        line-height: 1.45;
+    }
+    div[data-testid="stMetric"] {
+        min-height: 112px;
+    }
+    div[data-testid="stDataFrame"] {
+        background: #FFFFFF;
     }
     </style>
     """,
@@ -2856,6 +2908,19 @@ def _render_navigation_item(label):
 
 # Navigation is organised around the user's workflow rather than a flat
 # list of every module. The registry remains the single source of truth.
+st.sidebar.markdown(
+    """
+    <div class="sidebar-brand">
+        <div class="sidebar-symbol" aria-hidden="true">
+            <span></span><span></span><span></span>
+        </div>
+        <div class="sidebar-wordmark">TIMAN<span>STAT</span></div>
+        <div class="sidebar-platform-label">STATISTICAL SUPPORT PLATFORM</div>
+        <div class="sidebar-byline">by Timan Analytics</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 st.sidebar.markdown("#### WORKSPACE")
 _render_navigation_item("Home")
 
