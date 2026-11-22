@@ -4823,6 +4823,11 @@ elif page == "Survey Analysis":
                 "Do not substitute normalized weights, size measures or conditional draw "
                 "probabilities. Respondent subsampling within SSUs is not supported."
             )
+            two_pps_design = st.radio(
+                "First-stage PPSWOR design structure",
+                ["Unstratified", "Stratified"],
+                horizontal=True, key="two_ppswor_design_structure",
+            )
             two_pps_kind = st.selectbox(
                 "PPSWOR estimand",
                 ["Total", "Mean", "Proportion", "Domain total"],
@@ -4837,6 +4842,16 @@ elif page == "Survey Analysis":
                 key="two_ppswor_ssu_variable",
             )
             two_pps_structural = {two_pps_psu, two_pps_ssu}
+            two_pps_strata = None
+            if two_pps_design == "Stratified":
+                two_pps_strata_options = [
+                    x for x in ms_cols if x not in (two_pps_psu, two_pps_ssu)
+                ]
+                two_pps_strata = st.selectbox(
+                    "Stratum identifier", two_pps_strata_options,
+                    key="two_ppswor_strata_variable",
+                )
+            two_pps_structural = {two_pps_psu, two_pps_ssu, two_pps_strata}
             two_pps_numeric = [
                 x for x in ms_numeric if x not in two_pps_structural
             ]
@@ -4904,28 +4919,44 @@ elif page == "Survey Analysis":
                 index=1, format_func=lambda x: f"{x:.0%}",
                 key="two_ppswor_confidence_level",
             )
-            st.caption(
-                "Paste a square CSV matrix: the first column contains PSU IDs, "
-                "the header row contains the same PSU IDs, and each cell contains "
-                "the actual joint inclusion probability pi_ij. Diagonal cells must "
-                "equal pi_i."
-            )
-            two_pps_joint_text = st.text_area(
-                "Second-order PSU joint inclusion probability matrix (CSV)",
-                placeholder=(
-                    ",P1,P2,P3\n"
-                    "P1,0.50,0.20,0.30\n"
-                    "P2,0.20,0.70,0.50\n"
-                    "P3,0.30,0.50,0.80"
-                ),
-                height=150,
-                key="two_ppswor_joint_matrix_csv",
-            )
+            if two_pps_design == "Stratified":
+                st.info(
+                    "Upload one Excel workbook (.xlsx) with one worksheet per stratum. "
+                    "Each worksheet name must exactly match its stratum label. The first "
+                    "column and column headers identify the same PSUs in that stratum."
+                )
+                two_pps_matrix_file = st.file_uploader(
+                    "Stratum-specific joint inclusion matrices (.xlsx)",
+                    type=["xlsx"], key="two_ppswor_stratified_matrix_upload",
+                )
+                two_pps_joint_text = ""
+            else:
+                st.caption(
+                    "Paste a square CSV matrix: the first column contains PSU IDs, "
+                    "the header row contains the same PSU IDs, and each cell contains "
+                    "the actual joint inclusion probability pi_ij. Diagonal cells must "
+                    "equal pi_i."
+                )
+                two_pps_joint_text = st.text_area(
+                    "Second-order PSU joint inclusion probability matrix (CSV)",
+                    placeholder=(
+                        ",P1,P2,P3\\n"
+                        "P1,0.50,0.20,0.30\\n"
+                        "P2,0.20,0.70,0.50\\n"
+                        "P3,0.30,0.50,0.80"
+                    ),
+                    height=150,
+                    key="two_ppswor_joint_matrix_csv",
+                )
+                two_pps_matrix_file = None
             two_pps_key = (
                 _dataset_analysis_key(df), two_pps_kind, two_pps_psu, two_pps_ssu,
                 two_pps_pi, two_pps_population, two_pps_outcome,
                 two_pps_denominator, two_pps_domain_variable, two_pps_domain_value,
-                two_pps_confidence, two_pps_joint_text,
+                two_pps_confidence, two_pps_joint_text, two_pps_design,
+                two_pps_strata,
+                hashlib.sha256(two_pps_matrix_file.getvalue()).hexdigest()
+                if two_pps_matrix_file is not None else None,
             )
             two_pps_required = [
                 two_pps_psu, two_pps_ssu, two_pps_pi,
@@ -4934,7 +4965,11 @@ elif page == "Survey Analysis":
             two_pps_ready = (
                 all(value is not None for value in two_pps_required)
                 and len(set(two_pps_required)) == 5
-                and bool(two_pps_joint_text.strip())
+                and (
+                    (two_pps_design == "Unstratified" and bool(two_pps_joint_text.strip()))
+                    or (two_pps_design == "Stratified" and two_pps_matrix_file is not None
+                        and two_pps_strata is not None)
+                )
                 and (
                     two_pps_kind not in ("Mean", "Proportion")
                     or two_pps_denominator is not None
@@ -4953,11 +4988,53 @@ elif page == "Survey Analysis":
                 disabled=not two_pps_ready,
             ):
                 try:
-                    joint_matrix = pd.read_csv(
-                        io.StringIO(two_pps_joint_text.strip()), index_col=0
-                    )
-                    joint_matrix.index = joint_matrix.index.map(str)
-                    joint_matrix.columns = joint_matrix.columns.map(str)
+                    if two_pps_design == "Stratified":
+                        matrix_bytes = two_pps_matrix_file.getvalue()
+                        workbook = pd.ExcelFile(io.BytesIO(matrix_bytes))
+                        observed_strata = df[two_pps_strata].dropna().unique().tolist()
+                        expected_sheets = {str(value): value for value in observed_strata}
+                        if len(expected_sheets) != len(observed_strata):
+                            raise ValueError(
+                                "Stratum labels must have unique text representations "
+                                "to map them safely to Excel worksheet names."
+                            )
+                        missing_sheets = sorted(set(expected_sheets) - set(workbook.sheet_names))
+                        extra_sheets = sorted(set(workbook.sheet_names) - set(expected_sheets))
+                        if missing_sheets or extra_sheets:
+                            raise ValueError(
+                                "Workbook worksheets must match observed strata exactly. "
+                                f"Missing: {missing_sheets or 'none'}; "
+                                f"unexpected: {extra_sheets or 'none'}."
+                            )
+                        joint_matrix = {}
+                        for sheet_name, stratum_value in expected_sheets.items():
+                            matrix = pd.read_excel(
+                                workbook, sheet_name=sheet_name, index_col=0
+                            )
+                            if matrix.empty or not matrix.index.is_unique or not matrix.columns.is_unique:
+                                raise ValueError(
+                                    f"Worksheet {sheet_name!r} must be a non-empty matrix "
+                                    "with unique PSU row and column labels."
+                                )
+                            stratum_ids = (
+                                df.loc[df[two_pps_strata] == stratum_value, two_pps_psu]
+                                .dropna().tolist()
+                            )
+                            label_lookup = {str(value): value for value in stratum_ids}
+                            matrix.index = [label_lookup.get(str(value), value) for value in matrix.index]
+                            matrix.columns = [label_lookup.get(str(value), value) for value in matrix.columns]
+                            if set(matrix.index) != set(matrix.columns):
+                                raise ValueError(
+                                    f"Worksheet {sheet_name!r} row and column PSU labels must match."
+                                )
+                            ordered_ids = list(dict.fromkeys(stratum_ids))
+                            joint_matrix[stratum_value] = matrix.loc[ordered_ids, ordered_ids]
+                    else:
+                        joint_matrix = pd.read_csv(
+                            io.StringIO(two_pps_joint_text.strip()), index_col=0
+                        )
+                        joint_matrix.index = joint_matrix.index.map(str)
+                        joint_matrix.columns = joint_matrix.columns.map(str)
                     if two_pps_kind == "Total":
                         two_pps_result = run_two_stage_ppswor_total_service(
                             df, two_pps_outcome, two_pps_psu, two_pps_ssu,
