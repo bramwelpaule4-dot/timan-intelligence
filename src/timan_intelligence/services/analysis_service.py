@@ -1455,7 +1455,7 @@ def run_survey_weighting_service(
     raking_margins: dict[str, dict[Any, float]] | None = None,
     trim_quantiles: tuple[float, float] | None = None,
 ) -> AnalysisResult:
-    """Construct and adjust survey weights with explicit design inputs."""
+    """Construct weights; nonrespondents are retained with zero analysis weight."""
     from timan_intelligence.core.survey_weighting import (
         calculate_base_weights, adjust_nonresponse,
         calibrate_poststratification, rake_weights, trim_weights,
@@ -1463,53 +1463,60 @@ def run_survey_weighting_service(
     )
 
     if not isinstance(frame, pd.DataFrame) or frame.empty:
-        raise ValueError("A non-empty respondent dataset is required.")
+        raise ValueError("A non-empty sampled-unit dataset is required.")
     output = frame.copy()
     output["base_weight"] = calculate_base_weights(output, inclusion_probability_column)
-    current_column = "base_weight"
     stages = ["Inverse-probability base weights"]
+    analysis = output.copy()
     if response_column:
         if not adjustment_cells:
             raise ValueError("Specify at least one adjustment-cell variable for nonresponse adjustment.")
-        output["nonresponse_adjusted_weight"] = adjust_nonresponse(
-            output, current_column, response_column, adjustment_cells
-        )
-        current_column = "nonresponse_adjusted_weight"
+        adjusted = adjust_nonresponse(output, "base_weight", response_column, adjustment_cells)
+        output["nonresponse_adjusted_weight"] = adjusted
+        response = pd.to_numeric(output[response_column], errors="coerce")
+        analysis = output.loc[response == 1].copy()
+        if analysis.empty:
+            raise ValueError("No respondent records are available for weighted analysis.")
         stages.append("Weighted response-rate adjustment within cells")
+    current_column = "nonresponse_adjusted_weight" if response_column else "base_weight"
     if population_totals is not None:
         if not poststrata_column:
             raise ValueError("Select a post-stratification variable.")
-        output["poststratified_weight"] = calibrate_poststratification(
-            output, current_column, poststrata_column, population_totals
+        analysis["poststratified_weight"] = calibrate_poststratification(
+            analysis, current_column, poststrata_column, population_totals
         )
         current_column = "poststratified_weight"
         stages.append("Post-stratification to known population totals")
     raking_info = None
     if raking_margins:
-        output["raked_weight"], raking_info = rake_weights(
-            output, current_column, raking_margins
+        analysis["raked_weight"], raking_info = rake_weights(
+            analysis, current_column, raking_margins
         )
         current_column = "raked_weight"
         stages.append("Iterative proportional fitting (raking)")
     if trim_quantiles is not None:
-        output["trimmed_weight"] = trim_weights(
-            output, current_column, trim_quantiles[0], trim_quantiles[1],
+        analysis["trimmed_weight"] = trim_weights(
+            analysis, current_column, trim_quantiles[0], trim_quantiles[1],
             preserve_total=True,
         )
         current_column = "trimmed_weight"
         stages.append("Winsorised weight trimming with total-weight preservation")
-    diagnostics = pd.DataFrame([
-        {"stage": "final", **weight_diagnostics(output[current_column])}
-    ])
+    final_weights = analysis[current_column]
+    output["analysis_weight"] = 0.0
+    output.loc[analysis.index, "analysis_weight"] = final_weights
+    analysis_diagnostics = weight_diagnostics(final_weights)
+    diagnostics = pd.DataFrame([{"stage": "final", **analysis_diagnostics}])
     findings = [
-        f"Constructed final weights for {len(output):,} respondent records.",
-        f"Final weight column: {current_column}.",
-        f"Effective sample size (Kish): {diagnostics.iloc[0]['kish_effective_sample_size']:.2f}.",
+        f"Constructed final weights for {len(analysis):,} analysis-eligible records.",
+        f"Final analysis weight column: analysis_weight.",
+        f"Effective sample size (Kish): {analysis_diagnostics['kish_effective_sample_size']:.2f}.",
     ]
     limitations = [
         "Kish effective sample size and DEFF are unequal-weighting approximations; they do not capture clustering, stratification or all calibration effects.",
         "Base weights require exact first-order unit inclusion probabilities. Conditional PPSWOR draw probabilities are not accepted as substitutes.",
     ]
+    if response_column:
+        limitations.append("Nonrespondents are retained in the exported dataset with analysis_weight = 0; exclude them from respondent-level analyses.")
     if raking_info and not raking_info["converged"]:
         limitations.append(
             f"Raking did not converge within {raking_info['iterations']} iterations; maximum relative margin error was {raking_info['maximum_relative_margin_error']:.6g}."
@@ -1526,9 +1533,9 @@ def run_survey_weighting_service(
         ],
         limitations=limitations,
         metadata={
-            "final_weight_column": current_column,
+            "final_weight_column": "analysis_weight",
             "stages": stages,
             "raking": raking_info,
-            "diagnostics": diagnostics.iloc[0].to_dict(),
+            "diagnostics": analysis_diagnostics,
         },
     )
