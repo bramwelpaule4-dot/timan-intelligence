@@ -74,11 +74,8 @@ def _prepare(
     if work.empty:
         raise ValueError("No complete records with valid outcomes, weights and cluster identifiers remain.")
 
-    # A PSU must belong to exactly one stratum. Cluster IDs may repeat across strata.
-    psu_strata = work.groupby("cluster", sort=False)["stratum"].nunique()
-    if (psu_strata > 1).any():
-        raise ValueError("Each cluster identifier must belong to only one stratum. Create globally unique PSU IDs if needed.")
-
+    # PSU identifiers are nested within strata; identical labels may legitimately
+    # recur in different strata, so all PSU operations use the (stratum, PSU) pair.
     psu_counts = work.groupby("stratum", sort=False)["cluster"].nunique()
     if (psu_counts < 2).any():
         bad = ", ".join(map(str, psu_counts[psu_counts < 2].index.tolist()))
