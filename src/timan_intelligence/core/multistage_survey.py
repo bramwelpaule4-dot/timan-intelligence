@@ -514,7 +514,7 @@ def estimate_two_stage_mean(
     return _estimate_two_stage_ratio(
         df, outcome_total_variable, element_count_variable, psu_variable,
         ssu_variable, psu_population_count_variable, ssu_population_count_variable,
-        strata_variable, confidence_level, False,
+        strata_variable, confidence_level, False, certainty_psu_variable,
     )
 
 
@@ -534,7 +534,7 @@ def estimate_two_stage_proportion(
     return _estimate_two_stage_ratio(
         df, successes_variable, eligible_count_variable, psu_variable,
         ssu_variable, psu_population_count_variable, ssu_population_count_variable,
-        strata_variable, confidence_level, True,
+        strata_variable, confidence_level, True, certainty_psu_variable,
     )
 
 
@@ -566,6 +566,7 @@ def estimate_two_stage_domain_total(
     ssu_population_count_variable: str,
     strata_variable: str | None = None,
     confidence_level: float = 0.95,
+    certainty_psu_variable: str | None = None,
 ) -> dict[str, Any]:
     """Estimate a domain total, retaining all sampled SSUs for variance estimation.
 
@@ -583,7 +584,7 @@ def estimate_two_stage_domain_total(
     result = estimate_two_stage_total(
         work, derived, psu_variable, ssu_variable,
         psu_population_count_variable, ssu_population_count_variable,
-        strata_variable, confidence_level,
+        strata_variable, confidence_level, certainty_psu_variable,
     )
     result["findings"] = [
         f"Estimated total for domain {domain_value!r}: {result['estimate']:,.4g}.",
@@ -618,6 +619,7 @@ def _estimate_two_stage_domain_ratio(
     strata_variable: str | None,
     confidence_level: float,
     require_proportion: bool,
+    certainty_psu_variable: str | None = None,
 ) -> dict[str, Any]:
     work, indicator = _prepare_two_stage_domain(df, domain_variable, domain_value)
     numerator = pd.to_numeric(work[numerator_variable], errors="coerce")
