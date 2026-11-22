@@ -93,8 +93,9 @@ def estimate_ppswor_total(
             raise ValueError("Joint inclusion probabilities must lie between zero and one.")
         if np.any(values - np.minimum.outer(p, p) > 1e-10):
             raise ValueError("A joint inclusion probability cannot exceed either corresponding first-order probability.")
-        if not np.isclose(p.sum(), round(float(p.sum())), atol=1e-7):
-            raise ValueError("First-order inclusion probabilities must sum to the fixed sample size within each stratum.")
+        lower_bounds = np.maximum(0.0, p[:, None] + p[None, :] - 1.0)
+        if np.any(values + 1e-10 < lower_bounds):
+            raise ValueError("A joint inclusion probability is below its probability-theory lower bound.")
         y_values = group["__y__"].to_numpy(dtype=float)
         estimate_h = float(np.sum(y_values / p))
         variance_h = 0.0
