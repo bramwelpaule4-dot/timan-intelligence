@@ -18,6 +18,7 @@ from timan_intelligence.core.statistical_engine import (
     run_independent_samples_t_test,
     run_mean_confidence_interval,
     run_one_sample_t_test,
+    run_one_sample_binomial_test,
     run_proportion_confidence_interval,
     run_welch_mean_difference_confidence_interval,
     run_paired_mean_difference_confidence_interval,
@@ -36,6 +37,7 @@ _EXECUTOR_BY_METHOD_ID = {
     "method.descriptive.numeric.summary": "descriptive",
     "method.inference.confidence_interval.mean": "mean_ci",
     "method.inference.comparison.t_test.one_sample": "one_sample_t",
+    "method.inference.comparison.binomial.one_sample": "one_sample_binomial",
     "method.inference.confidence_interval.proportion": "proportion_ci",
     "method.inference.confidence_interval.mean_difference.welch": "welch_mean_difference_ci",
     "method.inference.confidence_interval.mean_difference.paired": "paired_mean_difference_ci",
@@ -230,6 +232,14 @@ def execute_recommendation(
             reference_value=options["reference_value"],
             alternative=options.get("alternative", "two-sided"),
         )
+    elif executor == "one_sample_binomial":
+        if len(variables) != 1:
+            raise AnalysisExecutionError("An exact binomial test requires exactly one binary outcome variable.")
+        options = recommendation.get("options") or {}
+        if "reference_proportion" not in options:
+            raise AnalysisExecutionError("An exact binomial test requires a user-specified reference_proportion.")
+        result = run_one_sample_binomial_test(df, variables[0], options["reference_proportion"],
+            alternative=options.get("alternative", "two-sided"), confidence_level=options.get("confidence_level", 0.95))
     elif executor == "proportion_ci":
         if len(variables) != 1:
             raise AnalysisExecutionError(

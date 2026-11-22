@@ -919,6 +919,67 @@ def run_proportion_confidence_interval(
 
 
 
+
+def run_one_sample_binomial_test(df: pd.DataFrame, variable: str, reference_proportion: float,
+                                alternative: str = "two-sided", confidence_level: float = 0.95) -> AnalysisResult:
+    """Test a binary population proportion against a reference using an exact binomial test."""
+    from scipy.stats import binomtest
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Expected a pandas DataFrame.")
+    if not isinstance(variable, str) or variable not in df.columns:
+        raise ValueError("Select a valid binary outcome variable.")
+    if not pd.api.types.is_numeric_dtype(df[variable]):
+        raise TypeError("The outcome must be numeric and coded strictly as 1 (event) and 0 (non-event).")
+    try:
+        p0 = float(reference_proportion)
+        level = float(confidence_level)
+    except (TypeError, ValueError):
+        raise ValueError("Reference proportion and confidence level must be numeric.") from None
+    if not pd.notna(p0) or not 0 <= p0 <= 1:
+        raise ValueError("Reference proportion must be finite and between 0 and 1.")
+    if not pd.notna(level) or not 0 < level < 1:
+        raise ValueError("Confidence level must be between 0 and 1.")
+    if alternative not in {"two-sided", "less", "greater"}:
+        raise ValueError("Alternative must be 'two-sided', 'less' or 'greater'.")
+    raw = df[variable].dropna()
+    if raw.empty:
+        raise ValueError("A binomial test requires at least one observed value.")
+    if not set(raw.unique()).issubset({0, 1}):
+        raise ValueError("The outcome must contain only 0 and 1 values.")
+    values = raw.astype(int)
+    n = int(len(values))
+    successes = int(values.sum())
+    estimate = successes / n
+    test = binomtest(successes, n, p=p0, alternative=alternative)
+    interval = test.proportion_ci(confidence_level=level, method="exact")
+    lower, upper = float(interval.low), float(interval.high)
+    excluded = int(len(df) - n)
+    summary = pd.DataFrame([{"Successes": successes, "Observations": n,
+        "Observed proportion": estimate, "Reference proportion": p0,
+        "Alternative hypothesis": alternative, "Exact p-value": float(test.pvalue),
+        "Confidence level": level, "Exact lower confidence limit": lower,
+        "Exact upper confidence limit": upper, "Missing values excluded": excluded}])
+    findings = [f"Observed proportion is {estimate:.4f} ({successes} of {n}).",
+        f"The exact binomial test p-value is {test.pvalue:.4g} against reference proportion {p0:.4f} ({alternative} alternative).",
+        f"The {level:.0%} exact Clopper-Pearson interval is [{lower:.4f}, {upper:.4f}]."]
+    limitations = ["The exact binomial test assumes independent Bernoulli observations with a common event probability.",
+        "This procedure is not adjusted for survey weights, clustering, stratification or finite-population corrections.",
+        "The exact interval is the conservative Clopper-Pearson interval."]
+    if excluded:
+        limitations.append(f"{excluded:,} rows with missing outcomes were excluded.")
+    return AnalysisResult(title=f"Exact one-sample binomial test: {variable}",
+        method="Exact one-sample binomial test", status="success",
+        tables={"test_summary": summary}, findings=findings,
+        assumptions=["Outcome is binary: 1 denotes an event and 0 denotes a non-event.",
+            "Observations are independent and share a common event probability."],
+        limitations=limitations, metadata={"variable": variable, "successes": successes,
+            "observations": n, "estimate": estimate, "reference_proportion": p0,
+            "alternative": alternative, "p_value": float(test.pvalue),
+            "confidence_level": level, "confidence_interval": (lower, upper),
+            "missing_values_excluded": excluded, "sampling_design_aware": False,
+            "inference_framework": "exact_binomial"})
+
+
 def run_paired_mean_difference_confidence_interval(
     df: pd.DataFrame,
     before_variable: str,

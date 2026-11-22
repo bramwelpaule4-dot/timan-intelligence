@@ -1968,3 +1968,9 @@ def run_fisher_exact_test_service(df: pd.DataFrame, row_variable: str, column_va
     """Run Fisher's exact test through the shared analysis service."""
     from timan_intelligence.core.statistical_engine import run_fisher_exact_test
     return run_fisher_exact_test(df, row_variable, column_variable, alternative)
+
+
+def run_one_sample_binomial_test_service(df: pd.DataFrame, variable: str, reference_proportion: float, alternative: str = "two-sided", confidence_level: float = 0.95) -> AnalysisResult:
+    """Run an exact one-sample binomial test through the shared service."""
+    from timan_intelligence.core.statistical_engine import run_one_sample_binomial_test
+    return run_one_sample_binomial_test(df, variable, reference_proportion, alternative, confidence_level)
