@@ -5275,6 +5275,13 @@ elif page == "Survey Analysis":
                             saved_ppswor_domain.tables["pairwise_variance"],
                             hide_index=True, use_container_width=True,
                         )
+                    st.download_button(
+                        "Download PPSWOR domain mean/proportion report (PDF)",
+                        data=build_ppswor_report(saved_ppswor_domain),
+                        file_name="timanstat_ppswor_domain_ratio_report.pdf",
+                        mime="application/pdf",
+                        key="download_ppswor_domain_ratio_report",
+                    )
                     for warning in saved_ppswor_domain.limitations:
                         st.warning(warning)
 
