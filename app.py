@@ -67,6 +67,7 @@ from timan_intelligence.services.analysis_service import (
     run_proportion_confidence_interval_service,
     run_welch_mean_difference_confidence_interval_service,
     run_paired_mean_difference_confidence_interval_service,
+    run_paired_samples_t_test_service,
     run_ppswor_total_service,
     run_ppswor_ratio_service,
     run_ppswor_domain_ratio_service,
@@ -865,7 +866,7 @@ MODULES = {
     "Statistical Inference": (
         "Partially available — initial independent-sample procedures",
         "Model-based mean and proportion confidence intervals, one-sample Student's t-test, "
-        "Welch mean-difference confidence intervals, paired mean-change intervals, Welch's "
+        "Welch mean-difference confidence intervals, paired mean-change intervals and paired t-tests, Welch's "
         "independent-samples t-test and one-way ANOVA are available for their stated study "
         "designs. Complex survey inference and other planned methods remain under development.",
     ),
@@ -7139,6 +7140,7 @@ elif page == "Statistical Inference":
                 "Confidence interval for a proportion",
                 "Welch confidence interval for a mean difference",
                 "Paired mean-change confidence interval",
+                "Paired-samples Student's t-test",
                 "Welch's independent-samples t-test",
                 "One-way ANOVA",
             ],
@@ -7188,7 +7190,7 @@ elif page == "Statistical Inference":
                 key="inference_one_sample_t_alternative",
             )
             st.caption("Reports the t statistic, degrees of freedom, p-value and two-sided 95% confidence interval. The alternative hypothesis controls the p-value direction.")
-        elif inference_method == "Paired mean-change confidence interval":
+        elif inference_method in {"Paired mean-change confidence interval", "Paired-samples Student's t-test"}:
             before_variable = (
                 st.selectbox("Before measurement", numeric_cols, key="inference_paired_before")
                 if numeric_cols else None
@@ -7200,7 +7202,19 @@ elif page == "Statistical Inference":
             )
             outcome_variable = before_variable
             group_variable = after_variable
-            st.caption("Each row must represent the same participant, household, facility or other matched unit at both time points. The reported change is after minus before.")
+            if inference_method == "Paired-samples Student's t-test":
+                paired_alternative = st.selectbox(
+                    "Alternative hypothesis", ["two-sided", "greater", "less"],
+                    format_func=lambda value: {
+                        "two-sided": "Two-sided: mean change differs from zero",
+                        "greater": "One-sided: mean change is greater than zero",
+                        "less": "One-sided: mean change is less than zero",
+                    }[value],
+                    key="inference_paired_t_alternative",
+                )
+                st.caption("Tests whether the mean within-pair change (after minus before) differs from zero. The confidence interval remains two-sided.")
+            else:
+                st.caption("Each row must represent the same participant, household, facility or other matched unit at both time points. The reported change is after minus before.")
         elif inference_method == "Confidence interval for a proportion":
             binary_cols = [
                 column for column in numeric_cols
@@ -7245,7 +7259,7 @@ elif page == "Statistical Inference":
 
         design_confirmation_label = (
             "I confirm that each row is one correctly matched pair and that pair-level differences are independent; this is not a complex survey."
-            if inference_method == "Paired mean-change confidence interval"
+            if inference_method in {"Paired mean-change confidence interval", "Paired-samples Student's t-test"}
             else "I confirm that each row represents an independent observational unit and that this is not a complex survey or repeated-measures design."
         )
         independence_confirmed = st.checkbox(
@@ -7286,6 +7300,10 @@ elif page == "Statistical Inference":
                 elif inference_method == "Welch confidence interval for a mean difference":
                     inference_result = run_welch_mean_difference_confidence_interval_service(
                         inference_df, outcome_variable, group_variable, confidence_level
+                    )
+                elif inference_method == "Paired-samples Student's t-test":
+                    inference_result = run_paired_samples_t_test_service(
+                        inference_df, outcome_variable, group_variable, confidence_level, paired_alternative
                     )
                 elif inference_method == "Paired mean-change confidence interval":
                     inference_result = run_paired_mean_difference_confidence_interval_service(

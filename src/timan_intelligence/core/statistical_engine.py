@@ -918,6 +918,97 @@ def run_paired_mean_difference_confidence_interval(
         },
     )
 
+
+def run_paired_samples_t_test(
+    df: pd.DataFrame, before_variable: str, after_variable: str,
+    confidence_level: float = 0.95, alternative: str = "two-sided",
+) -> AnalysisResult:
+    """Test the mean after-minus-before difference for correctly matched rows."""
+    from scipy.stats import t
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Expected a pandas DataFrame.")
+    if before_variable not in df.columns or after_variable not in df.columns:
+        raise ValueError("Both before and after measurement variables must exist.")
+    if before_variable == after_variable:
+        raise ValueError("Before and after measurements must use different variables.")
+    for variable in (before_variable, after_variable):
+        if not pd.api.types.is_numeric_dtype(df[variable]):
+            raise TypeError(f"Measurement variable '{variable}' must be numeric.")
+    if isinstance(confidence_level, bool) or not isinstance(confidence_level, (int, float)):
+        raise TypeError("Confidence level must be numeric.")
+    if not 0 < float(confidence_level) < 1:
+        raise ValueError("Confidence level must be greater than 0 and less than 1.")
+    if alternative not in {"two-sided", "greater", "less"}:
+        raise ValueError("Alternative must be 'two-sided', 'greater' or 'less'.")
+    before, after = df[before_variable].astype(float), df[after_variable].astype(float)
+    finite_pair = before.notna() & after.notna() & before.map(lambda v: abs(v) != float("inf")) & after.map(lambda v: abs(v) != float("inf"))
+    differences = after[finite_pair] - before[finite_pair]
+    n = int(differences.size)
+    if n < 2:
+        raise ValueError("A paired-samples t-test requires at least two complete finite matched pairs.")
+    mean_change = float(differences.mean())
+    sd_change = float(differences.std(ddof=1))
+    dfree = n - 1
+    se = sd_change / (n ** 0.5)
+    if se == 0:
+        if mean_change == 0:
+            raise ValueError("The paired t statistic is undefined when all paired differences are zero.")
+        statistic = float("inf") if mean_change > 0 else float("-inf")
+    else:
+        statistic = mean_change / se
+    if alternative == "two-sided":
+        p_value = float(2 * t.sf(abs(statistic), dfree))
+    elif alternative == "greater":
+        p_value = float(t.sf(statistic, dfree))
+    else:
+        p_value = float(t.cdf(statistic, dfree))
+    critical = float(t.ppf(0.5 + float(confidence_level) / 2, dfree))
+    lower, upper = mean_change - critical * se, mean_change + critical * se
+    missing_pairs = int((before.isna() | after.isna()).sum())
+    incomplete_pairs = int((~finite_pair).sum())
+    infinite_pairs = incomplete_pairs - missing_pairs
+    summary = pd.DataFrame([{
+        "Before variable": before_variable, "After variable": after_variable,
+        "Complete pairs": n, "Mean before": float(before[finite_pair].mean()),
+        "Mean after": float(after[finite_pair].mean()), "Mean change (after - before)": mean_change,
+        "Standard error": se, "t statistic": statistic, "Degrees of freedom": dfree,
+        "Alternative": alternative, "p-value": p_value, "Confidence level": float(confidence_level),
+        "CI lower": lower, "CI upper": upper, "Incomplete pairs excluded": incomplete_pairs,
+    }])
+    findings = [
+        f"Mean within-pair change (after minus before) is {mean_change:.4g}.",
+        f"{n:,} complete matched pairs were analysed.",
+        f"Paired t statistic: {statistic:.4g} with {dfree} degrees of freedom; p-value: {p_value:.4g}.",
+        f"{float(confidence_level):.1%} two-sided confidence interval for mean change: [{lower:.4g}, {upper:.4g}].",
+        "The result is statistically significant at the 0.05 level." if p_value < 0.05 else "The result is not statistically significant at the 0.05 level.",
+    ]
+    limitations = [
+        "Each row is assumed to contain correctly matched before-and-after measurements from the same unit.",
+        "Pair-level differences are assumed independent across rows; this test is not adjusted for complex survey sampling or clustering.",
+        "The Student-t model applies to paired differences; inspect outliers and distributional shape, especially for small samples.",
+        "The confidence interval is two-sided even when a one-sided alternative is selected for the p-value.",
+    ]
+    if incomplete_pairs:
+        limitations.append(f"{incomplete_pairs:,} incomplete or non-finite pair(s) were excluded ({missing_pairs:,} with missing measurements and {infinite_pairs:,} with infinite measurements).")
+    return AnalysisResult(
+        title=f"Paired-samples t-test: {before_variable} to {after_variable}",
+        method="Paired-samples Student's t-test", status="success",
+        tables={"test": summary}, findings=findings, assumptions=[
+            "Each row represents one correctly matched pair.",
+            "The tested difference is after minus before.",
+            "Pair-level differences are independent across pairs.",
+            "The paired differences are numeric and their distribution is assessed.",
+        ], limitations=limitations, metadata={
+            "before_variable": before_variable, "after_variable": after_variable,
+            "estimate": mean_change, "standard_error": se, "t_statistic": statistic,
+            "degrees_of_freedom": dfree, "p_value": p_value, "alternative": alternative,
+            "confidence_level": float(confidence_level), "confidence_interval": (float(lower), float(upper)),
+            "complete_pairs": n, "incomplete_pairs": incomplete_pairs, "missing_pairs": missing_pairs,
+            "infinite_pairs": infinite_pairs, "sampling_design_aware": False, "study_design": "paired",
+        },
+    )
+
+
 def run_welch_mean_difference_confidence_interval(
     df: pd.DataFrame,
     outcome_variable: str,

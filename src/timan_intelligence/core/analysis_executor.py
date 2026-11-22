@@ -21,6 +21,7 @@ from timan_intelligence.core.statistical_engine import (
     run_proportion_confidence_interval,
     run_welch_mean_difference_confidence_interval,
     run_paired_mean_difference_confidence_interval,
+    run_paired_samples_t_test,
     run_one_way_anova,
 )
 
@@ -36,6 +37,7 @@ _EXECUTOR_BY_METHOD_ID = {
     "method.inference.confidence_interval.proportion": "proportion_ci",
     "method.inference.confidence_interval.mean_difference.welch": "welch_mean_difference_ci",
     "method.inference.confidence_interval.mean_difference.paired": "paired_mean_difference_ci",
+    "method.inference.comparison.t_test.paired": "paired_t",
     "method.inference.comparison.t_test.independent.welch": "welch_t",
     "method.inference.comparison.anova.one_way": "anova",
 }
@@ -234,6 +236,15 @@ def execute_recommendation(
         )
         result = run_proportion_confidence_interval(
             df, variables[0], confidence_level=confidence_level
+        )
+    elif executor == "paired_t":
+        if len(variables) != 2:
+            raise AnalysisExecutionError("A paired-samples t-test requires before and after measurement variables.")
+        options = recommendation.get("options") or {}
+        result = run_paired_samples_t_test(
+            df, variables[0], variables[1],
+            confidence_level=options.get("confidence_level", 0.95),
+            alternative=options.get("alternative", "two-sided"),
         )
     elif executor == "paired_mean_difference_ci":
         if len(variables) != 2:

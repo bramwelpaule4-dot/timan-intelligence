@@ -455,3 +455,55 @@ def test_one_sample_t_test_rejects_constant_sample_equal_to_reference():
         run_one_sample_t_test(
             pd.DataFrame({"score": [5, 5, 5]}), "score", 5
         )
+
+
+
+def test_paired_samples_t_test_reports_change_statistic_and_p_value():
+    from timan_intelligence.core.statistical_engine import run_paired_samples_t_test
+    frame = pd.DataFrame({"before": [10.0, 12.0, 14.0, 16.0], "after": [12.0, 15.0, 15.0, 20.0]})
+    result = run_paired_samples_t_test(frame, "before", "after", 0.90)
+    row = result.tables["test"].iloc[0]
+    assert result.status == "success"
+    assert result.method == "Paired-samples Student's t-test"
+    assert row["Mean change (after - before)"] == pytest.approx(2.5)
+    assert row["Degrees of freedom"] == 3
+    assert 0 <= row["p-value"] <= 1
+    assert result.metadata["study_design"] == "paired"
+
+
+def test_paired_samples_t_test_supports_directional_alternatives_and_exclusions():
+    from timan_intelligence.core.statistical_engine import run_paired_samples_t_test
+    frame = pd.DataFrame({"before": [1.0, 2.0, 3.0, None, float("inf")], "after": [3.0, 4.0, 5.0, 6.0, 8.0]})
+    result = run_paired_samples_t_test(frame, "before", "after", alternative="greater")
+    assert result.metadata["alternative"] == "greater"
+    assert result.metadata["complete_pairs"] == 3
+    assert result.metadata["missing_pairs"] == 1
+    assert result.metadata["infinite_pairs"] == 1
+    assert result.metadata["p_value"] < 0.05
+
+
+def test_paired_samples_t_test_rejects_invalid_pair_inputs():
+    from timan_intelligence.core.statistical_engine import run_paired_samples_t_test
+    with pytest.raises(ValueError, match="different variables"):
+        run_paired_samples_t_test(pd.DataFrame({"before": [1.0, 2.0]}), "before", "before")
+    with pytest.raises(ValueError, match="at least two complete"):
+        run_paired_samples_t_test(pd.DataFrame({"before": [1.0, None], "after": [2.0, 3.0]}), "before", "after")
+    with pytest.raises(ValueError, match="Alternative"):
+        run_paired_samples_t_test(pd.DataFrame({"before": [1.0, 2.0], "after": [2.0, 3.0]}), "before", "after", alternative="invalid")
+
+
+def test_executor_runs_registered_paired_samples_t_test_and_blocks_complex_sampling():
+    from timan_intelligence.core.analysis_executor import AnalysisExecutionError, execute_recommendation
+    frame = pd.DataFrame({"before": [10.0, 12.0, 14.0, 16.0], "after": [12.0, 15.0, 15.0, 20.0]})
+    recommendation = {
+        "method": "Paired-samples t-test", "method_id": "method.inference.comparison.t_test.paired",
+        "variables": ["before", "after"], "status": "review_required",
+        "design_context": {"study_design": "paired"},
+        "options": {"confidence_level": 0.90, "alternative": "greater"},
+    }
+    result = execute_recommendation(frame, recommendation, approved=True)
+    assert result.status == "success"
+    assert result.metadata["method_id"] == "method.inference.comparison.t_test.paired"
+    blocked = {**recommendation, "design_context": {"study_design": "paired", "sampling_design": "cluster"}}
+    with pytest.raises(AnalysisExecutionError, match="not validated"):
+        execute_recommendation(frame, blocked, approved=True)

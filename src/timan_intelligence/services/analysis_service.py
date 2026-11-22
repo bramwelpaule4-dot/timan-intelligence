@@ -1947,3 +1947,12 @@ def run_welch_mean_difference_confidence_interval_service(
     return run_welch_mean_difference_confidence_interval(
         df, outcome_variable, group_variable, confidence_level
     )
+
+
+def run_paired_samples_t_test_service(
+    df: pd.DataFrame, before_variable: str, after_variable: str,
+    confidence_level: float = 0.95, alternative: str = "two-sided",
+) -> AnalysisResult:
+    """Run a paired-samples Student-t test through the shared analysis service."""
+    from timan_intelligence.core.statistical_engine import run_paired_samples_t_test
+    return run_paired_samples_t_test(df, before_variable, after_variable, confidence_level, alternative)

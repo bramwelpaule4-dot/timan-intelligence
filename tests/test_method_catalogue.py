@@ -36,7 +36,7 @@ def test_only_existing_execution_methods_are_marked_implemented():
     }
 
     assert implemented == IMPLEMENTED_METHODS
-    assert len(implemented) == 8
+    assert len(implemented) == 9
 
 
 def test_planned_methods_are_not_marked_executable():
@@ -61,6 +61,14 @@ def test_method_lookup_returns_expected_record():
     assert method is not None
     assert method.name == "Welch's independent-samples t-test"
     assert method.implementation_status == "implemented"
+    assert method.execution_eligibility == "conditional"
+
+
+def test_paired_samples_t_test_is_registered_as_conditionally_executable():
+    method = get_statistical_method("method.inference.comparison.t_test.paired")
+    assert method is not None
+    assert method.implementation_status == "implemented"
+    assert method.verification_status == "unit_tested"
     assert method.execution_eligibility == "conditional"
 
 
@@ -141,8 +149,8 @@ def test_catalogue_summary_reports_lifecycle_and_priorities():
     summary = get_statistical_method_summary()
 
     assert summary["catalogue_version"] == CATALOGUE_VERSION
-    assert summary["total_methods"] == 26
-    assert summary["implementation_status"]["implemented"] == 8
+    assert summary["total_methods"] == 27
+    assert summary["implementation_status"]["implemented"] == 9
     assert summary["implementation_status"]["planned"] == 18
     assert set(summary["release_priorities"]) == {"P1", "P2", "P3"}
 
