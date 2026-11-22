@@ -3419,6 +3419,8 @@ elif page == "Descriptive Statistics":
             st.divider()
             render_binary_logistic_regression(df)
             st.divider()
+            render_multinomial_logistic_regression(df)
+            st.divider()
             render_ordinal_logistic_regression(df)
 
 
