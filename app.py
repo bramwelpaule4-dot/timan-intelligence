@@ -40,6 +40,8 @@ from timan_intelligence.services.analysis_service import (
     run_weighted_numeric_summary_service,
     run_stratified_weighted_mean_service,
     run_stratified_weighted_frequency_service,
+    run_cluster_weighted_mean_service,
+    run_cluster_weighted_frequency_service,
     run_categorical_comparison,
     run_numeric_group_comparison_service,
     run_numeric_association_service,
@@ -3804,6 +3806,121 @@ elif page == "Survey Analysis":
                         "Confidence intervals use a stratified simple-random-sample "
                         "variance estimator without finite population correction. "
                         "PSU clustering and multistage designs are not yet supported."
+                    )
+
+        st.divider()
+        st.subheader("Cluster-adjusted survey estimates")
+        st.write(
+            "Account for correlation among respondents sampled within the same "
+            "primary sampling unit (PSU), optionally retaining stratification. "
+            "Use the PSU identifier from the sampling design, not an arbitrary "
+            "geographic or administrative label."
+        )
+        cluster_numeric = list(df.select_dtypes(include="number").columns)
+        cluster_cols = list(df.columns)
+        if not cluster_numeric or len(cluster_cols) < 3:
+            st.info("A numeric weight, an outcome and a PSU identifier are required.")
+        else:
+            cluster_weight = st.selectbox(
+                "Survey weight", cluster_numeric, key="cluster_weight_variable"
+            )
+            cluster_id_candidates = [c for c in cluster_cols if c != cluster_weight]
+            cluster_id = st.selectbox(
+                "Primary sampling unit (PSU)", cluster_id_candidates,
+                key="cluster_psu_variable",
+            )
+            cluster_use_strata = st.checkbox(
+                "My sample is stratified", value=True, key="cluster_use_strata"
+            )
+            if cluster_use_strata:
+                cluster_strata_candidates = [
+                    c for c in cluster_cols
+                    if c not in (cluster_weight, cluster_id)
+                ]
+                cluster_strata = st.selectbox(
+                    "Stratum identifier", cluster_strata_candidates,
+                    key="cluster_strata_variable",
+                )
+            else:
+                cluster_strata = None
+            cluster_outcome_type = st.radio(
+                "Cluster-adjusted outcome", ["Numeric mean", "Categorical proportion"],
+                horizontal=True, key="cluster_outcome_type",
+            )
+            excluded_cluster = [cluster_weight, cluster_id]
+            if cluster_strata:
+                excluded_cluster.append(cluster_strata)
+            if cluster_outcome_type == "Numeric mean":
+                cluster_outcomes = [
+                    c for c in cluster_numeric if c not in excluded_cluster
+                ]
+            else:
+                cluster_outcomes = [
+                    c for c in cluster_cols if c not in excluded_cluster
+                ]
+            if not cluster_outcomes:
+                st.info("No eligible outcome variable is available.")
+            else:
+                cluster_outcome = st.selectbox(
+                    "Outcome variable", cluster_outcomes,
+                    key="cluster_outcome_variable",
+                )
+                cluster_confidence = st.selectbox(
+                    "Confidence level", [0.90, 0.95, 0.99], index=1,
+                    format_func=lambda value: f"{value:.0%}",
+                    key="cluster_confidence_level",
+                )
+                if st.button(
+                    "Calculate cluster-adjusted estimate", type="primary",
+                    key="run_cluster_survey_estimate",
+                ):
+                    try:
+                        if cluster_outcome_type == "Numeric mean":
+                            cluster_result = run_cluster_weighted_mean_service(
+                                df, cluster_outcome, cluster_weight, cluster_id,
+                                cluster_strata, cluster_confidence,
+                            )
+                            cluster_table_key = "cluster_estimate"
+                        else:
+                            cluster_result = run_cluster_weighted_frequency_service(
+                                df, cluster_outcome, cluster_weight, cluster_id,
+                                cluster_strata, cluster_confidence,
+                            )
+                            cluster_table_key = "cluster_frequencies"
+                        st.session_state["cluster_survey_result"] = cluster_result
+                        st.session_state["cluster_survey_result_key"] = (
+                            _dataset_analysis_key(df), cluster_outcome,
+                            cluster_weight, cluster_id, cluster_strata,
+                            cluster_outcome_type, cluster_confidence,
+                        )
+                    except (TypeError, ValueError, KeyError) as exc:
+                        st.error(str(exc))
+                cluster_key = (
+                    _dataset_analysis_key(df), cluster_outcome, cluster_weight,
+                    cluster_id, cluster_strata, cluster_outcome_type,
+                    cluster_confidence,
+                )
+                saved_cluster_result = st.session_state.get("cluster_survey_result")
+                if (
+                    saved_cluster_result is not None
+                    and st.session_state.get("cluster_survey_result_key") == cluster_key
+                ):
+                    st.dataframe(
+                        saved_cluster_result.tables[
+                            "cluster_estimate"
+                            if cluster_outcome_type == "Numeric mean"
+                            else "cluster_frequencies"
+                        ],
+                        hide_index=True, use_container_width=True,
+                    )
+                    for finding in saved_cluster_result.findings:
+                        st.write(f"• {finding}")
+                    for warning in saved_cluster_result.limitations:
+                        st.warning(warning)
+                    st.caption(
+                        "Variance is estimated from independent sampled PSUs "
+                        "using a with-replacement ultimate-cluster method. "
+                        "At least two PSUs per stratum are required."
                     )
 
         st.info(
