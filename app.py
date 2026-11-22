@@ -69,6 +69,7 @@ from timan_intelligence.services.analysis_service import (
     run_paired_mean_difference_confidence_interval_service,
     run_paired_samples_t_test_service,
     run_chi_square_test_of_independence_service,
+    run_fisher_exact_test_service,
     run_ppswor_total_service,
     run_ppswor_ratio_service,
     run_ppswor_domain_ratio_service,
@@ -7143,6 +7144,7 @@ elif page == "Statistical Inference":
                 "Paired mean-change confidence interval",
                 "Paired-samples Student's t-test",
                 "Chi-square test of independence",
+                "Fisher's exact test",
                 "Welch's independent-samples t-test",
                 "One-way ANOVA",
             ],
@@ -7235,13 +7237,17 @@ elif page == "Statistical Inference":
             if not binary_cols:
                 st.warning("No numeric variables coded strictly as 0/1 with observed values are available.")
             st.caption("Uses the Wilson score interval for a binary outcome.")
-        elif inference_method == "Chi-square test of independence":
+        elif inference_method in {"Chi-square test of independence", "Fisher's exact test"}:
             category_options = categorical_cols
             row_variable = st.selectbox("First categorical variable", category_options, key="inference_chi_square_row") if category_options else None
             column_options = [column for column in category_options if column != row_variable]
             column_variable = st.selectbox("Second categorical variable", column_options, key="inference_chi_square_column") if column_options else None
             outcome_variable, group_variable = row_variable, column_variable
-            st.caption("Tests association between two categorical variables. Recode numeric category codes as categorical variables first. Review expected cell counts before interpreting the p-value.")
+            if inference_method == "Fisher's exact test":
+                fisher_alternative = st.selectbox("Alternative hypothesis", ["two-sided", "greater", "less"], key="inference_fisher_alternative")
+                st.caption("Exact test for a 2 × 2 table, useful when expected counts are sparse. The odds ratio follows the displayed row and column category order.")
+            else:
+                st.caption("Tests association between two categorical variables. Recode numeric category codes as categorical variables first. Review expected cell counts before interpreting the p-value.")
         else:
             outcome_variable = (
                 st.selectbox(
@@ -7278,7 +7284,7 @@ elif page == "Statistical Inference":
         can_run = (
             outcome_variable is not None
             and (
-                inference_method == "Chi-square test of independence"
+                inference_method in {"Chi-square test of independence", "Fisher's exact test"}
                 or inference_method in {
                     "Confidence interval for a mean",
                     "Confidence interval for a proportion",
@@ -7311,6 +7317,8 @@ elif page == "Statistical Inference":
                     inference_result = run_welch_mean_difference_confidence_interval_service(
                         inference_df, outcome_variable, group_variable, confidence_level
                     )
+                elif inference_method == "Fisher's exact test":
+                    inference_result = run_fisher_exact_test_service(inference_df, outcome_variable, group_variable, fisher_alternative)
                 elif inference_method == "Chi-square test of independence":
                     inference_result = run_chi_square_test_of_independence_service(inference_df, outcome_variable, group_variable)
                 elif inference_method == "Paired-samples Student's t-test":

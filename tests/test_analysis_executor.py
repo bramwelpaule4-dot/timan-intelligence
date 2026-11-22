@@ -405,3 +405,15 @@ def test_executor_runs_chi_square_independence_and_blocks_complex_sampling():
     blocked = {**recommendation, "design_context": {"sampling_design": "cluster"}}
     with pytest.raises(AnalysisExecutionError, match="not validated"):
         execute_recommendation(frame, blocked, approved=True)
+
+
+def test_executor_runs_fisher_exact_and_blocks_complex_sampling():
+    from timan_intelligence.core.analysis_executor import AnalysisExecutionError, execute_recommendation
+    frame = pd.DataFrame({"exposure": ["Y"] * 10 + ["N"] * 6, "outcome": ["Y"] * 8 + ["N"] * 2 + ["Y"] + ["N"] * 5})
+    recommendation = {"method": "Fisher exact test", "method_id": "method.inference.association.fisher_exact", "variables": ["exposure", "outcome"], "status": "review_required", "options": {"alternative": "two-sided"}, "design_context": {"study_design": "independent_observations"}}
+    result = execute_recommendation(frame, recommendation, approved=True)
+    assert result.status == "success"
+    assert result.metadata["method_id"] == "method.inference.association.fisher_exact"
+    blocked = {**recommendation, "design_context": {"sampling_design": "cluster"}}
+    with pytest.raises(AnalysisExecutionError, match="not validated"):
+        execute_recommendation(frame, blocked, approved=True)

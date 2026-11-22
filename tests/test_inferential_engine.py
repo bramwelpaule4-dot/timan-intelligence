@@ -538,3 +538,30 @@ def test_chi_square_independence_rejects_invalid_variables():
         run_chi_square_test_of_independence(pd.DataFrame({"x": [0, 1], "y": ["a", "b"]}), "x", "y")
     with pytest.raises(ValueError, match="at least two observed categories"):
         run_chi_square_test_of_independence(pd.DataFrame({"x": ["a", "a"], "y": ["b", "c"]}), "x", "y")
+
+
+def test_fisher_exact_returns_exact_p_value_and_odds_ratio():
+    from timan_intelligence.core.statistical_engine import run_fisher_exact_test
+    frame = pd.DataFrame({"exposed": ["Yes"] * 10 + ["No"] * 6, "outcome": ["Yes"] * 8 + ["No"] * 2 + ["Yes"] + ["No"] * 5})
+    result = run_fisher_exact_test(frame, "exposed", "outcome")
+    assert result.status == "success"
+    assert result.metadata["odds_ratio"] == pytest.approx(20.0)
+    assert 0 <= result.metadata["p_value"] <= 1
+    assert result.tables["contingency_table"].shape[0] == 2
+
+
+def test_fisher_exact_supports_directional_alternative_and_missing_values():
+    from timan_intelligence.core.statistical_engine import run_fisher_exact_test
+    frame = pd.DataFrame({"group": ["A", "A", "A", "B", "B", "B", None], "event": ["Y", "Y", "N", "Y", "N", "N", "Y"]})
+    result = run_fisher_exact_test(frame, "group", "event", alternative="greater")
+    assert result.metadata["alternative"] == "greater"
+    assert result.metadata["missing_pairs_excluded"] == 1
+    assert 0 <= result.metadata["p_value"] <= 1
+
+
+def test_fisher_exact_rejects_non_2_by_2_and_invalid_alternative():
+    from timan_intelligence.core.statistical_engine import run_fisher_exact_test
+    with pytest.raises(ValueError, match="exactly two observed categories"):
+        run_fisher_exact_test(pd.DataFrame({"a": ["x", "y", "z", "x"], "b": ["u", "u", "v", "v"]}), "a", "b")
+    with pytest.raises(ValueError, match="Alternative must"):
+        run_fisher_exact_test(pd.DataFrame({"a": ["x", "x", "y", "y"], "b": ["u", "v", "u", "v"]}), "a", "b", "invalid")
