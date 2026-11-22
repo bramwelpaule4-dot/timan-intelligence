@@ -1,5 +1,7 @@
 """Shared orchestration entry points used by the web and desktop interfaces."""
 
+from typing import Any
+
 import pandas as pd
 from timan_intelligence.core.poisson_regression import run_poisson_regression
 from timan_intelligence.core.negative_binomial_regression import run_negative_binomial_regression
