@@ -602,3 +602,105 @@ def run_mean_confidence_interval(
             "inference_framework": "iid_model_based",
         },
     )
+
+
+def run_proportion_confidence_interval(
+    df: pd.DataFrame,
+    variable: str,
+    confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Estimate a binary population proportion using a Wilson score interval.
+
+    Missing values are excluded. The procedure assumes independent,
+    identically distributed Bernoulli observations and is not survey-design
+    adjusted.
+    """
+    from scipy.stats import norm
+
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Expected a pandas DataFrame.")
+    if not isinstance(variable, str) or not variable.strip():
+        raise ValueError("Provide a valid binary variable name.")
+    if variable not in df.columns:
+        raise ValueError(f"Variable '{variable}' was not found in the dataset.")
+    if isinstance(confidence_level, bool) or not isinstance(confidence_level, (int, float)):
+        raise TypeError("Confidence level must be numeric.")
+    if not 0 < float(confidence_level) < 1:
+        raise ValueError("Confidence level must be greater than 0 and less than 1.")
+    series = df[variable]
+    if not pd.api.types.is_numeric_dtype(series):
+        raise TypeError(f"Variable '{variable}' must be numeric and coded 0/1.")
+
+    observed = series.dropna().astype(float)
+    if observed.empty:
+        raise ValueError("A proportion confidence interval requires at least one observed value.")
+    if not observed.isin([0.0, 1.0]).all():
+        raise ValueError(f"Variable '{variable}' must contain only 0 and 1 (and optional missing values).")
+
+    n = int(len(observed))
+    successes = int(observed.sum())
+    estimate = successes / n
+    z = float(norm.ppf(0.5 + float(confidence_level) / 2.0))
+    z2 = z * z
+    denominator = 1.0 + z2 / n
+    centre = (estimate + z2 / (2.0 * n)) / denominator
+    half_width = (
+        z
+        * ((estimate * (1.0 - estimate) / n) + z2 / (4.0 * n * n)) ** 0.5
+        / denominator
+    )
+    lower = max(0.0, centre - half_width)
+    upper = min(1.0, centre + half_width)
+    standard_error = (estimate * (1.0 - estimate) / n) ** 0.5
+    missing_count = int(series.isna().sum())
+
+    findings = [
+        f"Estimated proportion of {variable}=1: {estimate:.4f} ({estimate:.1%}).",
+        f"{successes:,} positive observations among {n:,} usable observations.",
+        f"{float(confidence_level):.1%} Wilson score confidence interval: [{lower:.4f}, {upper:.4f}].",
+    ]
+    limitations = [
+        "The Wilson interval assumes independent Bernoulli observations and does not adjust for clustering, stratification, unequal survey weights or finite-population corrections.",
+        "For complex probability samples, use the design-aware proportion estimator in Survey Analysis.",
+    ]
+    if missing_count:
+        limitations.append(f"{missing_count:,} missing observation(s) were excluded.")
+
+    return AnalysisResult(
+        title=f"Confidence interval for proportion: {variable}",
+        method="Wilson score confidence interval for a proportion",
+        status="success",
+        tables={
+            "estimate": pd.DataFrame([{
+                "Variable": variable,
+                "Positive observations": successes,
+                "Observations": n,
+                "Estimated proportion": estimate,
+                "Estimated percentage": estimate * 100.0,
+                "Standard error": standard_error,
+                "Confidence level": float(confidence_level),
+                "Lower confidence limit": lower,
+                "Upper confidence limit": upper,
+            }])
+        },
+        findings=findings,
+        assumptions=[
+            "The outcome is binary and coded 1 for the event of interest and 0 otherwise.",
+            "Observations are independent and arise from a common Bernoulli population.",
+            "The denominator includes all eligible non-missing observations.",
+            "Missing outcomes are excluded and reported.",
+        ],
+        limitations=limitations,
+        metadata={
+            "variable": variable,
+            "estimate": estimate,
+            "successes": successes,
+            "observations": n,
+            "standard_error": standard_error,
+            "confidence_level": float(confidence_level),
+            "confidence_interval": (float(lower), float(upper)),
+            "missing_values": missing_count,
+            "sampling_design_aware": False,
+            "inference_framework": "iid_wilson_score",
+        },
+    )
