@@ -1971,6 +1971,11 @@ def run_fisher_exact_test_service(df: pd.DataFrame, row_variable: str, column_va
 
 
 
+def run_two_proportions_confidence_interval_service(df: pd.DataFrame, outcome_variable: str, group_variable: str, confidence_level: float = 0.95) -> AnalysisResult:
+    """Estimate two independent proportions through the shared analysis service."""
+    from timan_intelligence.core.statistical_engine import run_two_proportions_confidence_interval
+    return run_two_proportions_confidence_interval(df, outcome_variable, group_variable, confidence_level)
+
 def run_two_independent_proportions_test_service(df: pd.DataFrame, outcome_variable: str, group_variable: str, confidence_level: float = 0.95, alternative: str = "two-sided") -> AnalysisResult:
     """Compare two independent proportions through the shared analysis service."""
     from timan_intelligence.core.statistical_engine import run_two_independent_proportions_test
