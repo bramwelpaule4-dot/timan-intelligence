@@ -37,6 +37,7 @@ from timan_intelligence.administration.user_admin_ui import render_user_administ
 from timan_intelligence.services.ppswor_report_service import build_ppswor_report
 from timan_intelligence.services.analysis_service import (
     run_survey_profile,
+    run_survey_weighting_service,
     run_weighted_frequency_service,
     run_weighted_numeric_summary_service,
     run_stratified_weighted_mean_service,
@@ -302,8 +303,28 @@ st.markdown(
     }
     div[data-testid="stExpander"] {
         border: 1px solid var(--timan-border);
-        border-radius: 10px;
-        background: rgba(255,255,255,.72);
+        border-radius: 12px;
+        background: rgba(255,255,255,.86);
+        box-shadow: 0 2px 8px rgba(23,59,103,.035);
+        margin: .45rem 0 .8rem 0;
+        overflow: hidden;
+    }
+    div[data-testid="stExpander"] summary {
+        min-height: 3rem;
+        padding: .25rem .45rem;
+        font-weight: 700;
+        color: var(--timan-navy);
+    }
+    div[data-testid="stExpander"] summary:hover {
+        color: var(--timan-blue);
+        background: rgba(37,134,199,.045);
+    }
+    div[data-testid="stExpander"] details[open] > summary {
+        border-bottom: 1px solid var(--timan-border);
+        background: rgba(37,134,199,.035);
+    }
+    div[data-testid="stExpander"] [data-testid="stExpanderDetails"] {
+        padding: .8rem 1rem 1rem 1rem;
     }
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
@@ -2873,13 +2894,14 @@ navigation_groups = (
     ),
 )
 
-for group_label, group_pages, expanded in navigation_groups:
+for group_label, group_pages, _default_expanded in navigation_groups:
     available_pages = [
         name for name in group_pages if name in navigation_options
     ]
     if not available_pages:
         continue
-    with st.sidebar.expander(group_label, expanded=expanded):
+    group_is_active = st.session_state.navigation_page in group_pages
+    with st.sidebar.expander(group_label, expanded=group_is_active):
         for module_name in available_pages:
             _render_navigation_item(module_name)
 
@@ -3591,6 +3613,169 @@ elif page == "Survey Analysis":
                 "custom-coded scales must be confirmed against the questionnaire "
                 "or codebook before they can be analysed as ordinal responses."
             )
+
+        with st.expander("Survey weighting and adjustment", expanded=False):
+            st.markdown(
+                "Construct documented analysis weights from exact first-order inclusion "
+                "probabilities, then optionally adjust for nonresponse, calibrate to "
+                "population controls, rake across multiple margins and trim extreme weights."
+            )
+            st.caption(
+                "Do not use conditional draw probabilities from successive PPSWOR as "
+                "first-order inclusion probabilities. Nonrespondents remain in the export "
+                "with an analysis weight of zero."
+            )
+            weight_numeric_columns = list(df.select_dtypes(include="number").columns)
+            if not weight_numeric_columns:
+                st.info("The dataset needs a numeric exact inclusion-probability column.")
+            else:
+                wcol1, wcol2 = st.columns(2)
+                with wcol1:
+                    weighting_pi_col = st.selectbox(
+                        "Exact first-order inclusion probability (πᵢ)",
+                        weight_numeric_columns,
+                        key="weighting_pi_column",
+                        help="Values must be greater than 0 and no greater than 1.",
+                    )
+                with wcol2:
+                    weighting_response_col = st.selectbox(
+                        "Response indicator (optional)",
+                        [None] + weight_numeric_columns,
+                        format_func=lambda value: "Not applying nonresponse adjustment" if value is None else value,
+                        key="weighting_response_column",
+                        help="If selected, code respondents as 1 and nonrespondents as 0.",
+                    )
+                weighting_cells = []
+                if weighting_response_col is not None:
+                    weighting_cells = st.multiselect(
+                        "Nonresponse adjustment-cell variables",
+                        [column for column in df.columns if column != weighting_response_col],
+                        key="weighting_adjustment_cells",
+                        help="Every cell must contain at least one respondent.",
+                    )
+                margin_file = st.file_uploader(
+                    "Population control totals (optional CSV)",
+                    type=["csv"],
+                    key="weighting_margins_file",
+                    help="Use columns: variable, category, target_total. Include one row per category.",
+                )
+                poststrata_column = None
+                population_totals = None
+                raking_margins = None
+                weighting_frame = df.copy()
+                if margin_file is not None:
+                    try:
+                        margin_data = pd.read_csv(margin_file)
+                        required_margin_cols = {"variable", "category", "target_total"}
+                        if not required_margin_cols.issubset(margin_data.columns):
+                            st.error("Population controls must contain variable, category and target_total columns.")
+                        else:
+                            margin_data["variable"] = margin_data["variable"].astype(str)
+                            margin_data["category"] = margin_data["category"].astype(str)
+                            margin_data["target_total"] = pd.to_numeric(margin_data["target_total"], errors="coerce")
+                            if margin_data[["variable", "category", "target_total"]].isna().any().any():
+                                st.error("Population control rows must have complete variable, category and numeric target_total values.")
+                            elif margin_data.duplicated(["variable", "category"]).any():
+                                st.error("Each variable/category combination must appear only once in the control file.")
+                            else:
+                                margin_variables = sorted(
+                                    set(margin_data["variable"]).intersection(set(map(str, df.columns)))
+                                )
+                                if not margin_variables:
+                                    st.error("No control-file variable names match dataset columns.")
+                                else:
+                                    poststrata_choice = st.selectbox(
+                                        "Post-stratification variable (optional)",
+                                        ["None"] + margin_variables,
+                                        key="weighting_poststrata_variable",
+                                    )
+                                    if poststrata_choice != "None":
+                                        poststrata_column = f"_timan_poststrata_{poststrata_choice}"
+                                        weighting_frame[poststrata_column] = df[poststrata_choice].astype("string").fillna("<MISSING>").astype(str)
+                                        rows = margin_data[margin_data["variable"] == poststrata_choice]
+                                        population_totals = dict(zip(rows["category"], rows["target_total"].astype(float)))
+                                    rake_choices = st.multiselect(
+                                        "Raking margins (optional)",
+                                        margin_variables,
+                                        key="weighting_raking_variables",
+                                        help="Select one or more margins; targets should be mutually coherent and refer to the same population.",
+                                    )
+                                    if rake_choices:
+                                        raking_margins = {}
+                                        for margin_variable in rake_choices:
+                                            internal_column = f"_timan_rake_{margin_variable}"
+                                            weighting_frame[internal_column] = df[margin_variable].astype("string").fillna("<MISSING>").astype(str)
+                                            rows = margin_data[margin_data["variable"] == margin_variable]
+                                            raking_margins[internal_column] = dict(
+                                                zip(rows["category"], rows["target_total"].astype(float))
+                                            )
+                    except (ValueError, pd.errors.ParserError, UnicodeDecodeError) as exc:
+                        st.error(f"Could not read population controls: {exc}")
+                trim_enabled = st.checkbox(
+                    "Trim extreme weights (optional)", value=False,
+                    key="weighting_trim_enabled",
+                )
+                trim_quantiles = None
+                if trim_enabled:
+                    trim_quantiles = st.slider(
+                        "Lower and upper trimming quantiles",
+                        min_value=0.0, max_value=1.0, value=(0.01, 0.99),
+                        step=0.01, key="weighting_trim_quantiles",
+                    )
+                if st.button(
+                    "Construct and validate survey weights",
+                    type="primary",
+                    key="run_survey_weighting_engine",
+                ):
+                    try:
+                        if weighting_response_col is not None and not weighting_cells:
+                            raise ValueError("Select at least one nonresponse adjustment-cell variable.")
+                        weighting_result = run_survey_weighting_service(
+                            weighting_frame,
+                            weighting_pi_col,
+                            response_column=weighting_response_col,
+                            adjustment_cells=weighting_cells or None,
+                            poststrata_column=poststrata_column,
+                            population_totals=population_totals,
+                            raking_margins=raking_margins,
+                            trim_quantiles=trim_quantiles,
+                        )
+                        st.session_state["survey_weighting_result"] = weighting_result
+                    except (TypeError, ValueError, KeyError) as exc:
+                        st.error(str(exc))
+                weighting_result = st.session_state.get("survey_weighting_result")
+                if weighting_result is not None:
+                    st.markdown("#### Weight construction results")
+                    d1, d2, d3, d4 = st.columns(4)
+                    diagnostics = weighting_result.metadata.get("diagnostics", {})
+                    d1.metric("Analysis records", f"{diagnostics.get('n', 0):,}")
+                    d2.metric("Kish effective n", f"{diagnostics.get('kish_effective_sample_size', 0):,.1f}")
+                    d3.metric("Weight CV", f"{diagnostics.get('coefficient_of_variation', 0):.3f}")
+                    d4.metric("Approx. unequal-weight DEFF", f"{diagnostics.get('kish_deff_approximation', 0):.3f}")
+                    st.dataframe(
+                        weighting_result.tables["weight_diagnostics"],
+                        hide_index=True, use_container_width=True,
+                    )
+                    st.caption("Kish effective sample size and DEFF are unequal-weighting diagnostics, not full complex-survey variance estimates.")
+                    st.download_button(
+                        "Download weighted analysis dataset (CSV)",
+                        data=weighting_result.tables["weighted_dataset"].to_csv(index=False).encode("utf-8-sig"),
+                        file_name="timanstat_weighted_analysis_dataset.csv",
+                        mime="text/csv", key="download_weighted_analysis_dataset",
+                    )
+                    st.download_button(
+                        "Download weight diagnostics (CSV)",
+                        data=weighting_result.tables["weight_diagnostics"].to_csv(index=False).encode("utf-8-sig"),
+                        file_name="timanstat_weight_diagnostics.csv",
+                        mime="text/csv", key="download_weight_diagnostics",
+                    )
+                    st.markdown("**Applied stages**")
+                    for stage in weighting_result.metadata.get("stages", []):
+                        st.write(f"• {stage}")
+                    for assumption in weighting_result.assumptions:
+                        st.caption(f"Assumption: {assumption}")
+                    for limitation in weighting_result.limitations:
+                        st.warning(limitation)
 
         st.divider()
         st.subheader("Survey-weighted descriptive estimates")
