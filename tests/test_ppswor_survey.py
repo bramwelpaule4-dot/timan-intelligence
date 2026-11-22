@@ -39,7 +39,7 @@ def test_ppswor_rejects_duplicate_psus_and_invalid_pi():
         estimate_ppswor_total(df, "total", "psu", "pi", joint, "stratum")
     df, joint = ppswor_fixture()
     df.loc[0, "pi"] = 0
-    with pytest.raises(ValueError, match="between 0 and 1"):
+    with pytest.raises(ValueError, match=r"\(0, 1\]"):
         estimate_ppswor_total(df, "total", "psu", "pi", joint, "stratum")
 
 
