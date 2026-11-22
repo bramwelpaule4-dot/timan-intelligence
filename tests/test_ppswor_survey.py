@@ -169,3 +169,46 @@ def test_ppswor_ratio_service_returns_shared_analysis_result():
     )
     assert result.status == "success"
     assert result.metadata["parameter"] == "mean"
+
+
+def test_ppswor_domain_ratio_retains_zero_domain_psus_and_design_variance():
+    from timan_intelligence.core.ppswor_survey import estimate_ppswor_domain_ratio
+    df, joint = ppswor_fixture()
+    df["domain_num"] = [10.0, 0.0, 30.0]
+    df["domain_den"] = [5.0, 0.0, 10.0]
+    result = estimate_ppswor_domain_ratio(
+        df, "Women", "domain_num", "domain_den", "psu", "pi",
+        joint, "stratum", parameter="mean",
+    )
+    expected = (10 / .5 + 0 / .7 + 30 / .8) / (5 / .5 + 0 / .7 + 10 / .8)
+    assert result["estimate"] == pytest.approx(expected)
+    assert result["variance"] > 0
+    assert result["metadata"]["domain_estimation"] is True
+    assert result["metadata"]["domain_name"] == "Women"
+    assert len(result["pairwise_variance"]) == 3
+    assert any("Do not filter" in warning for warning in result["warnings"])
+
+
+def test_ppswor_domain_ratio_rejects_missing_domain_name():
+    from timan_intelligence.core.ppswor_survey import estimate_ppswor_domain_ratio
+    df, joint = ppswor_fixture()
+    df["domain_num"] = [10.0, 20.0, 30.0]
+    df["domain_den"] = [5.0, 10.0, 15.0]
+    with pytest.raises(ValueError, match="domain name"):
+        estimate_ppswor_domain_ratio(
+            df, " ", "domain_num", "domain_den", "psu", "pi", joint, "stratum"
+        )
+
+
+def test_ppswor_domain_ratio_service_returns_domain_metadata():
+    from timan_intelligence.services.analysis_service import run_ppswor_domain_ratio_service
+    df, joint = ppswor_fixture()
+    df["domain_num"] = [2.0, 0.0, 8.0]
+    df["domain_den"] = [10.0, 0.0, 20.0]
+    result = run_ppswor_domain_ratio_service(
+        df, "Youth", "domain_num", "domain_den", "psu", "pi", joint, "stratum",
+        parameter="proportion",
+    )
+    assert result.status == "success"
+    assert result.metadata["domain_name"] == "Youth"
+    assert result.metadata["domain_estimation"] is True
