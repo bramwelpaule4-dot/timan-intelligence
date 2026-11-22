@@ -45,6 +45,8 @@ from timan_intelligence.services.analysis_service import (
     run_ordinal_logistic_regression_service,
     run_poisson_regression_service,
     run_negative_binomial_regression_service,
+    run_kaplan_meier_service,
+    run_cox_survival_service,
     run_multinomial_logistic_regression_service,
     recommend_categorical_outcome_model_service,
     run_regression_diagnostics_service,
@@ -2425,6 +2427,204 @@ def render_negative_binomial_regression(df):
             st.warning(warning)
 
 
+
+def _survival_variable_options(df):
+    time_options = [
+        c for c in df.select_dtypes(include="number").columns
+        if not pd.api.types.is_bool_dtype(df[c].dtype)
+    ]
+    event_options = [
+        c for c in df.columns if 2 <= df[c].dropna().nunique() == 2
+    ]
+    return time_options, event_options
+
+
+def render_kaplan_meier_analysis(df):
+    """Render Kaplan-Meier survival curves and optional log-rank test."""
+    st.subheader("Estimate time-to-event outcomes")
+    st.write(
+        "Kaplan-Meier analysis estimates the probability of remaining event-free "
+        "over time while accounting for right-censored observations, such as "
+        "participants who have not yet obtained employment by the end of follow-up."
+    )
+    time_options, event_options = _survival_variable_options(df)
+    if not time_options or not event_options:
+        st.info("A numeric follow-up-time variable and a two-category event-status variable are required.")
+        return
+    time_variable = st.selectbox("Follow-up time variable", time_options, key="km_time")
+    event_variable = st.selectbox("Event-status variable", event_options, key="km_event")
+    event_categories = list(pd.unique(df[event_variable].dropna()))
+    event_value = st.selectbox(
+        "Which category represents the event of interest?",
+        event_categories, key="km_event_value", format_func=str,
+        help="For example, select 'employed' as the event; 'censored' records represent participants without the event by last follow-up.",
+    )
+    group_options = [None] + [c for c in df.columns if c not in {time_variable, event_variable}]
+    group_variable = st.selectbox(
+        "Compare groups (optional)", group_options, index=0,
+        format_func=lambda value: "No grouping" if value is None else str(value),
+        key="km_group",
+    )
+    st.caption(
+        "The log-rank test is provided when exactly two groups are selected. "
+        "With more groups, TimanStat displays separate curves without an overall test."
+    )
+    dataset_key = _dataset_analysis_key(df)
+    result_key = f"timanstat_kaplan_meier_{dataset_key}"
+    if st.button("Run Kaplan-Meier analysis", type="primary", key="run_kaplan_meier"):
+        try:
+            result = run_kaplan_meier_service(
+                df, str(time_variable), str(event_variable), event_value, group_variable
+            )
+        except (TypeError, ValueError) as exc:
+            st.error(str(exc))
+        except Exception:
+            st.error("The Kaplan-Meier analysis could not be estimated.")
+        else:
+            st.session_state[result_key] = {
+                "time": time_variable, "event": event_variable,
+                "event_value": event_value, "group": group_variable,
+                "result": result,
+            }
+    saved = st.session_state.get(result_key)
+    if not saved:
+        st.info("Select follow-up time, event status and the event category, then run the analysis.")
+        return
+    if (saved["time"] != time_variable or saved["event"] != event_variable
+        or saved["event_value"] != event_value or saved["group"] != group_variable):
+        st.info("Run the analysis again to apply the changed variable selections.")
+        return
+    result = saved["result"]
+    metadata = result.metadata
+    metrics = st.columns(4)
+    metrics[0].metric("Records analysed", f"{metadata['valid_n']:,}")
+    metrics[1].metric("Events", f"{metadata['event_n']:,}")
+    metrics[2].metric("Censored", f"{metadata['censored_n']:,}")
+    median = metadata["median_survival_time"]
+    metrics[3].metric("Median survival", "Not reached" if median is None else f"{median:.3g}")
+    st.markdown("#### Survival curve")
+    if "group_survival_curves" in result.tables:
+        grouped = result.tables["group_survival_curves"]
+        for label, subset in grouped.groupby("Group", sort=False):
+            st.markdown(f"**{label}**")
+            st.line_chart(
+                subset.set_index("Time")[["Survival probability"]],
+                y="Survival probability", use_container_width=True,
+            )
+        st.dataframe(grouped, hide_index=True, use_container_width=True)
+    else:
+        curve = result.tables["survival_curve"]
+        if not curve.empty:
+            st.line_chart(
+                curve.set_index("Time")[["Survival probability"]],
+                y="Survival probability", use_container_width=True,
+            )
+        st.dataframe(curve, hide_index=True, use_container_width=True)
+    if metadata.get("logrank_test"):
+        test = metadata["logrank_test"]
+        st.caption(
+            f"Log-rank test: chi-square(1) = {test['chi_square']:.4g}; "
+            f"p-value = {test['p_value']:.4g}."
+        )
+    st.markdown("#### Interpretation")
+    for finding in result.findings:
+        st.write(f"• {finding}")
+    if result.limitations:
+        st.markdown("#### Assumptions and limitations")
+        for warning in result.limitations:
+            st.warning(warning)
+
+
+def render_cox_survival_regression(df):
+    """Render Cox proportional hazards regression."""
+    st.subheader("Identify factors associated with time to an event")
+    st.write(
+        "Cox regression estimates how predictors are associated with the "
+        "instantaneous event hazard. It is useful for examining factors "
+        "associated with earlier or later outcomes while accounting for censoring."
+    )
+    time_options, event_options = _survival_variable_options(df)
+    if not time_options or not event_options:
+        st.info("A numeric follow-up-time variable and a two-category event-status variable are required.")
+        return
+    time_variable = st.selectbox("Follow-up time variable", time_options, key="cox_time")
+    event_variable = st.selectbox("Event-status variable", event_options, key="cox_event")
+    event_categories = list(pd.unique(df[event_variable].dropna()))
+    event_value = st.selectbox(
+        "Which category represents the event of interest?",
+        event_categories, key="cox_event_value", format_func=str,
+    )
+    predictor_options = [
+        c for c in df.select_dtypes(include="number").columns
+        if c not in {time_variable, event_variable}
+        and not pd.api.types.is_bool_dtype(df[c].dtype)
+    ]
+    if not predictor_options:
+        st.info("At least one numeric predictor is required.")
+        return
+    predictors = st.multiselect(
+        "Numeric predictors", predictor_options,
+        key="cox_predictors", max_selections=15,
+    )
+    st.caption(
+        "The current guided model uses Breslow handling for tied event times. "
+        "The proportional hazards assumption is not yet formally tested. "
+        "Categorical predictors and complex survey adjustments are not supported."
+    )
+    if not predictors:
+        st.info("Select at least one predictor to run Cox regression.")
+        return
+    dataset_key = _dataset_analysis_key(df)
+    result_key = f"timanstat_cox_{dataset_key}"
+    if st.button("Run Cox regression", type="primary", key="run_cox_regression"):
+        try:
+            model = run_cox_survival_service(
+                df, list(predictors), str(time_variable), str(event_variable), event_value
+            )
+        except (TypeError, ValueError) as exc:
+            st.error(str(exc))
+        except Exception:
+            st.error("The Cox model could not be estimated. No inferential result has been reported.")
+        else:
+            st.session_state[result_key] = {
+                "predictors": list(predictors), "time": time_variable,
+                "event": event_variable, "event_value": event_value,
+                "result": model,
+            }
+    saved = st.session_state.get(result_key)
+    if not saved:
+        st.info("Select the time and event variables, choose the event category and predictors, then run the model.")
+        return
+    if (saved["predictors"] != list(predictors) or saved["time"] != time_variable
+        or saved["event"] != event_variable or saved["event_value"] != event_value):
+        st.info("Run the model again to apply the changed variable selections.")
+        return
+    result = saved["result"]
+    metadata = result.metadata
+    metrics = st.columns(3)
+    metrics[0].metric("Complete records", f"{metadata['valid_n']:,}")
+    metrics[1].metric("Observed events", f"{metadata['event_n']:,}")
+    metrics[2].metric("Model p-value", f"{metadata['model_p_value']:.4g}")
+    st.markdown("#### Adjusted hazard ratios")
+    st.dataframe(result.tables["coefficients"], hide_index=True, use_container_width=True)
+    st.caption(
+        "A hazard ratio above 1 indicates a higher instantaneous event hazard; "
+        "below 1 indicates a lower hazard, holding other predictors constant."
+    )
+    st.markdown("#### Estimated baseline survival")
+    st.line_chart(
+        result.tables["baseline_survival"].set_index("Time")[["Baseline survival"]],
+        y="Baseline survival", use_container_width=True,
+    )
+    st.markdown("#### Interpretation")
+    for finding in result.findings:
+        st.write(f"• {finding}")
+    if result.limitations:
+        st.markdown("#### Assumptions and limitations")
+        for warning in result.limitations:
+            st.warning(warning)
+
+
 def show_under_development(page, purpose):
     """Display an honest status page for an unfinished module."""
     st.title(page)
@@ -3727,6 +3927,10 @@ elif page == "Descriptive Statistics":
             render_poisson_regression(df)
             st.divider()
             render_negative_binomial_regression(df)
+            st.divider()
+            render_kaplan_meier_analysis(df)
+            st.divider()
+            render_cox_survival_regression(df)
 
 
 # VISUALISATIONS
