@@ -36,6 +36,8 @@ from timan_intelligence.entitlements.subscription_admin_ui import render_subscri
 from timan_intelligence.administration.user_admin_ui import render_user_administration
 from timan_intelligence.services.analysis_service import (
     run_survey_profile,
+    run_weighted_frequency_service,
+    run_weighted_numeric_summary_service,
     run_categorical_comparison,
     run_numeric_group_comparison_service,
     run_numeric_association_service,
@@ -3571,10 +3573,139 @@ elif page == "Survey Analysis":
                 "or codebook before they can be analysed as ordinal responses."
             )
 
+        st.divider()
+        st.subheader("Survey-weighted descriptive estimates")
+        st.write(
+            "Use a documented positive survey-weight variable to estimate "
+            "weighted response distributions or numeric summaries. Confirm "
+            "that the weights match the target population and unit of analysis."
+        )
+        numeric_weight_candidates = [
+            column for column in df.select_dtypes(include="number").columns
+        ]
+        if not numeric_weight_candidates:
+            st.info(
+                "No numeric columns are available for a survey weight. "
+                "Import the documented weight variable as numeric data."
+            )
+        else:
+            selected_weight = st.selectbox(
+                "Survey weight variable",
+                numeric_weight_candidates,
+                key="survey_weight_variable",
+            )
+            weighted_analysis_type = st.radio(
+                "Weighted estimate",
+                ["Categorical frequencies", "Numeric summary"],
+                horizontal=True,
+                key="survey_weighted_analysis_type",
+            )
+            if weighted_analysis_type == "Categorical frequencies":
+                weighted_outcome_candidates = [
+                    column for column in df.columns if column != selected_weight
+                ]
+            else:
+                weighted_outcome_candidates = [
+                    column for column in df.select_dtypes(include="number").columns
+                    if column != selected_weight
+                ]
+            if not weighted_outcome_candidates:
+                st.info(
+                    "No eligible outcome variable is available for the selected "
+                    "weighted analysis."
+                )
+            else:
+                selected_weighted_outcome = st.selectbox(
+                    "Outcome variable",
+                    weighted_outcome_candidates,
+                    key="survey_weighted_outcome",
+                )
+                include_weighted_missing = False
+                if weighted_analysis_type == "Categorical frequencies":
+                    include_weighted_missing = st.checkbox(
+                        "Include missing responses as a separate category",
+                        value=False,
+                        key="survey_weighted_include_missing",
+                    )
+                if st.button(
+                    "Calculate weighted estimates",
+                    type="primary",
+                    key="run_survey_weighted_estimates",
+                ):
+                    try:
+                        if weighted_analysis_type == "Categorical frequencies":
+                            weighted_result = run_weighted_frequency_service(
+                                df,
+                                selected_weighted_outcome,
+                                selected_weight,
+                                include_weighted_missing,
+                            )
+                            weighted_table = weighted_result.tables["weighted_frequencies"]
+                        else:
+                            weighted_result = run_weighted_numeric_summary_service(
+                                df,
+                                selected_weighted_outcome,
+                                selected_weight,
+                            )
+                            weighted_table = weighted_result.tables["weighted_summary"]
+                        st.session_state["survey_weighted_result"] = weighted_result
+                        st.session_state["survey_weighted_result_key"] = (
+                            _dataset_analysis_key(df),
+                            selected_weight,
+                            selected_weighted_outcome,
+                            weighted_analysis_type,
+                            include_weighted_missing,
+                        )
+                    except (TypeError, ValueError, KeyError) as exc:
+                        st.error(str(exc))
+                expected_weighted_key = (
+                    _dataset_analysis_key(df),
+                    selected_weight,
+                    selected_weighted_outcome,
+                    weighted_analysis_type,
+                    include_weighted_missing,
+                )
+                saved_weighted_result = st.session_state.get("survey_weighted_result")
+                if (
+                    saved_weighted_result is not None
+                    and st.session_state.get("survey_weighted_result_key") == expected_weighted_key
+                ):
+                    weighted_metadata = saved_weighted_result.metadata
+                    metric_row = st.columns(4)
+                    metric_row[0].metric("Records analysed", f"{weighted_metadata['records_used']:,}")
+                    metric_row[1].metric("Sum of weights", f"{weighted_metadata['sum_of_weights']:,.3f}")
+                    metric_row[2].metric(
+                        "Kish effective N",
+                        f"{weighted_metadata['effective_sample_size_kish']:.1f}",
+                    )
+                    metric_row[3].metric(
+                        "Weight range",
+                        f"{weighted_metadata['minimum_weight']:.3g}–{weighted_metadata['maximum_weight']:.3g}",
+                    )
+                    st.dataframe(
+                        saved_weighted_result.tables[
+                            "weighted_frequencies"
+                            if weighted_analysis_type == "Categorical frequencies"
+                            else "weighted_summary"
+                        ],
+                        hide_index=True,
+                        use_container_width=True,
+                    )
+                    for finding in saved_weighted_result.findings:
+                        st.write(f"• {finding}")
+                    for warning in saved_weighted_result.limitations:
+                        st.warning(warning)
+                    st.caption(
+                        "Weighted results are descriptive estimates only. "
+                        "No design-adjusted standard errors, confidence intervals "
+                        "or hypothesis tests are produced in this release."
+                    )
+
         st.info(
-            "All frequencies in this release are unweighted descriptions of "
-            "the imported records. Weighted population estimates and "
-            "design-adjusted standard errors are not yet available."
+            "Unweighted question-level frequencies above describe the imported "
+            "records. Use the weighted estimator separately when a documented "
+            "survey weight is available. Complex-design inference is not yet "
+            "supported."
         )
     else:
         st.info("Upload and import a survey dataset in Data Management to begin.")
