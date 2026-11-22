@@ -52,6 +52,7 @@ from timan_intelligence.services.analysis_service import (
     run_two_stage_ppswr_total_service,
     run_two_stage_ppswr_mean_service,
     run_two_stage_ppswr_proportion_service,
+    run_ppswor_total_service,
     run_categorical_comparison,
     run_numeric_group_comparison_service,
     run_numeric_association_service,
@@ -4538,6 +4539,136 @@ elif page == "Survey Analysis":
                     with st.expander("PSU draw-level details"):
                         st.dataframe(saved_pps.tables["psu_draw_details"], hide_index=True, use_container_width=True)
                 for warning in saved_pps.limitations:
+                    st.warning(warning)
+
+        with st.expander("PSU-level PPS without replacement (PPSWOR) estimation"):
+            st.write(
+                "Use this estimator only when PSUs were selected by a fixed-size "
+                "PPS-without-replacement design and each sampled PSU has a fully "
+                "observed outcome total. It uses the Horvitz–Thompson estimator "
+                "with Sen–Yates–Grundy (SYG) variance."
+            )
+            st.warning(
+                "This first interface supports an unstratified, PSU-level total only. "
+                "It does not support SSU subsampling, two-stage PPSWOR, means, "
+                "proportions, or PPSWR. Do not derive inclusion probabilities from "
+                "size measures or normalized weights."
+            )
+            ppswor_psu = st.selectbox(
+                "Sampled PSU identifier", ms_cols, key="ppswor_psu_variable"
+            )
+            ppswor_numeric = [
+                x for x in ms_numeric if x not in (ppswor_psu, ms_strata)
+            ]
+            ppswor_outcome = st.selectbox(
+                "Fully observed PSU outcome total", ppswor_numeric,
+                key="ppswor_outcome_variable",
+            )
+            ppswor_pi_options = [
+                x for x in ppswor_numeric if x != ppswor_outcome
+            ]
+            ppswor_pi = st.selectbox(
+                "First-order inclusion probability (pi_i)", ppswor_pi_options,
+                key="ppswor_pi_variable",
+            )
+            ppswor_matrix_file = st.file_uploader(
+                "Upload joint inclusion probability matrix (CSV)",
+                type=["csv"], key="ppswor_joint_matrix_upload",
+                help=(
+                    "Square CSV matrix: first column contains PSU identifiers; "
+                    "column headers contain the same PSU identifiers; each cell "
+                    "is the design joint inclusion probability pi_ij. The diagonal "
+                    "must equal pi_i."
+                ),
+            )
+            ppswor_confidence = st.selectbox(
+                "PPSWOR confidence level", [0.90, 0.95, 0.99],
+                index=1, format_func=lambda x: f"{x:.0%}",
+                key="ppswor_confidence_level",
+            )
+            ppswor_ready = (
+                ppswor_psu is not None
+                and ppswor_outcome is not None
+                and ppswor_pi is not None
+                and len({ppswor_psu, ppswor_outcome, ppswor_pi}) == 3
+                and ppswor_matrix_file is not None
+            )
+            if st.button(
+                "Run PSU-level PPSWOR total",
+                type="primary", key="run_ppswor_total",
+                disabled=not ppswor_ready,
+            ):
+                try:
+                    matrix = pd.read_csv(
+                        io.BytesIO(ppswor_matrix_file.getvalue()), index_col=0
+                    )
+                    if (
+                        matrix.empty
+                        or not matrix.index.is_unique
+                        or not matrix.columns.is_unique
+                    ):
+                        raise ValueError(
+                            "The joint-inclusion CSV must be a non-empty square matrix "
+                            "with unique PSU row and column labels."
+                        )
+                    sampled_ids = df[ppswor_psu].dropna().tolist()
+                    label_lookup = {str(value): value for value in sampled_ids}
+                    matrix.index = [
+                        label_lookup.get(str(value), value) for value in matrix.index
+                    ]
+                    matrix.columns = [
+                        label_lookup.get(str(value), value) for value in matrix.columns
+                    ]
+                    if set(matrix.index) != set(matrix.columns):
+                        raise ValueError(
+                            "Joint-inclusion matrix row and column PSU labels must match."
+                        )
+                    ordered_ids = list(dict.fromkeys(sampled_ids))
+                    matrix = matrix.loc[ordered_ids, ordered_ids]
+                    ppswor_result = run_ppswor_total_service(
+                        df, ppswor_outcome, ppswor_psu, ppswor_pi,
+                        matrix, None, ppswor_confidence,
+                    )
+                    st.session_state["ppswor_total_result"] = ppswor_result
+                    st.session_state["ppswor_total_result_key"] = (
+                        _dataset_analysis_key(df), ppswor_psu, ppswor_outcome,
+                        ppswor_pi, ppswor_confidence, ppswor_matrix_file.name,
+                    )
+                except (TypeError, ValueError, KeyError, pd.errors.ParserError) as exc:
+                    st.error(str(exc))
+            ppswor_result_key = (
+                _dataset_analysis_key(df), ppswor_psu, ppswor_outcome,
+                ppswor_pi, ppswor_confidence,
+                ppswor_matrix_file.name if ppswor_matrix_file is not None else None,
+            )
+            saved_ppswor = st.session_state.get("ppswor_total_result")
+            if (
+                saved_ppswor is not None
+                and st.session_state.get("ppswor_total_result_key") == ppswor_result_key
+            ):
+                st.metric(
+                    "PPSWOR estimated population total",
+                    f"{saved_ppswor.metadata['estimate']:,.4g}",
+                )
+                st.metric(
+                    "SYG design-based standard error",
+                    f"{saved_ppswor.metadata['standard_error']:,.4g}",
+                )
+                ci = saved_ppswor.metadata["confidence_interval"]
+                st.write(
+                    f"{ppswor_confidence:.0%} confidence interval: "
+                    f"[{ci[0]:,.4g}, {ci[1]:,.4g}]"
+                )
+                st.dataframe(
+                    saved_ppswor.tables["stratum_estimates"],
+                    hide_index=True, use_container_width=True,
+                )
+                with st.expander("Pairwise SYG variance contributions"):
+                    st.dataframe(
+                        saved_ppswor.tables["pairwise_variance"],
+                        hide_index=True, use_container_width=True,
+                    )
+                for warning in saved_ppswor.limitations:
                     st.warning(warning)
 
         st.info(
