@@ -25,6 +25,7 @@ IMPLEMENTED_METHODS = frozenset(
         "method.inference.confidence_interval.mean",
         "method.inference.confidence_interval.proportion",
         "method.inference.confidence_interval.mean_difference.welch",
+        "method.inference.confidence_interval.mean_difference.paired",
         "method.inference.comparison.t_test.independent.welch",
         "method.inference.comparison.anova.one_way",
     }
@@ -217,6 +218,29 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             limitations=[
                 "The current implementation assumes independent Bernoulli observations.",
                 "It is not design-adjusted for complex survey samples, clustering, stratification or sampling weights.",
+            ],
+        ),
+        _method(
+            entity_id="method.inference.confidence_interval.mean_difference.paired",
+            name="Paired mean-change confidence interval",
+            description="Estimates the mean after-minus-before change in correctly matched measurements using a paired Student-t interval.",
+            family="estimation",
+            purpose="inference",
+            priority="P1",
+            outcome_types=["numeric"],
+            required_roles=["paired_measurement_before", "paired_measurement_after"],
+            study_designs=["paired", "repeated_measure"],
+            data_requirements=["Two numeric before-and-after measurements in separate columns.", "Each row represents one correctly matched pair.", "At least two complete finite pairs."],
+            assumptions=["Pairs are correctly matched.", "Pair-level differences are independent across rows.", "The distribution of paired differences is assessed."],
+            outputs=["Complete pair count", "Mean before", "Mean after", "Mean change (after minus before)", "Standard error", "Degrees of freedom", "Confidence interval"],
+            use_cases=["Estimate pre/post programme change", "Quantify within-participant change", "Analyse matched repeated measurements"],
+            aliases=["Paired mean difference interval", "Before-after mean change confidence interval"],
+            implementation_status="implemented",
+            verification_status="unit_tested",
+            execution_eligibility="conditional",
+            limitations=[
+                "Each row must represent one correctly matched pair; unmatched observations are excluded.",
+                "The interval is not adjusted for complex survey sampling or clustering.",
             ],
         ),
         _method(
