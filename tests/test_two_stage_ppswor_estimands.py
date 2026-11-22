@@ -72,8 +72,12 @@ def test_two_stage_ppswor_proportion_requires_binary_outcome():
     result = estimate_two_stage_ppswor_proportion(
         frame, "binary", 12, *common
     )
-    assert 0 <= result["estimate"] <= 1
+    # A design-unbiased estimator can fall outside [0, 1] in a realised sample;
+    # do not clip it because clipping would alter its design properties.
+    total = estimate_two_stage_ppswor_total(frame, "binary", *common)
+    assert result["estimate"] == pytest.approx(total["estimate"] / 12)
     assert result["metadata"]["estimand"] == "population proportion"
+    assert any("not clipped to [0, 1]" in warning for warning in result["warnings"])
     with pytest.raises(ValueError, match="whole number"):
         estimate_two_stage_ppswor_proportion(
             frame, "binary", 12.5, *common
