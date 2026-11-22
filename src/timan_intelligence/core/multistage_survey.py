@@ -477,3 +477,157 @@ def estimate_two_stage_proportion(
         ssu_variable, psu_population_count_variable, ssu_population_count_variable,
         strata_variable, confidence_level, True,
     )
+
+
+def _prepare_two_stage_domain(
+    df: pd.DataFrame, domain_variable: str, domain_value: Any,
+) -> tuple[pd.DataFrame, pd.Series]:
+    """Validate SSU-level domain membership and return its Boolean indicator."""
+    if not isinstance(df, pd.DataFrame) or df.empty:
+        raise ValueError("A non-empty pandas DataFrame is required.")
+    if domain_variable not in df.columns:
+        raise KeyError(f"Domain variable not found: {domain_variable}.")
+    membership = df[domain_variable]
+    if membership.isna().any():
+        raise ValueError("Domain membership cannot be missing; resolve missing domain values before estimation.")
+    indicator = membership.eq(domain_value)
+    if not indicator.any():
+        raise ValueError("The selected domain has no sampled SSUs; a domain estimate cannot be produced.")
+    return df.copy(), indicator.astype(bool)
+
+
+def estimate_two_stage_domain_total(
+    df: pd.DataFrame,
+    outcome_variable: str,
+    domain_variable: str,
+    domain_value: Any,
+    psu_variable: str,
+    ssu_variable: str,
+    psu_population_count_variable: str,
+    ssu_population_count_variable: str,
+    strata_variable: str | None = None,
+    confidence_level: float = 0.95,
+) -> dict[str, Any]:
+    """Estimate a domain total, retaining all sampled SSUs for variance estimation.
+
+    Domain membership must be defined at SSU level. SSUs outside the domain
+    contribute zero to the domain outcome but remain in the sample design.
+    """
+    work, indicator = _prepare_two_stage_domain(df, domain_variable, domain_value)
+    outcome = pd.to_numeric(work[outcome_variable], errors="coerce")
+    if outcome.isna().any() or not np.isfinite(outcome.to_numpy(dtype=float)).all():
+        raise ValueError("Domain total outcomes must be complete, numeric and finite.")
+    derived = "__timanstat_domain_total_outcome__"
+    if derived in work.columns:
+        raise ValueError("Dataset contains a reserved internal column name; rename it and retry.")
+    work[derived] = outcome.where(indicator, 0.0)
+    result = estimate_two_stage_total(
+        work, derived, psu_variable, ssu_variable,
+        psu_population_count_variable, ssu_population_count_variable,
+        strata_variable, confidence_level,
+    )
+    result["findings"] = [
+        f"Estimated total for domain {domain_value!r}: {result['estimate']:,.4g}.",
+        *result["findings"][1:],
+    ]
+    result["warnings"] = [
+        "Domain membership is treated as an SSU-level characteristic; all elements within an SSU must belong to the same domain.",
+        "All sampled SSUs, including those outside the domain, are retained in variance estimation; outside-domain outcomes are set to zero.",
+        *result["warnings"],
+    ]
+    result["metadata"] = {
+        **result["metadata"],
+        "estimator": "Two-stage design-based domain total with stage-specific FPCs",
+        "domain_variable": domain_variable,
+        "domain_value": str(domain_value),
+        "sampled_domain_ssus": int(indicator.sum()),
+        "sampled_non_domain_ssus": int((~indicator).sum()),
+    }
+    return result
+
+
+def _estimate_two_stage_domain_ratio(
+    df: pd.DataFrame,
+    numerator_variable: str,
+    denominator_variable: str,
+    domain_variable: str,
+    domain_value: Any,
+    psu_variable: str,
+    ssu_variable: str,
+    psu_population_count_variable: str,
+    ssu_population_count_variable: str,
+    strata_variable: str | None,
+    confidence_level: float,
+    require_proportion: bool,
+) -> dict[str, Any]:
+    work, indicator = _prepare_two_stage_domain(df, domain_variable, domain_value)
+    numerator = pd.to_numeric(work[numerator_variable], errors="coerce")
+    denominator = pd.to_numeric(work[denominator_variable], errors="coerce")
+    if numerator.isna().any() or not np.isfinite(numerator.to_numpy(dtype=float)).all():
+        raise ValueError("Domain numerator values must be complete, numeric and finite.")
+    if denominator.isna().any() or not np.isfinite(denominator.to_numpy(dtype=float)).all():
+        raise ValueError("Domain denominator values must be complete, numeric and finite.")
+    if (denominator < 0).any() or not np.equal(denominator, np.floor(denominator)).all():
+        raise ValueError("Domain denominator counts must be non-negative whole numbers.")
+    if require_proportion and (
+        (numerator < 0).any() or (numerator > denominator).any()
+        or not np.equal(numerator, np.floor(numerator)).all()
+    ):
+        raise ValueError("For a domain proportion, successes must be whole numbers between zero and eligible counts.")
+    ncol, dcol = "__timanstat_domain_numerator__", "__timanstat_domain_denominator__"
+    if {ncol, dcol}.intersection(work.columns):
+        raise ValueError("Dataset contains reserved internal column names; rename them and retry.")
+    work[ncol] = numerator.where(indicator, 0.0)
+    work[dcol] = denominator.where(indicator, 0.0)
+    result = _estimate_two_stage_ratio(
+        work, ncol, dcol, psu_variable, ssu_variable,
+        psu_population_count_variable, ssu_population_count_variable,
+        strata_variable, confidence_level, require_proportion,
+    )
+    kind = "proportion" if require_proportion else "mean"
+    result["findings"] = [
+        f"Estimated domain {kind} for {domain_value!r}: {result['estimate']:,.4g}.",
+        *result["findings"][1:],
+    ]
+    result["warnings"] = [
+        "Domain membership is treated as an SSU-level characteristic; all elements within an SSU must belong to the same domain.",
+        "All sampled SSUs remain in the design variance calculation; non-domain numerator and denominator contributions are set to zero.",
+        *result["warnings"],
+    ]
+    result["metadata"] = {
+        **result["metadata"],
+        "estimator": f"Two-stage Taylor-linearised domain {kind} estimator with stage-specific FPCs",
+        "domain_variable": domain_variable,
+        "domain_value": str(domain_value),
+        "sampled_domain_ssus": int(indicator.sum()),
+        "sampled_non_domain_ssus": int((~indicator).sum()),
+    }
+    return result
+
+
+def estimate_two_stage_domain_mean(
+    df: pd.DataFrame, outcome_total_variable: str, element_count_variable: str,
+    domain_variable: str, domain_value: Any, psu_variable: str, ssu_variable: str,
+    psu_population_count_variable: str, ssu_population_count_variable: str,
+    strata_variable: str | None = None, confidence_level: float = 0.95,
+) -> dict[str, Any]:
+    """Estimate a mean among SSUs/elements belonging to an SSU-level domain."""
+    return _estimate_two_stage_domain_ratio(
+        df, outcome_total_variable, element_count_variable, domain_variable,
+        domain_value, psu_variable, ssu_variable, psu_population_count_variable,
+        ssu_population_count_variable, strata_variable, confidence_level, False,
+    )
+
+
+def estimate_two_stage_domain_proportion(
+    df: pd.DataFrame, successes_variable: str, eligible_count_variable: str,
+    domain_variable: str, domain_value: Any, psu_variable: str, ssu_variable: str,
+    psu_population_count_variable: str, ssu_population_count_variable: str,
+    strata_variable: str | None = None, confidence_level: float = 0.95,
+) -> dict[str, Any]:
+    """Estimate a proportion among SSUs/elements belonging to an SSU-level domain."""
+    return _estimate_two_stage_domain_ratio(
+        df, successes_variable, eligible_count_variable, domain_variable,
+        domain_value, psu_variable, ssu_variable, psu_population_count_variable,
+        ssu_population_count_variable, strata_variable, confidence_level, True,
+    )
