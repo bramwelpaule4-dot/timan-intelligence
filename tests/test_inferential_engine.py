@@ -319,3 +319,57 @@ def test_proportion_confidence_interval_service_returns_shared_result():
     )
     assert result.status == "success"
     assert result.metadata["confidence_level"] == pytest.approx(0.90)
+
+
+def test_welch_mean_difference_interval_uses_group_one_minus_group_two():
+    from timan_intelligence.core.statistical_engine import run_welch_mean_difference_confidence_interval
+
+    frame = pd.DataFrame({
+        "group": ["A", "A", "A", "B", "B", "B", "B"],
+        "score": [10.0, 12.0, 14.0, 7.0, 8.0, 9.0, 10.0],
+    })
+    result = run_welch_mean_difference_confidence_interval(
+        frame, "score", "group", 0.95
+    )
+    assert result.status == "success"
+    assert result.metadata["group_1_label"] == "A"
+    assert result.metadata["group_2_label"] == "B"
+    assert result.metadata["estimate"] == pytest.approx(3.0)
+    lower, upper = result.metadata["confidence_interval"]
+    assert lower < 3.0 < upper
+    assert result.metadata["degrees_of_freedom"] > 0
+    assert result.metadata["sampling_design_aware"] is False
+
+
+def test_welch_mean_difference_interval_excludes_missing_and_infinite_outcomes():
+    from timan_intelligence.core.statistical_engine import run_welch_mean_difference_confidence_interval
+
+    frame = pd.DataFrame({
+        "group": ["A", "A", "A", "B", "B", "B"],
+        "score": [10.0, 12.0, float("inf"), 7.0, 9.0, None],
+    })
+    result = run_welch_mean_difference_confidence_interval(frame, "score", "group")
+    assert result.metadata["missing_values"] == 1
+    assert result.metadata["infinite_values"] == 1
+    assert result.metadata["group_1_label"] == "A"
+    assert result.metadata["group_2_label"] == "B"
+
+
+def test_welch_mean_difference_interval_validates_groups_and_sample_sizes():
+    from timan_intelligence.core.statistical_engine import run_welch_mean_difference_confidence_interval
+
+    with pytest.raises(ValueError, match="exactly two groups"):
+        run_welch_mean_difference_confidence_interval(
+            pd.DataFrame({"group": ["A", "A", "A"], "score": [1, 2, 3]}),
+            "score", "group",
+        )
+    with pytest.raises(ValueError, match="at least two finite"):
+        run_welch_mean_difference_confidence_interval(
+            pd.DataFrame({"group": ["A", "A", "B", "B"], "score": [1, float("inf"), 2, 3]}),
+            "score", "group",
+        )
+    with pytest.raises(ValueError, match="less than 1"):
+        run_welch_mean_difference_confidence_interval(
+            pd.DataFrame({"group": ["A", "A", "B", "B"], "score": [1, 2, 3, 4]}),
+            "score", "group", 1.0,
+        )
