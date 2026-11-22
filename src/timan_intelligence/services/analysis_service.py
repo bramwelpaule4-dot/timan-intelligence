@@ -1502,6 +1502,11 @@ def run_survey_weighting_service(
         current_column = "trimmed_weight"
         stages.append("Winsorised weight trimming with total-weight preservation")
     final_weights = analysis[current_column]
+    # Preserve intermediate stages in the fieldwork dataset for auditability.
+    for stage_column in ("poststratified_weight", "raked_weight", "trimmed_weight"):
+        if stage_column in analysis.columns:
+            output[stage_column] = float("nan")
+            output.loc[analysis.index, stage_column] = analysis[stage_column]
     output["analysis_weight"] = 0.0
     output.loc[analysis.index, "analysis_weight"] = final_weights
     analysis_diagnostics = weight_diagnostics(final_weights)
