@@ -1771,15 +1771,16 @@ def render_categorical_model_recommender(df):
     category_count = int(df[outcome].dropna().nunique())
     structure = None
     if category_count >= 3:
-        structure = st.radio(
+        structure = st.selectbox(
             "Do these categories have a meaningful order?",
             options=["ordered", "nominal"],
+            index=None,
+            placeholder="Select ordered or unordered",
             format_func=lambda value: (
                 "Yes — ordered levels (e.g. low, moderate, high)"
                 if value == "ordered"
                 else "No — unordered categories (e.g. assistance type)"
             ),
-            horizontal=False,
             key="categorical_model_recommender_structure",
         )
     try:
