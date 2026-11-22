@@ -1962,3 +1962,9 @@ def run_chi_square_test_of_independence_service(df: pd.DataFrame, row_variable: 
     """Run Pearson's chi-square test through the shared analysis service."""
     from timan_intelligence.core.statistical_engine import run_chi_square_test_of_independence
     return run_chi_square_test_of_independence(df, row_variable, column_variable)
+
+
+def run_fisher_exact_test_service(df: pd.DataFrame, row_variable: str, column_variable: str, alternative: str = "two-sided") -> AnalysisResult:
+    """Run Fisher's exact test through the shared analysis service."""
+    from timan_intelligence.core.statistical_engine import run_fisher_exact_test
+    return run_fisher_exact_test(df, row_variable, column_variable, alternative)

@@ -78,6 +78,51 @@ def run_chi_square_test_of_independence(df: pd.DataFrame, row_variable: str, col
             "study_design": "independent_observations", "continuity_correction": False})
 
 
+
+def run_fisher_exact_test(df: pd.DataFrame, row_variable: str, column_variable: str, alternative: str = "two-sided") -> AnalysisResult:
+    """Run Fisher's exact test for association in a 2 by 2 table."""
+    from scipy.stats import fisher_exact
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Expected a pandas DataFrame.")
+    for variable, label in ((row_variable, "first"), (column_variable, "second")):
+        if not isinstance(variable, str) or variable not in df.columns:
+            raise ValueError(f"Select a valid {label} categorical variable.")
+        if pd.api.types.is_numeric_dtype(df[variable]):
+            raise TypeError("Both variables must be categorical. Recode numeric category codes as categorical variables before testing.")
+    if row_variable == column_variable:
+        raise ValueError("Choose two different categorical variables.")
+    if alternative not in {"two-sided", "less", "greater"}:
+        raise ValueError("Alternative must be 'two-sided', 'less' or 'greater'.")
+    pair = df[[row_variable, column_variable]]
+    complete = pair.dropna()
+    excluded = int(len(pair) - len(complete))
+    if complete.empty:
+        raise ValueError("No complete observations remain for the contingency table.")
+    observed = pd.crosstab(complete[row_variable], complete[column_variable])
+    observed = observed.loc[observed.sum(axis=1) > 0, observed.sum(axis=0) > 0]
+    if observed.shape != (2, 2):
+        raise ValueError("Fisher's exact test requires exactly two observed categories in each variable (a 2 by 2 table).")
+    odds_ratio, p_value = fisher_exact(observed.to_numpy(), alternative=alternative)
+    n = int(observed.to_numpy().sum())
+    summary = pd.DataFrame([{"Odds ratio": float(odds_ratio), "Exact p-value": float(p_value),
+        "Alternative hypothesis": alternative, "Complete observations": n, "Excluded missing pairs": excluded}])
+    findings = [f"Fisher's exact test p-value is {p_value:.4g} ({alternative} alternative).",
+        f"The sample odds ratio is {odds_ratio:.4g}; interpret it using the row and column category order shown in the table.",
+        f"The 2 by 2 table contains {n:,} complete observations."]
+    limitations = ["The standard Fisher exact test assumes independent observational units and does not adjust for survey weights, clustering, stratification or finite-population corrections.",
+        "The odds ratio is a sample effect estimate; this implementation does not provide a confidence interval.",
+        "The alternative hypothesis is interpreted relative to the row and column category ordering shown in the contingency table."]
+    if excluded:
+        limitations.append(f"{excluded:,} rows with missing values in either variable were excluded using complete-case analysis.")
+    return AnalysisResult(title=f"Fisher's exact test: {row_variable} × {column_variable}", method="Fisher's exact test", status="success",
+        tables={"contingency_table": observed.reset_index(), "test_summary": summary}, findings=findings,
+        assumptions=["Both variables are categorical and each has exactly two observed categories.", "Each observational unit contributes to exactly one cell.", "Observations are independent under the applicable sampling model."],
+        limitations=limitations, metadata={"row_variable": row_variable, "column_variable": column_variable,
+        "odds_ratio": float(odds_ratio), "p_value": float(p_value), "alternative": alternative,
+        "n_observations": n, "missing_pairs_excluded": excluded, "sampling_design_aware": False,
+        "study_design": "independent_observations"})
+
+
 def run_descriptive_statistics(
     df: pd.DataFrame,
     variable: str,

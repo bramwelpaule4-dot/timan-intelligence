@@ -23,6 +23,7 @@ from timan_intelligence.core.statistical_engine import (
     run_paired_mean_difference_confidence_interval,
     run_paired_samples_t_test,
     run_chi_square_test_of_independence,
+    run_fisher_exact_test,
     run_one_way_anova,
 )
 
@@ -40,6 +41,7 @@ _EXECUTOR_BY_METHOD_ID = {
     "method.inference.confidence_interval.mean_difference.paired": "paired_mean_difference_ci",
     "method.inference.comparison.t_test.paired": "paired_t",
     "method.inference.association.chi_square.independence": "chi_square_independence",
+    "method.inference.association.fisher_exact": "fisher_exact",
     "method.inference.comparison.t_test.independent.welch": "welch_t",
     "method.inference.comparison.anova.one_way": "anova",
 }
@@ -239,6 +241,11 @@ def execute_recommendation(
         result = run_proportion_confidence_interval(
             df, variables[0], confidence_level=confidence_level
         )
+    elif executor == "fisher_exact":
+        if len(variables) != 2:
+            raise AnalysisExecutionError("Fisher exact test requires exactly two categorical variables.")
+        options = recommendation.get("options") or {}
+        result = run_fisher_exact_test(df, variables[0], variables[1], alternative=options.get("alternative", "two-sided"))
     elif executor == "chi_square_independence":
         if len(variables) != 2:
             raise AnalysisExecutionError("A chi-square test of independence requires exactly two categorical variables.")

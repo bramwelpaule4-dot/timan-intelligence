@@ -26,6 +26,7 @@ IMPLEMENTED_METHODS = frozenset(
         "method.inference.comparison.t_test.one_sample",
         "method.inference.comparison.t_test.paired",
         "method.inference.association.chi_square.independence",
+        "method.inference.association.fisher_exact",
         "method.inference.confidence_interval.proportion",
         "method.inference.confidence_interval.mean_difference.welch",
         "method.inference.confidence_interval.mean_difference.paired",
@@ -405,7 +406,9 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             assumptions=["Independent observations under the applicable sampling model.", "The table structure and alternative hypothesis are specified."],
             outputs=["Odds ratio", "Exact p-value", "Contingency table"],
             use_cases=["Assess association in a 2 by 2 table, particularly when counts are sparse"],
-            limitations=["The standard Fisher exact procedure is not a general substitute for complex-sample survey inference."],
+            aliases=["Fisher exact test", "Exact test for a 2 by 2 table"],
+            implementation_status="implemented", verification_status="unit_tested", execution_eligibility="conditional",
+            limitations=["Requires a 2 by 2 table and independent observational units.", "Not adjusted for complex survey sampling.", "Odds-ratio confidence interval is not provided by this procedure."],
         ),
         _method(
             entity_id="method.inference.association.correlation.pearson",
