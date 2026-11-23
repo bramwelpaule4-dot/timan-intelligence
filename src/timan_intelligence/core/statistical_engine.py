@@ -619,6 +619,7 @@ def run_kruskal_wallis_test(df: pd.DataFrame, outcome_variable: str, group_varia
 def run_dunn_posthoc_test(df: pd.DataFrame, outcome_variable: str, group_variable: str) -> AnalysisResult:
     """Run Dunn pairwise rank comparisons with Holm family-wise adjustment."""
     from itertools import combinations
+    import numpy as np
     from scipy.stats import norm, rankdata
     if not isinstance(df, pd.DataFrame):
         raise TypeError("Expected a pandas DataFrame.")
