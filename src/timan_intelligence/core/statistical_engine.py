@@ -1479,8 +1479,8 @@ def run_friedman_test(
     incomplete = int(len(df) - len(complete))
     if len(complete) < 2:
         raise ValueError("The Friedman test requires at least two complete matched units across all selected measurements.")
-    if any(complete[column].nunique() < 2 for column in measurement_variables) and complete.nunique(axis=1).sum() == 0:
-        raise ValueError("The Friedman test is undefined when all repeated measurements are identical.")
+    if (complete.nunique(axis=1) == 1).all():
+        raise ValueError("The Friedman test is undefined when all repeated measurements are identical within every unit.")
     arrays = [complete[column].to_numpy() for column in measurement_variables]
     try:
         statistic, p_value = friedmanchisquare(*arrays)
