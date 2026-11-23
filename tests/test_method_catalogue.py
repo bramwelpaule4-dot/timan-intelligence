@@ -36,7 +36,7 @@ def test_only_existing_execution_methods_are_marked_implemented():
     }
 
     assert implemented == IMPLEMENTED_METHODS
-    assert len(implemented) == 17
+    assert len(implemented) == 18
 
 
 def test_exact_binomial_is_registered_as_conditionally_executable():
@@ -270,6 +270,15 @@ def test_dunn_holm_is_registered_as_conditionally_executable():
     method = get_statistical_method("method.inference.comparison.posthoc.dunn_holm")
     assert method is not None
     assert method.name == "Dunn post-hoc test with Holm adjustment"
+    assert method.implementation_status == "implemented"
+    assert method.verification_status == "unit_tested"
+    assert method.execution_eligibility == "conditional"
+
+
+def test_wilcoxon_signed_rank_is_registered_as_conditionally_executable():
+    method = get_statistical_method("method.inference.comparison.wilcoxon_signed_rank")
+    assert method is not None
+    assert method.name == "Wilcoxon signed-rank test"
     assert method.implementation_status == "implemented"
     assert method.verification_status == "unit_tested"
     assert method.execution_eligibility == "conditional"

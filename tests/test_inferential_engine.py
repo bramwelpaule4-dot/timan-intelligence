@@ -780,3 +780,40 @@ def test_dunn_posthoc_excludes_missing_and_infinite_outcomes():
     result = run_dunn_posthoc_test(frame, "y", "g")
     assert result.metadata["missing_outcomes"] == 1
     assert result.metadata["infinite_outcomes"] == 1
+
+
+def test_wilcoxon_signed_rank_reports_paired_change_and_effect_size():
+    from timan_intelligence.core.statistical_engine import run_wilcoxon_signed_rank_test
+    frame = pd.DataFrame({"before":[1,2,3,4,5,6,7,8],"after":[3,4,5,7,8,9,10,12]})
+    result = run_wilcoxon_signed_rank_test(frame,"before","after")
+    assert result.status == "success"
+    assert result.metadata["study_design"] == "paired"
+    assert result.metadata["p_value"] < 0.05
+    assert result.metadata["rank_biserial_correlation"] == pytest.approx(1.0)
+    assert result.metadata["complete_pairs"] == 8
+
+
+def test_wilcoxon_signed_rank_supports_direction_and_excludes_incomplete_pairs():
+    from timan_intelligence.core.statistical_engine import run_wilcoxon_signed_rank_test
+    frame = pd.DataFrame({"before":[1,2,3,4,5,None,7],"after":[2,3,4,5,6,8,float("inf")]})
+    result = run_wilcoxon_signed_rank_test(frame,"before","after",alternative="greater")
+    assert result.metadata["alternative"] == "greater"
+    assert result.metadata["missing_pairs"] == 1
+    assert result.metadata["infinite_pairs"] == 1
+    assert result.metadata["p_value"] < 0.05
+
+
+def test_wilcoxon_signed_rank_rejects_invalid_pairs_and_all_zero_differences():
+    from timan_intelligence.core.statistical_engine import run_wilcoxon_signed_rank_test
+    with pytest.raises(ValueError,match="at least two complete"):
+        run_wilcoxon_signed_rank_test(pd.DataFrame({"b":[1,None],"a":[2,3]}),"b","a")
+    with pytest.raises(ValueError,match="all paired differences are zero"):
+        run_wilcoxon_signed_rank_test(pd.DataFrame({"b":[1,2,3],"a":[1,2,3]}),"b","a")
+
+
+def test_wilcoxon_signed_rank_service_returns_shared_analysis_result():
+    from timan_intelligence.services.analysis_service import run_wilcoxon_signed_rank_test_service
+    frame = pd.DataFrame({"b":[1,2,3,4],"a":[2,3,4,5]})
+    result = run_wilcoxon_signed_rank_test_service(frame,"b","a")
+    assert result.status == "success"
+    assert result.method == "Wilcoxon signed-rank test"

@@ -539,3 +539,22 @@ def test_dunn_holm_executor_blocks_complex_and_repeated_measures_designs():
     recommendation["design_context"]={"study_design":"repeated_measures"}
     with pytest.raises(AnalysisExecutionError,match="repeated-measures"):
         execute_recommendation(frame,recommendation,approved=True)
+
+
+def test_execution_runs_registered_wilcoxon_signed_rank_test():
+    frame = pd.DataFrame({"before":[1,2,3,4,5,6],"after":[2,3,4,5,6,7]})
+    rec = {"method":"Wilcoxon signed-rank test","method_id":"method.inference.comparison.wilcoxon_signed_rank","variables":["before","after"],"options":{"alternative":"greater"},"status":"review_required"}
+    result = execute_recommendation(frame,rec,approved=True)
+    assert result.status == "success"
+    assert result.metadata["method_id"] == "method.inference.comparison.wilcoxon_signed_rank"
+    assert result.metadata["alternative"] == "greater"
+
+
+def test_wilcoxon_signed_rank_executor_allows_paired_design_but_blocks_complex_sampling():
+    frame = pd.DataFrame({"before":[1,2,3,4,5,6],"after":[2,3,4,5,6,7]})
+    rec = {"method":"Wilcoxon signed-rank test","variables":["before","after"],"status":"review_required","design_context":{"study_design":"paired"}}
+    result = execute_recommendation(frame,rec,approved=True)
+    assert result.status == "success"
+    rec["design_context"]={"sampling_design":"cluster"}
+    with pytest.raises(AnalysisExecutionError,match="not validated"):
+        execute_recommendation(frame,rec,approved=True)
