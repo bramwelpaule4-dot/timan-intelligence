@@ -76,6 +76,7 @@ from timan_intelligence.services.analysis_service import (
     run_mann_whitney_u_test_service,
     run_kruskal_wallis_test_service,
     run_dunn_posthoc_test_service,
+    run_wilcoxon_signed_rank_test_service,
     run_ppswor_total_service,
     run_ppswor_ratio_service,
     run_ppswor_domain_ratio_service,
@@ -7159,6 +7160,7 @@ elif page == "Statistical Inference":
                 "Mann–Whitney U test",
                 "Kruskal–Wallis test",
                 "Dunn post-hoc test with Holm adjustment",
+                "Wilcoxon signed-rank test",
             ],
             key="inference_method_choice",
         )
@@ -7206,7 +7208,7 @@ elif page == "Statistical Inference":
                 key="inference_one_sample_t_alternative",
             )
             st.caption("Reports the t statistic, degrees of freedom, p-value and two-sided 95% confidence interval. The alternative hypothesis controls the p-value direction.")
-        elif inference_method in {"Paired mean-change confidence interval", "Paired-samples Student's t-test"}:
+        elif inference_method in {"Paired mean-change confidence interval", "Paired-samples Student's t-test", "Wilcoxon signed-rank test"}:
             before_variable = (
                 st.selectbox("Before measurement", numeric_cols, key="inference_paired_before")
                 if numeric_cols else None
@@ -7229,6 +7231,17 @@ elif page == "Statistical Inference":
                     key="inference_paired_t_alternative",
                 )
                 st.caption("Tests whether the mean within-pair change (after minus before) differs from zero. The confidence interval remains two-sided.")
+            elif inference_method == "Wilcoxon signed-rank test":
+                paired_alternative = st.selectbox(
+                    "Alternative hypothesis", ["two-sided", "greater", "less"],
+                    format_func=lambda value: {
+                        "two-sided": "Two-sided: paired change differs from zero",
+                        "greater": "One-sided: after values tend to be higher",
+                        "less": "One-sided: after values tend to be lower",
+                    }[value],
+                    key="inference_wilcoxon_alternative",
+                )
+                st.caption("Compares paired before-and-after differences using signed ranks. Reports the Wilcoxon statistic, p-value, positive/negative rank sums and matched-pairs rank-biserial correlation. Zero differences are excluded.")
             else:
                 st.caption("Each row must represent the same participant, household, facility or other matched unit at both time points. The reported change is after minus before.")
         elif inference_method in {"Two-independent-proportions comparison", "Confidence interval for difference in two proportions"}:
@@ -7446,6 +7459,10 @@ elif page == "Statistical Inference":
                 elif inference_method == "Paired-samples Student's t-test":
                     inference_result = run_paired_samples_t_test_service(
                         inference_df, outcome_variable, group_variable, confidence_level, paired_alternative
+                    )
+                elif inference_method == "Wilcoxon signed-rank test":
+                    inference_result = run_wilcoxon_signed_rank_test_service(
+                        inference_df, outcome_variable, group_variable, paired_alternative
                     )
                 elif inference_method == "Paired mean-change confidence interval":
                     inference_result = run_paired_mean_difference_confidence_interval_service(
