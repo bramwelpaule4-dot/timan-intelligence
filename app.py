@@ -75,6 +75,7 @@ from timan_intelligence.services.analysis_service import (
     run_two_proportions_confidence_interval_service,
     run_mann_whitney_u_test_service,
     run_kruskal_wallis_test_service,
+    run_dunn_posthoc_test_service,
     run_ppswor_total_service,
     run_ppswor_ratio_service,
     run_ppswor_domain_ratio_service,
@@ -7157,6 +7158,7 @@ elif page == "Statistical Inference":
                 "One-way ANOVA",
                 "Mann–Whitney U test",
                 "Kruskal–Wallis test",
+                "Dunn post-hoc test with Holm adjustment",
             ],
             key="inference_method_choice",
         )
@@ -7344,6 +7346,10 @@ elif page == "Statistical Inference":
             outcome_variable = st.selectbox("Numeric or ordinal outcome (ordinal categories must be encoded in order)", numeric_cols, key="inference_kruskal_outcome") if numeric_cols else None
             group_variable = st.selectbox("Independent grouping variable (at least three groups)", categorical_cols, key="inference_kruskal_group") if categorical_cols else None
             st.caption("Compares rank distributions across three or more independent groups. Reports the H statistic, p-value, group sizes, medians, mean ranks and epsilon-squared effect size. A significant result requires a separate post-hoc analysis to identify which groups differ.")
+        elif inference_method == "Dunn post-hoc test with Holm adjustment":
+            outcome_variable = st.selectbox("Numeric or ordinal outcome (ordinal categories must be encoded in order)", numeric_cols, key="inference_dunn_outcome") if numeric_cols else None
+            group_variable = st.selectbox("Independent grouping variable (at least three groups)", categorical_cols, key="inference_dunn_group") if categorical_cols else None
+            st.caption("Performs pairwise rank comparisons with tie correction and Holm family-wise error adjustment. Normally use after a significant Kruskal–Wallis test. Review adjusted p-values and mean-rank differences; this does not replace the omnibus test.")
         else:
             outcome_variable = (
                 st.selectbox(
@@ -7427,6 +7433,8 @@ elif page == "Statistical Inference":
                     )
                 elif inference_method == "Kruskal–Wallis test":
                     inference_result = run_kruskal_wallis_test_service(inference_df, outcome_variable, group_variable)
+                elif inference_method == "Dunn post-hoc test with Holm adjustment":
+                    inference_result = run_dunn_posthoc_test_service(inference_df, outcome_variable, group_variable)
                 elif inference_method == "Welch confidence interval for a mean difference":
                     inference_result = run_welch_mean_difference_confidence_interval_service(
                         inference_df, outcome_variable, group_variable, confidence_level
