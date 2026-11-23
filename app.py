@@ -876,7 +876,7 @@ MODULES = {
     "Statistical Inference": (
         "Partially available — initial independent-sample procedures",
         "Model-based mean and proportion confidence intervals, one-sample Student's t-test and exact binomial test, two-independent-proportions comparisons and difference-in-proportions confidence intervals, "
-        "Welch mean-difference confidence intervals, paired mean-change intervals, paired t-tests, Mann–Whitney U and Kruskal–Wallis rank tests, chi-square tests and Fisher's exact tests for categorical association, Welch's "
+        "Welch mean-difference confidence intervals, paired mean-change intervals, paired t-tests, Wilcoxon signed-rank and Friedman tests for related measurements, Mann–Whitney U and Kruskal–Wallis rank tests, chi-square tests and Fisher's exact tests for categorical association, Welch's "
         "independent-samples t-test and one-way ANOVA are available for their stated study "
         "designs. Complex survey inference and other planned methods remain under development.",
     ),
