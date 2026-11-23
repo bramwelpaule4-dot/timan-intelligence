@@ -902,7 +902,7 @@ def test_repeated_measures_anova_reports_sphericity_corrections_and_holm_followu
 
 def test_repeated_measures_anova_excludes_incomplete_rows_consistently():
     from timan_intelligence.core.statistical_engine import run_repeated_measures_anova
-    frame = pd.DataFrame({"a":[1,2,3,4,5],"b":[2,3,4,5,None],"c":[4,5,6,7,8]})
+    frame = pd.DataFrame({"a":[1,2,3,4,5],"b":[2,3,5,5,None],"c":[4,5,6,8,8]})
     result = run_repeated_measures_anova(frame, ["a","b","c"])
     assert result.metadata["n_complete"] == 4 and result.metadata["n_incomplete"] == 1
 
