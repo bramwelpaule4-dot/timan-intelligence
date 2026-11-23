@@ -77,6 +77,7 @@ from timan_intelligence.services.analysis_service import (
     run_kruskal_wallis_test_service,
     run_dunn_posthoc_test_service,
     run_wilcoxon_signed_rank_test_service,
+    run_friedman_test_service,
     run_ppswor_total_service,
     run_ppswor_ratio_service,
     run_ppswor_domain_ratio_service,
@@ -7161,9 +7162,11 @@ elif page == "Statistical Inference":
                 "Kruskal–Wallis test",
                 "Dunn post-hoc test with Holm adjustment",
                 "Wilcoxon signed-rank test",
+                "Friedman test",
             ],
             key="inference_method_choice",
         )
+        measurement_variables = []
         confidence_level = st.selectbox(
             "Confidence level",
             [0.90, 0.95, 0.99],
@@ -7363,6 +7366,18 @@ elif page == "Statistical Inference":
             outcome_variable = st.selectbox("Numeric or ordinal outcome (ordinal categories must be encoded in order)", numeric_cols, key="inference_dunn_outcome") if numeric_cols else None
             group_variable = st.selectbox("Independent grouping variable (at least three groups)", categorical_cols, key="inference_dunn_group") if categorical_cols else None
             st.caption("Performs pairwise rank comparisons with tie correction and Holm family-wise error adjustment. Normally use after a significant Kruskal–Wallis test. Review adjusted p-values and mean-rank differences; this does not replace the omnibus test.")
+        elif inference_method == "Friedman test":
+            measurement_variables = st.multiselect(
+                "Repeated measurement columns (select at least three, in time/condition order)",
+                numeric_cols,
+                default=[],
+                key="inference_friedman_measurements",
+                help="Use wide-format data: one row per participant/unit and one column per time point or condition. Keep the same unit on each row across all selected columns.",
+            )
+            outcome_variable = measurement_variables[0] if measurement_variables else None
+            group_variable = None
+            st.caption("Compares three or more related measurements on the same units. Reports the Friedman statistic, p-value, Kendall's W and mean within-unit ranks. A significant result is omnibus; use a paired post-hoc method with multiplicity adjustment to identify which measurements differ.")
+
         else:
             outcome_variable = (
                 st.selectbox(
@@ -7388,29 +7403,32 @@ elif page == "Statistical Inference":
                 st.caption("Tests whether at least one group mean differs across two or more independent groups.")
 
         design_confirmation_label = (
-            "I confirm that each row is one correctly matched pair and that pair-level differences are independent; this is not a complex survey."
-            if inference_method in {"Paired mean-change confidence interval", "Paired-samples Student's t-test"}
+            "I confirm that each row is one correctly matched unit across all selected repeated measurements, and different units are independent; this is not a complex survey."
+            if inference_method == "Friedman test"
+            else "I confirm that each row is one correctly matched pair and that pair-level differences are independent; this is not a complex survey."
+            if inference_method in {"Paired mean-change confidence interval", "Paired-samples Student's t-test", "Wilcoxon signed-rank test"}
             else "I confirm that each row represents an independent observational unit and that this is not a complex survey or repeated-measures design."
         )
         independence_confirmed = st.checkbox(
             design_confirmation_label,
             key="inference_independence_confirmed",
         )
-        can_run = (
-            outcome_variable is not None
+        has_required_variables = (
+            len(measurement_variables) >= 3
+            if inference_method == "Friedman test"
+            else outcome_variable is not None
             and (
                 inference_method in {"Chi-square test of independence", "Fisher's exact test"}
                 or inference_method in {
                     "Confidence interval for a mean",
                     "Confidence interval for a proportion",
                     "Exact one-sample binomial test",
-
                     "One-sample Student's t-test",
                 }
                 or group_variable is not None
             )
-            and independence_confirmed
         )
+        can_run = has_required_variables and independence_confirmed
         if st.button(
             "Run inferential analysis",
             type="primary",
@@ -7446,6 +7464,8 @@ elif page == "Statistical Inference":
                     )
                 elif inference_method == "Kruskal–Wallis test":
                     inference_result = run_kruskal_wallis_test_service(inference_df, outcome_variable, group_variable)
+                elif inference_method == "Friedman test":
+                    inference_result = run_friedman_test_service(inference_df, measurement_variables)
                 elif inference_method == "Dunn post-hoc test with Holm adjustment":
                     inference_result = run_dunn_posthoc_test_service(inference_df, outcome_variable, group_variable)
                 elif inference_method == "Welch confidence interval for a mean difference":
@@ -7482,6 +7502,7 @@ elif page == "Statistical Inference":
                     inference_method,
                     outcome_variable,
                     group_variable,
+                    tuple(measurement_variables),
                     confidence_level,
                 )
             except (TypeError, ValueError, KeyError) as exc:
@@ -7492,6 +7513,7 @@ elif page == "Statistical Inference":
             inference_method,
             outcome_variable,
             group_variable,
+            tuple(measurement_variables),
             confidence_level,
         )
         inference_result = st.session_state.get("general_inference_result")
