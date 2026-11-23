@@ -1499,7 +1499,7 @@ def run_repeated_measures_anova(df: pd.DataFrame, measurement_variables: list[st
     sign, logdet = np.linalg.slogdet(cov)
     if sign > 0 and tr > 0:
         mauchly_w = float(np.clip(np.exp(min(0.0, logdet - p * np.log(tr / p))), 0.0, 1.0))
-        correction = (2 * p * p + p + 2) / (6 * p)
+        correction = 1.0 - (2 * p * p + p + 2) / (6 * p * (n - 1))
         mauchly_chi = float(-(n - 1) * correction * np.log(max(mauchly_w, np.finfo(float).tiny)))
         mauchly_df = int(p * (p + 1) / 2 - 1)
         mauchly_p = float(chi2.sf(mauchly_chi, mauchly_df)) if mauchly_df > 0 else 1.0
