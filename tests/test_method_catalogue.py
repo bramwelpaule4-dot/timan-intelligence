@@ -126,7 +126,7 @@ def test_catalogue_filters_can_be_combined():
         release_priority="P1",
     )
 
-    assert len(methods) == 7
+    assert len(methods) == 8
     assert {method.name for method in methods} == {
         "Welch's independent-samples t-test",
         "One-way ANOVA",
@@ -135,6 +135,7 @@ def test_catalogue_filters_can_be_combined():
         "Wilcoxon signed-rank test",
         "Friedman test",
         "Pairwise Wilcoxon post-hoc test with Holm adjustment",
+        "One-way repeated-measures ANOVA",
     }
 
 

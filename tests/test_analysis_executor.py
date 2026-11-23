@@ -587,7 +587,7 @@ def test_execution_runs_registered_friedman_pairwise_posthoc():
 
 
 def test_executor_runs_repeated_measures_anova_and_blocks_complex_sampling():
-    frame = pd.DataFrame({"t0":[1,2,3,4,5,6],"t1":[2,4,3,5,5,8],"t2":[4,4,7,8,7,10]})
+    frame = pd.DataFrame({"t0":[1,2,3,4,5,6],"t1":[2,3,4,5,6,7],"t2":[4,5,6,7,8,9]})
     rec = {"method":"One-way repeated-measures ANOVA","method_id":"method.inference.comparison.anova.repeated_measures",
         "variables":["t0","t1","t2"],"status":"review_required","design_context":{"study_design":"repeated_measures"},
         "options":{"confidence_level":0.90}}
