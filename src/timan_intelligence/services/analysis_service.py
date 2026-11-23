@@ -1964,6 +1964,13 @@ def run_kruskal_wallis_test_service(df: pd.DataFrame, outcome_variable: str, gro
     return run_kruskal_wallis_test(df, outcome_variable, group_variable)
 
 
+
+def run_dunn_posthoc_test_service(df: pd.DataFrame, outcome_variable: str, group_variable: str) -> AnalysisResult:
+    """Run Dunn pairwise comparisons with Holm adjustment."""
+    from timan_intelligence.core.statistical_engine import run_dunn_posthoc_test
+    return run_dunn_posthoc_test(df, outcome_variable, group_variable)
+
+
 def run_paired_samples_t_test_service(
     df: pd.DataFrame, before_variable: str, after_variable: str,
     confidence_level: float = 0.95, alternative: str = "two-sided",
