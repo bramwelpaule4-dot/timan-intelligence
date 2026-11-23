@@ -37,6 +37,7 @@ IMPLEMENTED_METHODS = frozenset(
         "method.inference.comparison.anova.one_way",
         "method.inference.comparison.mann_whitney",
         "method.inference.comparison.kruskal_wallis",
+        "method.inference.comparison.posthoc.dunn_holm",
     }
 )
 
@@ -426,6 +427,21 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             aliases=["Kruskal Wallis", "Kruskal-Wallis H test", "Non-parametric one-way group comparison"],
             implementation_status="implemented", verification_status="unit_tested", execution_eligibility="conditional",
             limitations=["A significant result does not identify which groups differ; use a justified post-hoc procedure with multiplicity control.", "It is not automatically a test of medians; location-shift interpretation requires similarly shaped distributions.", "Not adjusted for complex survey sampling, weights, clustering, stratification or repeated-measures designs."],
+        ),
+
+        _method(
+            entity_id="method.inference.comparison.posthoc.dunn_holm",
+            name="Dunn post-hoc test with Holm adjustment",
+            description="Identifies pairwise rank-distribution differences across independent groups with family-wise error control.",
+            family="multiple_comparisons", purpose="inference", priority="P2",
+            outcome_types=["ordinal", "numeric"], required_roles=["outcome", "grouping_factor"],
+            data_requirements=["At least three independent groups with an ordered outcome."],
+            assumptions=["Independent observations.", "The outcome is at least ordinal.", "The pooled rank variance is suitable for the independent-groups design."],
+            outputs=["Pairwise mean-rank differences", "Z statistics", "Unadjusted p-values", "Holm-adjusted p-values"],
+            use_cases=["Identify which independent groups differ after a rank-based omnibus comparison"],
+            aliases=["Dunn test", "Dunn's test", "Dunn pairwise comparisons with Holm correction"],
+            implementation_status="implemented", verification_status="unit_tested", execution_eligibility="conditional",
+            limitations=["Commonly used after Kruskal–Wallis; it does not replace the omnibus test.", "Not adjusted for complex survey designs or repeated measures.", "Location-shift interpretation requires similarly shaped distributions."],
         ),
         _method(
             entity_id="method.inference.association.chi_square.independence",
