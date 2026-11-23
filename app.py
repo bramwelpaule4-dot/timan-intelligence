@@ -7414,7 +7414,7 @@ elif page == "Statistical Inference":
 
         design_confirmation_label = (
             "I confirm that each row is one correctly matched unit across all selected repeated measurements, and different units are independent; this is not a complex survey."
-            if inference_method == "Friedman test"
+            if inference_method in {"Friedman test", "Pairwise Wilcoxon post-hoc test with Holm adjustment"}
             else "I confirm that each row is one correctly matched pair and that pair-level differences are independent; this is not a complex survey."
             if inference_method in {"Paired mean-change confidence interval", "Paired-samples Student's t-test", "Wilcoxon signed-rank test"}
             else "I confirm that each row represents an independent observational unit and that this is not a complex survey or repeated-measures design."
@@ -7425,7 +7425,7 @@ elif page == "Statistical Inference":
         )
         has_required_variables = (
             len(measurement_variables) >= 3
-            if inference_method == "Friedman test"
+            if inference_method in {"Friedman test", "Pairwise Wilcoxon post-hoc test with Holm adjustment"}
             else outcome_variable is not None
             and (
                 inference_method in {"Chi-square test of independence", "Fisher's exact test"}

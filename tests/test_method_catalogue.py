@@ -36,7 +36,7 @@ def test_only_existing_execution_methods_are_marked_implemented():
     }
 
     assert implemented == IMPLEMENTED_METHODS
-    assert len(implemented) == 19
+    assert len(implemented) == 20
 
 
 def test_exact_binomial_is_registered_as_conditionally_executable():
@@ -126,7 +126,7 @@ def test_catalogue_filters_can_be_combined():
         release_priority="P1",
     )
 
-    assert len(methods) == 6
+    assert len(methods) == 7
     assert {method.name for method in methods} == {
         "Welch's independent-samples t-test",
         "One-way ANOVA",
@@ -134,6 +134,7 @@ def test_catalogue_filters_can_be_combined():
         "Two-independent-proportions comparison",
         "Wilcoxon signed-rank test",
         "Friedman test",
+        "Pairwise Wilcoxon post-hoc test with Holm adjustment",
     }
 
 
