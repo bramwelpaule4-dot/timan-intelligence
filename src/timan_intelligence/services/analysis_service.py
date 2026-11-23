@@ -1977,7 +1977,7 @@ def run_friedman_pairwise_posthoc_service(df: pd.DataFrame, measurement_variable
     return run_friedman_pairwise_posthoc(df, measurement_variables)
 
 
-df: pd.DataFrame, measurement_variables: list[str]) -> AnalysisResult:
+def run_friedman_test_service(df: pd.DataFrame, measurement_variables: list[str]) -> AnalysisResult:
     """Run the Friedman repeated-measures test through the shared service."""
     from timan_intelligence.core.statistical_engine import run_friedman_test
     return run_friedman_test(df, measurement_variables)
