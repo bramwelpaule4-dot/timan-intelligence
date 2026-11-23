@@ -749,3 +749,34 @@ def test_kruskal_wallis_service_returns_shared_analysis_result():
     from timan_intelligence.services.analysis_service import run_kruskal_wallis_test_service
     frame = pd.DataFrame({"y":[1,2,3,5,6,7,9,10,11],"g":["A"]*3+["B"]*3+["C"]*3})
     assert run_kruskal_wallis_test_service(frame,"y","g").status == "success"
+
+
+def test_dunn_posthoc_uses_tie_corrected_ranks_and_holm_adjustment():
+    from timan_intelligence.core.statistical_engine import run_dunn_posthoc_test
+    frame = pd.DataFrame({"score": [1,2,3,5,6,7,9,10,11,1,5,9], "group": ["A"]*3+["B"]*3+["C"]*3+["A","B","C"]})
+    result = run_dunn_posthoc_test(frame, "score", "group")
+    pairs = result.tables["pairwise_comparisons"]
+    assert result.status == "success"
+    assert result.metadata["adjustment"] == "Holm"
+    assert len(pairs) == 3
+    assert (pairs["Holm-adjusted p-value"] >= pairs["Unadjusted p-value"]).all()
+    assert (pairs["Holm-adjusted p-value"] <= 1).all()
+    assert pairs["Significant at 0.05"].equals(pairs["Holm-adjusted p-value"].lt(0.05))
+
+
+def test_dunn_posthoc_rejects_invalid_group_counts_and_all_ties():
+    from timan_intelligence.core.statistical_engine import run_dunn_posthoc_test
+    with pytest.raises(ValueError, match="at least three"):
+        run_dunn_posthoc_test(pd.DataFrame({"y":[1,2,3,4],"g":["A","A","B","B"]}), "y", "g")
+    with pytest.raises(ValueError, match="at least two"):
+        run_dunn_posthoc_test(pd.DataFrame({"y":[1,2,3,4,5],"g":["A","A","B","C","C"]}), "y", "g")
+    with pytest.raises(ValueError, match="all observations are tied"):
+        run_dunn_posthoc_test(pd.DataFrame({"y":[1]*6,"g":["A","A","B","B","C","C"]}), "y", "g")
+
+
+def test_dunn_posthoc_excludes_missing_and_infinite_outcomes():
+    from timan_intelligence.core.statistical_engine import run_dunn_posthoc_test
+    frame = pd.DataFrame({"y":[1,2,3,5,6,7,9,10,11,None,float("inf")],"g":["A"]*3+["B"]*3+["C"]*3+["A","B"]})
+    result = run_dunn_posthoc_test(frame, "y", "g")
+    assert result.metadata["missing_outcomes"] == 1
+    assert result.metadata["infinite_outcomes"] == 1
