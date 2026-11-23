@@ -38,6 +38,7 @@ IMPLEMENTED_METHODS = frozenset(
         "method.inference.comparison.mann_whitney",
         "method.inference.comparison.kruskal_wallis",
         "method.inference.comparison.posthoc.dunn_holm",
+        "method.inference.comparison.wilcoxon_signed_rank",
     }
 )
 
@@ -393,6 +394,23 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             aliases=["Paired t-test", "Matched-pairs t-test", "Dependent-samples t-test"],
             implementation_status="implemented", verification_status="unit_tested", execution_eligibility="conditional",
             limitations=["Requires correctly matched pairs and independent pair-level differences.", "Not adjusted for complex survey sampling or clustering.", "The confidence interval is two-sided even when a one-sided alternative is selected."],
+        ),
+
+        _method(
+            entity_id="method.inference.comparison.wilcoxon_signed_rank",
+            name="Wilcoxon signed-rank test",
+            description="Compares two related measurements using signed ranks of within-pair differences.",
+            family="group_comparison", purpose="inference", priority="P1",
+            outcome_types=["ordinal", "numeric"],
+            required_roles=["paired_measurement_before", "paired_measurement_after", "pair_identifier"],
+            study_designs=["paired", "repeated_measure"],
+            data_requirements=["Two ordered measurements correctly matched within the same unit."],
+            assumptions=["Pairs are correctly matched.", "Pair-level differences are independent.", "The distribution of differences is reasonably symmetric for a location-shift interpretation."],
+            outputs=["Complete pair count", "Wilcoxon statistic", "P-value", "Positive and negative rank sums", "Matched-pairs rank-biserial correlation"],
+            use_cases=["Non-parametric before-and-after programme evaluation", "Paired ordinal or skewed outcome comparison"],
+            aliases=["Wilcoxon matched-pairs signed-rank test", "Paired Wilcoxon test", "Signed-rank test"],
+            implementation_status="implemented", verification_status="unit_tested", execution_eligibility="conditional",
+            limitations=["Requires correctly matched pairs.", "Median-change interpretation requires a suitably symmetric difference distribution.", "Not adjusted for complex survey sampling or clustering."],
         ),
         _method(
             entity_id="method.inference.comparison.mann_whitney",

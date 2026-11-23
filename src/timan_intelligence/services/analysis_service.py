@@ -1971,6 +1971,12 @@ def run_dunn_posthoc_test_service(df: pd.DataFrame, outcome_variable: str, group
     return run_dunn_posthoc_test(df, outcome_variable, group_variable)
 
 
+def run_wilcoxon_signed_rank_test_service(df: pd.DataFrame, before_variable: str, after_variable: str, alternative: str = "two-sided") -> AnalysisResult:
+    """Run Wilcoxon signed-rank testing through the shared service."""
+    from timan_intelligence.core.statistical_engine import run_wilcoxon_signed_rank_test
+    return run_wilcoxon_signed_rank_test(df, before_variable, after_variable, alternative)
+
+
 def run_paired_samples_t_test_service(
     df: pd.DataFrame, before_variable: str, after_variable: str,
     confidence_level: float = 0.95, alternative: str = "two-sided",

@@ -31,6 +31,7 @@ from timan_intelligence.core.statistical_engine import (
     run_mann_whitney_u_test,
     run_kruskal_wallis_test,
     run_dunn_posthoc_test,
+    run_wilcoxon_signed_rank_test,
 )
 
 
@@ -56,6 +57,7 @@ _EXECUTOR_BY_METHOD_ID = {
     "method.inference.comparison.mann_whitney": "mann_whitney",
     "method.inference.comparison.kruskal_wallis": "kruskal_wallis",
     "method.inference.comparison.posthoc.dunn_holm": "dunn_holm",
+    "method.inference.comparison.wilcoxon_signed_rank": "wilcoxon_signed_rank",
 }
 
 
@@ -328,6 +330,10 @@ def execute_recommendation(
         if len(variables) != 2:
             raise AnalysisExecutionError("Dunn post-hoc testing requires an outcome and a grouping variable.")
         result = run_dunn_posthoc_test(df, variables[0], variables[1])
+    elif executor == "wilcoxon_signed_rank":
+        if len(variables) != 2:
+            raise AnalysisExecutionError("Wilcoxon signed-rank testing requires before and after measurement variables.")
+        result = run_wilcoxon_signed_rank_test(df, variables[0], variables[1], options.get("alternative", "two-sided"))
     elif executor == "welch_t":
         if len(variables) != 2:
             raise AnalysisExecutionError(

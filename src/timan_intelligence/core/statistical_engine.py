@@ -1448,6 +1448,87 @@ def run_paired_mean_difference_confidence_interval(
     )
 
 
+
+def run_wilcoxon_signed_rank_test(
+    df: pd.DataFrame, before_variable: str, after_variable: str,
+    alternative: str = "two-sided",
+) -> AnalysisResult:
+    """Compare matched before/after measurements using Wilcoxon signed ranks."""
+    from scipy.stats import rankdata, wilcoxon
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Expected a pandas DataFrame.")
+    if before_variable not in df.columns or after_variable not in df.columns:
+        raise ValueError("Both before and after measurement variables must exist.")
+    if before_variable == after_variable:
+        raise ValueError("Before and after measurements must use different variables.")
+    for variable in (before_variable, after_variable):
+        if not pd.api.types.is_numeric_dtype(df[variable]):
+            raise TypeError(f"Measurement variable '{variable}' must be numeric or ordinal-coded.")
+    if alternative not in {"two-sided", "greater", "less"}:
+        raise ValueError("Alternative must be 'two-sided', 'greater' or 'less'.")
+    before, after = df[before_variable].astype(float), df[after_variable].astype(float)
+    finite_pair = before.notna() & after.notna() & before.map(lambda v: abs(v) != float("inf")) & after.map(lambda v: abs(v) != float("inf"))
+    differences = (after[finite_pair] - before[finite_pair]).astype(float)
+    complete_pairs = int(len(differences))
+    if complete_pairs < 2:
+        raise ValueError("Wilcoxon signed-rank test requires at least two complete finite matched pairs.")
+    zero_count = int((differences == 0).sum())
+    nonzero = differences[differences != 0]
+    if nonzero.empty:
+        raise ValueError("Wilcoxon signed-rank test is undefined when all paired differences are zero.")
+    test = wilcoxon(differences.to_numpy(), alternative=alternative, zero_method="wilcox", correction=False, method="auto")
+    ranks = rankdata(abs(nonzero.to_numpy()), method="average")
+    positive_rank_sum = float(ranks[nonzero.to_numpy() > 0].sum())
+    negative_rank_sum = float(ranks[nonzero.to_numpy() < 0].sum())
+    rank_total = positive_rank_sum + negative_rank_sum
+    rank_biserial = (positive_rank_sum - negative_rank_sum) / rank_total if rank_total else 0.0
+    missing_pairs = int((before.isna() | after.isna()).sum())
+    incomplete_pairs = int((~finite_pair).sum())
+    infinite_pairs = incomplete_pairs - missing_pairs
+    statistic, p_value = float(test.statistic), float(test.pvalue)
+    summary = pd.DataFrame([{
+        "Before variable": before_variable, "After variable": after_variable,
+        "Complete matched pairs": complete_pairs, "Non-zero differences ranked": int(len(nonzero)),
+        "Zero differences excluded": zero_count, "Median change (after - before)": float(differences.median()),
+        "Mean change (after - before)": float(differences.mean()), "Positive rank sum": positive_rank_sum,
+        "Negative rank sum": negative_rank_sum, "Wilcoxon statistic": statistic,
+        "Alternative": alternative, "p-value": p_value, "Matched pairs excluded": incomplete_pairs,
+    }])
+    findings = [
+        f"Median within-pair change (after minus before) is {float(differences.median()):.4g}.",
+        f"{complete_pairs:,} complete matched pairs were assessed; {zero_count:,} zero differences were excluded from signed ranking.",
+        f"Wilcoxon signed-rank statistic: {statistic:.4g}; p-value: {p_value:.4g}.",
+        f"Matched-pairs rank-biserial correlation: {rank_biserial:.4g}.",
+        "The result is statistically significant at the 0.05 level." if p_value < 0.05 else "The result is not statistically significant at the 0.05 level.",
+    ]
+    limitations = [
+        "Each row must contain correctly matched before-and-after measurements from the same unit.",
+        "Pair-level differences are assumed independent across units.",
+        "The procedure evaluates the distribution of paired differences; interpreting it as a median-change test requires a suitably symmetric difference distribution.",
+        "Zero differences are excluded using the Wilcox convention; ties in absolute differences receive average ranks.",
+        "Not adjusted for complex survey weights, clustering, stratification or finite-population corrections.",
+        "Missing and infinite pairs are excluded.",
+    ]
+    if missing_pairs: limitations.append(f"{missing_pairs:,} pair(s) with missing values were excluded.")
+    if infinite_pairs: limitations.append(f"{infinite_pairs:,} pair(s) with infinite values were excluded.")
+    return AnalysisResult(
+        title=f"Wilcoxon signed-rank test: {after_variable} versus {before_variable}",
+        status="success", method="Wilcoxon signed-rank test", tables={"test": summary},
+        findings=findings,
+        assumptions=["Before-and-after values are correctly paired by row.", "Pairs are independent of other pairs.", "The outcome is at least ordinal and numeric coding preserves ordering.", "The distribution of paired differences is reasonably symmetric for a location-shift interpretation."],
+        limitations=limitations,
+        metadata={
+            "before_variable": before_variable, "after_variable": after_variable,
+            "complete_pairs": complete_pairs, "nonzero_differences": int(len(nonzero)),
+            "zero_differences": zero_count, "statistic": statistic, "p_value": p_value,
+            "alternative": alternative, "rank_biserial_correlation": float(rank_biserial),
+            "positive_rank_sum": positive_rank_sum, "negative_rank_sum": negative_rank_sum,
+            "missing_pairs": missing_pairs, "infinite_pairs": infinite_pairs,
+            "sampling_design_aware": False, "study_design": "paired",
+        },
+    )
+
+
 def run_paired_samples_t_test(
     df: pd.DataFrame, before_variable: str, after_variable: str,
     confidence_level: float = 0.95, alternative: str = "two-sided",
