@@ -583,3 +583,18 @@ def test_execution_runs_registered_friedman_pairwise_posthoc():
     assert result.status == "success"
     assert result.metadata["method_id"] == "method.inference.comparison.posthoc.friedman_wilcoxon_holm"
     assert result.metadata["adjustment"] == "Holm"
+
+
+
+def test_executor_runs_repeated_measures_anova_and_blocks_complex_sampling():
+    frame = pd.DataFrame({"t0":[1,2,3,4,5,6],"t1":[2,3,4,5,6,7],"t2":[4,5,6,7,8,9]})
+    rec = {"method":"One-way repeated-measures ANOVA","method_id":"method.inference.comparison.anova.repeated_measures",
+        "variables":["t0","t1","t2"],"status":"review_required","design_context":{"study_design":"repeated_measures"},
+        "options":{"confidence_level":0.90}}
+    result = execute_recommendation(frame,rec,approved=True)
+    assert result.status == "success"
+    assert result.metadata["method_id"] == "method.inference.comparison.anova.repeated_measures"
+    assert result.metadata["confidence_level"] == pytest.approx(0.90)
+    rec["design_context"] = {"sampling_design":"cluster"}
+    with pytest.raises(AnalysisExecutionError,match="not validated"):
+        execute_recommendation(frame,rec,approved=True)

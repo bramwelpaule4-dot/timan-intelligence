@@ -881,3 +881,35 @@ def test_friedman_pairwise_posthoc_uses_consistent_complete_case_set():
     assert result.metadata["n_incomplete"] == 1
     with pytest.raises(ValueError, match="at least three"):
         run_friedman_pairwise_posthoc(frame, ["a","b"])
+
+
+
+def test_repeated_measures_anova_reports_sphericity_corrections_and_holm_followups():
+    from timan_intelligence.core.statistical_engine import run_repeated_measures_anova
+    frame = pd.DataFrame({"baseline":[10,12,11,13,9,14,12,10,15,11],"midline":[12,14,13,15,11,16,14,12,17,13],"endline":[15,17,16,18,14,19,17,15,20,16]})
+    result = run_repeated_measures_anova(frame, ["baseline","midline","endline"])
+    summary = result.tables["test_summary"].iloc[0]
+    assert result.status == "success" and summary["F statistic"] > 0
+    assert 0 < summary["Greenhouse-Geisser epsilon"] <= 1
+    assert 0 < summary["Huynh-Feldt epsilon"] <= 1
+    assert 0 <= summary["Greenhouse-Geisser p-value"] <= 1
+    assert result.tables["sphericity_test"].iloc[0]["Mauchly's W"] <= 1
+    pairs = result.tables["pairwise_comparisons"]
+    assert len(pairs) == 3
+    assert (pairs["Holm-adjusted p-value"] >= pairs["P-value"] - 1e-12).all()
+    assert result.metadata["partial_eta_squared"] > 0
+
+
+def test_repeated_measures_anova_excludes_incomplete_rows_consistently():
+    from timan_intelligence.core.statistical_engine import run_repeated_measures_anova
+    frame = pd.DataFrame({"a":[1,2,3,4,5],"b":[2,3,4,5,None],"c":[4,5,6,7,8]})
+    result = run_repeated_measures_anova(frame, ["a","b","c"])
+    assert result.metadata["n_complete"] == 4 and result.metadata["n_incomplete"] == 1
+
+
+def test_repeated_measures_anova_validates_measurement_count_and_sample_size():
+    from timan_intelligence.core.statistical_engine import run_repeated_measures_anova
+    with pytest.raises(ValueError, match="at least three"):
+        run_repeated_measures_anova(pd.DataFrame({"a":[1,2,3],"b":[2,3,4]}), ["a","b"])
+    with pytest.raises(ValueError, match="at least three complete"):
+        run_repeated_measures_anova(pd.DataFrame({"a":[1,2],"b":[2,3],"c":[3,4]}), ["a","b","c"])

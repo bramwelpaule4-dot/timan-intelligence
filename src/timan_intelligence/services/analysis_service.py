@@ -1971,6 +1971,12 @@ def run_dunn_posthoc_test_service(df: pd.DataFrame, outcome_variable: str, group
     return run_dunn_posthoc_test(df, outcome_variable, group_variable)
 
 
+def run_repeated_measures_anova_service(df: pd.DataFrame, measurement_variables: list[str], confidence_level: float = 0.95) -> AnalysisResult:
+    """Run repeated-measures ANOVA through the shared analysis service."""
+    from timan_intelligence.core.statistical_engine import run_repeated_measures_anova
+    return run_repeated_measures_anova(df, measurement_variables, confidence_level)
+
+
 def run_friedman_pairwise_posthoc_service(df: pd.DataFrame, measurement_variables: list[str]) -> AnalysisResult:
     """Run paired post-hoc comparisons with Holm adjustment."""
     from timan_intelligence.core.statistical_engine import run_friedman_pairwise_posthoc

@@ -34,6 +34,7 @@ from timan_intelligence.core.statistical_engine import (
     run_wilcoxon_signed_rank_test,
     run_friedman_test,
     run_friedman_pairwise_posthoc,
+    run_repeated_measures_anova,
 )
 
 
@@ -62,6 +63,7 @@ _EXECUTOR_BY_METHOD_ID = {
     "method.inference.comparison.wilcoxon_signed_rank": "wilcoxon_signed_rank",
     "method.inference.comparison.friedman": "friedman",
     "method.inference.comparison.posthoc.friedman_wilcoxon_holm": "friedman_wilcoxon_holm",
+    "method.inference.comparison.anova.repeated_measures": "repeated_measures_anova",
 }
 
 
@@ -340,6 +342,10 @@ def execute_recommendation(
         if len(variables) != 2:
             raise AnalysisExecutionError("Wilcoxon signed-rank testing requires before and after measurement variables.")
         result = run_wilcoxon_signed_rank_test(df, variables[0], variables[1], options.get("alternative", "two-sided"))
+    elif executor == "repeated_measures_anova":
+        if len(variables) < 3:
+            raise AnalysisExecutionError("Repeated-measures ANOVA requires at least three repeated-measurement variables.")
+        result = run_repeated_measures_anova(df, variables, options.get("confidence_level", 0.95))
     elif executor == "friedman_wilcoxon_holm":
         if len(variables) < 3:
             raise AnalysisExecutionError("Friedman pairwise post-hoc testing requires at least three repeated-measurement variables.")

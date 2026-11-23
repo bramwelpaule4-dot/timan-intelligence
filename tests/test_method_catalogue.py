@@ -36,7 +36,7 @@ def test_only_existing_execution_methods_are_marked_implemented():
     }
 
     assert implemented == IMPLEMENTED_METHODS
-    assert len(implemented) == 20
+    assert len(implemented) == 21
 
 
 def test_exact_binomial_is_registered_as_conditionally_executable():
@@ -291,6 +291,16 @@ def test_friedman_is_registered_for_repeated_measures():
     method = get_statistical_method("method.inference.comparison.friedman")
     assert method is not None
     assert method.name == "Friedman test"
+    assert method.implementation_status == "implemented"
+    assert method.verification_status == "unit_tested"
+    assert method.execution_eligibility == "conditional"
+
+
+
+def test_repeated_measures_anova_is_registered_as_conditionally_executable():
+    method = get_statistical_method("method.inference.comparison.anova.repeated_measures")
+    assert method is not None
+    assert method.name == "One-way repeated-measures ANOVA"
     assert method.implementation_status == "implemented"
     assert method.verification_status == "unit_tested"
     assert method.execution_eligibility == "conditional"

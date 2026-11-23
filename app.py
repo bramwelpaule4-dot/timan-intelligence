@@ -79,6 +79,7 @@ from timan_intelligence.services.analysis_service import (
     run_wilcoxon_signed_rank_test_service,
     run_friedman_test_service,
     run_friedman_pairwise_posthoc_service,
+    run_repeated_measures_anova_service,
     run_ppswor_total_service,
     run_ppswor_ratio_service,
     run_ppswor_domain_ratio_service,
@@ -7165,6 +7166,7 @@ elif page == "Statistical Inference":
                 "Wilcoxon signed-rank test",
                 "Friedman test",
                 "Pairwise Wilcoxon post-hoc test with Holm adjustment",
+                "One-way repeated-measures ANOVA",
             ],
             key="inference_method_choice",
         )
@@ -7376,6 +7378,14 @@ elif page == "Statistical Inference":
             outcome_variable = measurement_variables[0] if measurement_variables else None
             group_variable = None
             st.caption("Runs pairwise Wilcoxon signed-rank comparisons across selected measurements and applies Holm adjustment to the full family of p-values. Prefer this after a significant Friedman test.")
+        elif inference_method == "One-way repeated-measures ANOVA":
+            measurement_variables = st.multiselect(
+                "Repeated measurement columns (select at least three, in time/condition order)",
+                numeric_cols, default=[], key="inference_rm_anova_measurements",
+                help="Use wide-format data: one row per matched unit and one numeric column per condition/time point.")
+            outcome_variable = measurement_variables[0] if measurement_variables else None
+            group_variable = None
+            st.caption("Tests mean differences across related measurements. Reports Mauchly's sphericity test, Greenhouse-Geisser and Huynh-Feldt corrections, partial eta-squared, and paired follow-up tests with Holm-adjusted p-values.")
         elif inference_method == "Friedman test":
             measurement_variables = st.multiselect(
                 "Repeated measurement columns (select at least three, in time/condition order)",
@@ -7414,7 +7424,7 @@ elif page == "Statistical Inference":
 
         design_confirmation_label = (
             "I confirm that each row is one correctly matched unit across all selected repeated measurements, and different units are independent; this is not a complex survey."
-            if inference_method in {"Friedman test", "Pairwise Wilcoxon post-hoc test with Holm adjustment"}
+            if inference_method in {"Friedman test", "Pairwise Wilcoxon post-hoc test with Holm adjustment", "One-way repeated-measures ANOVA"}
             else "I confirm that each row is one correctly matched pair and that pair-level differences are independent; this is not a complex survey."
             if inference_method in {"Paired mean-change confidence interval", "Paired-samples Student's t-test", "Wilcoxon signed-rank test"}
             else "I confirm that each row represents an independent observational unit and that this is not a complex survey or repeated-measures design."
@@ -7474,6 +7484,8 @@ elif page == "Statistical Inference":
                     )
                 elif inference_method == "Kruskal–Wallis test":
                     inference_result = run_kruskal_wallis_test_service(inference_df, outcome_variable, group_variable)
+                elif inference_method == "One-way repeated-measures ANOVA":
+                    inference_result = run_repeated_measures_anova_service(inference_df, measurement_variables, confidence_level)
                 elif inference_method == "Pairwise Wilcoxon post-hoc test with Holm adjustment":
                     inference_result = run_friedman_pairwise_posthoc_service(inference_df, measurement_variables)
                 elif inference_method == "Friedman test":

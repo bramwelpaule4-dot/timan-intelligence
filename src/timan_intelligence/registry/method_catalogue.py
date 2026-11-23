@@ -41,6 +41,7 @@ IMPLEMENTED_METHODS = frozenset(
         "method.inference.comparison.wilcoxon_signed_rank",
         "method.inference.comparison.friedman",
         "method.inference.comparison.posthoc.friedman_wilcoxon_holm",
+        "method.inference.comparison.anova.repeated_measures",
     }
 )
 
@@ -413,6 +414,20 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             aliases=["Friedman post-hoc Wilcoxon Holm", "Pairwise Wilcoxon repeated measures Holm"],
             implementation_status="implemented", verification_status="unit_tested", execution_eligibility="conditional",
             limitations=["Use as follow-up to an omnibus Friedman test.", "Complete-case analysis across all selected measures.", "Not adjusted for complex survey sampling."]),
+        _method(
+            entity_id="method.inference.comparison.anova.repeated_measures",
+            name="One-way repeated-measures ANOVA",
+            description="Compares means across three or more related conditions/time points, assesses sphericity, applies Greenhouse-Geisser and Huynh-Feldt corrections, and provides Holm-adjusted paired follow-ups.",
+            family="group_comparison", purpose="inference", priority="P1", outcome_types=["numeric"],
+            required_roles=["repeated_measurement_variables", "unit_identifier"],
+            study_designs=["repeated_measure", "repeated_measures", "longitudinal"],
+            data_requirements=["At least three numeric repeated-measurement columns, one row per matched unit, with complete observations for selected measures."],
+            assumptions=["Different units are independent.", "Within-subject contrasts/residuals are approximately multivariate normal.", "Sphericity is assessed and corrected degrees of freedom are used when appropriate."],
+            outputs=["Repeated-measures F statistic", "Mauchly sphericity test", "Greenhouse-Geisser and Huynh-Feldt corrections", "Partial eta-squared", "Holm-adjusted paired comparisons"],
+            use_cases=["Compare mean outcomes across baseline, midline and endline", "Compare three or more repeated treatment conditions"],
+            aliases=["Repeated measures ANOVA", "Within-subjects one-way ANOVA"],
+            implementation_status="implemented", verification_status="unit_tested", execution_eligibility="conditional",
+            limitations=["Complete-case analysis is used.", "Pairwise confidence intervals are unadjusted while p-values are Holm-adjusted.", "Not adjusted for complex survey sampling.", "Not a substitute for mixed-effects models with complex missingness or hierarchical structures."]),
         _method(
             entity_id="method.inference.comparison.friedman",
             name="Friedman test",

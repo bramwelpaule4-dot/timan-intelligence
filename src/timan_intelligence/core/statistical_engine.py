@@ -1450,6 +1450,118 @@ def run_paired_mean_difference_confidence_interval(
 
 
 
+
+def run_repeated_measures_anova(df: pd.DataFrame, measurement_variables: list[str], confidence_level: float = 0.95) -> AnalysisResult:
+    """One-way repeated-measures ANOVA with sphericity diagnostics and Holm follow-ups."""
+    from itertools import combinations
+    from scipy.linalg import helmert
+    from scipy.stats import chi2, f as f_dist, t as t_dist, ttest_rel
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Expected a pandas DataFrame.")
+    variables = list(measurement_variables or [])
+    if len(variables) < 3 or len(set(variables)) != len(variables):
+        raise ValueError("Repeated-measures ANOVA requires at least three distinct measurement variables.")
+    if not 0 < float(confidence_level) < 1:
+        raise ValueError("Confidence level must be between 0 and 1.")
+    missing = [v for v in variables if not isinstance(v, str) or v not in df.columns]
+    if missing:
+        raise ValueError(f"Measurement variables not found: {missing}.")
+    for v in variables:
+        if not pd.api.types.is_numeric_dtype(df[v]):
+            raise TypeError(f"Measurement variable '{v}' must be numeric.")
+    values = df[variables].apply(pd.to_numeric, errors="coerce")
+    mask = values.notna().all(axis=1)
+    for v in variables:
+        mask &= values[v].map(lambda z: abs(float(z)) != float("inf"))
+    complete = values.loc[mask].astype(float)
+    n, k = len(complete), len(variables)
+    if n < 3:
+        raise ValueError("Repeated-measures ANOVA requires at least three complete matched units.")
+    x = complete.to_numpy(dtype=float)
+    grand, means, subjects = float(x.mean()), x.mean(axis=0), x.mean(axis=1)
+    ss_condition = float(n * ((means - grand) ** 2).sum())
+    ss_subject = float(k * ((subjects - grand) ** 2).sum())
+    ss_total = float(((x - grand) ** 2).sum())
+    ss_error = ss_total - ss_condition - ss_subject
+    if ss_error <= 1e-12 * max(1.0, ss_total):
+        raise ValueError("Repeated-measures ANOVA is undefined because residual within-subject error variance is zero.")
+    df1, df2 = k - 1, (n - 1) * (k - 1)
+    f_stat = float((ss_condition / df1) / (ss_error / df2))
+    p_unc = float(f_dist.sf(f_stat, df1, df2))
+    eta_p = float(ss_condition / (ss_condition + ss_error))
+    p = k - 1
+    contrast = x @ helmert(k, full=False).T
+    cov = np.cov(contrast, rowvar=False, ddof=1)
+    tr, tr2 = float(np.trace(cov)), float(np.trace(cov @ cov))
+    eps_gg = float(np.clip(tr * tr / (p * tr2), 1 / p, 1.0)) if tr2 > 0 else 1.0
+    hf_den = p * (n - 1 - p * eps_gg)
+    eps_hf = float(np.clip((n * p * eps_gg - 2) / hf_den, eps_gg, 1.0)) if hf_den > 0 else 1.0
+    sign, logdet = np.linalg.slogdet(cov)
+    if sign > 0 and tr > 0:
+        mauchly_w = float(np.clip(np.exp(min(0.0, logdet - p * np.log(tr / p))), 0.0, 1.0))
+        correction = (2 * p * p + p + 2) / (6 * p)
+        mauchly_chi = float(-(n - 1) * correction * np.log(max(mauchly_w, np.finfo(float).tiny)))
+        mauchly_df = int(p * (p + 1) / 2 - 1)
+        mauchly_p = float(chi2.sf(mauchly_chi, mauchly_df)) if mauchly_df > 0 else 1.0
+    else:
+        mauchly_w, mauchly_chi, mauchly_p = 0.0, float("inf"), 0.0
+        mauchly_df = int(p * (p + 1) / 2 - 1)
+    gg1, gg2, hf1, hf2 = eps_gg * df1, eps_gg * df2, eps_hf * df1, eps_hf * df2
+    p_gg, p_hf = float(f_dist.sf(f_stat, gg1, gg2)), float(f_dist.sf(f_stat, hf1, hf2))
+    alpha = 1 - float(confidence_level)
+    pairs, raw_p = [], []
+    for first, second in combinations(variables, 2):
+        diff = complete[second].to_numpy() - complete[first].to_numpy()
+        test = ttest_rel(complete[second].to_numpy(), complete[first].to_numpy(), nan_policy="raise")
+        mean_diff, se, pv = float(diff.mean()), float(diff.std(ddof=1) / np.sqrt(n)), float(test.pvalue)
+        crit = float(t_dist.ppf(1 - alpha / 2, n - 1))
+        pairs.append({"Measurement 1": first, "Measurement 2": second, "Complete pairs": n,
+            "Mean difference (2 - 1)": mean_diff, "Standard error": se, "t statistic": float(test.statistic),
+            "Degrees of freedom": n - 1, "P-value": pv, f"{confidence_level:.0%} CI lower": mean_diff-crit*se,
+            f"{confidence_level:.0%} CI upper": mean_diff+crit*se})
+        raw_p.append(pv)
+    order = sorted(range(len(raw_p)), key=lambda i: raw_p[i])
+    adjusted, running = [0.0] * len(raw_p), 0.0
+    for rank, idx in enumerate(order):
+        running = max(running, min(1.0, (len(raw_p)-rank) * raw_p[idx]))
+        adjusted[idx] = running
+    for row, adj in zip(pairs, adjusted):
+        row["Holm-adjusted p-value"], row["Significant at alpha"] = float(adj), bool(adj < alpha)
+    summary = pd.DataFrame([{"F statistic":f_stat,"Numerator df (uncorrected)":df1,"Denominator df (uncorrected)":df2,
+        "Uncorrected p-value":p_unc,"Greenhouse-Geisser epsilon":eps_gg,"GG numerator df":gg1,"GG denominator df":gg2,
+        "Greenhouse-Geisser p-value":p_gg,"Huynh-Feldt epsilon":eps_hf,"HF numerator df":hf1,"HF denominator df":hf2,
+        "Huynh-Feldt p-value":p_hf,"Partial eta-squared":eta_p,"Complete units":n,"Excluded incomplete/non-finite units":len(df)-n}])
+    sphericity = pd.DataFrame([{"Mauchly's W":mauchly_w,"Chi-square approximation":mauchly_chi,
+        "Degrees of freedom":mauchly_df,"P-value":mauchly_p,"Sphericity at 0.05":bool(mauchly_p >= .05)}])
+    descriptive = pd.DataFrame([{"Measurement":v,"N":n,"Mean":float(complete[v].mean()),
+        "Standard deviation":float(complete[v].std(ddof=1))} for v in variables])
+    findings = [f"Repeated-measures ANOVA: F({gg1:.3g}, {gg2:.3g}) = {f_stat:.4g}, Greenhouse-Geisser corrected p = {p_gg:.4g}.",
+        f"Partial eta-squared is {eta_p:.4g}.",
+        f"Mauchly's test: W = {mauchly_w:.4g}, p = {mauchly_p:.4g}; epsilon GG = {eps_gg:.4g}, epsilon HF = {eps_hf:.4g}.",
+        f"{len(pairs)} paired t-test follow-ups use Holm-adjusted p-values."]
+    if mauchly_p < .05:
+        findings.append("Mauchly's test indicates departure from sphericity; interpret corrected degrees of freedom and p-values.")
+    limitations = ["One-factor univariate repeated-measures ANOVA for complete matched observations; not a mixed-effects model.",
+        "Assumes independent subjects and approximately multivariate-normal within-subject contrasts/residuals.",
+        "Mauchly's test may have low power in small samples and can be unstable with singular contrast covariance.",
+        "Pairwise follow-ups are paired t-tests; confidence intervals are unadjusted while p-values are Holm-adjusted.",
+        "Not adjusted for survey weights, clustering, stratification, finite-population corrections or missing-data models."]
+    if len(df) > n:
+        limitations.append(f"{len(df)-n} rows with missing or non-finite selected measurements were excluded using complete-case analysis.")
+    return AnalysisResult(title="One-way repeated-measures ANOVA", method="One-way repeated-measures ANOVA", status="success",
+        tables={"test_summary":summary,"sphericity_test":sphericity,"descriptive_statistics":descriptive,"pairwise_comparisons":pd.DataFrame(pairs)},
+        findings=findings, assumptions=["At least three numeric repeated measurements in wide format, one row per matched unit.",
+            "The same units are observed under each condition/time point.","Different units are independent.",
+            "Within-subject contrasts/residuals are approximately multivariate normal.","Sphericity is assessed and corrected degrees of freedom are reported.",
+            "Complete-case analysis is used."], limitations=limitations,
+        metadata={"measurement_variables":variables,"n_complete":n,"n_incomplete":len(df)-n,"k_measurements":k,
+            "f_statistic":f_stat,"p_value":p_gg,"p_value_uncorrected":p_unc,"p_value_greenhouse_geisser":p_gg,
+            "p_value_huynh_feldt":p_hf,"epsilon_greenhouse_geisser":eps_gg,"epsilon_huynh_feldt":eps_hf,
+            "mauchly_w":mauchly_w,"mauchly_p_value":mauchly_p,"partial_eta_squared":eta_p,
+            "number_of_pairwise_comparisons":len(pairs),"adjustment":"Holm","confidence_level":float(confidence_level),
+            "study_design":"repeated_measures","sampling_design_aware":False})
+
+
 def run_friedman_test(
     df: pd.DataFrame,
     measurement_variables: list[str],
