@@ -202,6 +202,8 @@ def execute_recommendation(
             "The recommendation contains missing or invalid dataset variables."
         )
 
+    options = recommendation.get("options") or {}
+
     if executor == "descriptive":
         if len(variables) != 1:
             raise AnalysisExecutionError(
