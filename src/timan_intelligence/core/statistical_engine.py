@@ -615,6 +615,91 @@ def run_kruskal_wallis_test(df: pd.DataFrame, outcome_variable: str, group_varia
     )
 
 
+
+def run_dunn_posthoc_test(df: pd.DataFrame, outcome_variable: str, group_variable: str) -> AnalysisResult:
+    """Run Dunn pairwise rank comparisons with Holm family-wise adjustment."""
+    from itertools import combinations
+    from scipy.stats import norm, rankdata
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Expected a pandas DataFrame.")
+    if outcome_variable not in df.columns or group_variable not in df.columns:
+        raise ValueError("Both outcome and grouping variables must exist.")
+    if outcome_variable == group_variable:
+        raise ValueError("Choose different outcome and grouping variables.")
+    if not pd.api.types.is_numeric_dtype(df[outcome_variable]):
+        raise TypeError("The outcome must be numeric or ordinal values encoded numerically.")
+    if df[group_variable].isna().any():
+        raise ValueError("The grouping variable contains missing group labels.")
+    labels = list(pd.unique(df[group_variable]))
+    if len(labels) < 3:
+        raise ValueError("Dunn's post-hoc test requires at least three independent groups.")
+    outcome = df[outcome_variable]
+    missing = int(outcome.isna().sum())
+    numeric = pd.to_numeric(outcome, errors="coerce")
+    finite = outcome.notna() & numeric.map(lambda x: bool(pd.notna(x) and abs(float(x)) != float("inf")))
+    infinite = int((outcome.notna() & ~finite).sum())
+    valid = df.loc[finite, [group_variable, outcome_variable]].copy()
+    valid[outcome_variable] = pd.to_numeric(valid[outcome_variable], errors="coerce").astype(float)
+    if valid.empty:
+        raise ValueError("At least one finite outcome value is required.")
+    samples = [valid.loc[valid[group_variable] == label, outcome_variable].to_numpy(float) for label in labels]
+    if any(len(sample) < 2 for sample in samples):
+        raise ValueError("Dunn's post-hoc test requires at least two finite observations in each group.")
+    values = valid[outcome_variable].to_numpy(float)
+    valid["_rank"] = rankdata(values, method="average")
+    n_total = len(values)
+    _, tie_counts = np.unique(values, return_counts=True)
+    tie_sum = float(np.sum(tie_counts ** 3 - tie_counts))
+    variance_factor = n_total * (n_total + 1) / 12.0 - tie_sum / (12.0 * (n_total - 1))
+    if not np.isfinite(variance_factor) or variance_factor <= 0:
+        raise ValueError("Dunn's test is undefined when all observations are tied.")
+    rows, raw_p = [], []
+    for first, second in combinations(labels, 2):
+        r1 = valid.loc[valid[group_variable] == first, "_rank"]
+        r2 = valid.loc[valid[group_variable] == second, "_rank"]
+        difference = float(r1.mean() - r2.mean())
+        se = float(np.sqrt(variance_factor * (1.0 / len(r1) + 1.0 / len(r2))))
+        z = difference / se
+        p = float(2.0 * norm.sf(abs(z)))
+        raw_p.append(p)
+        rows.append({"Group 1": str(first), "Group 2": str(second), "Group 1 n": int(len(r1)), "Group 2 n": int(len(r2)), "Mean rank difference (1 - 2)": difference, "Standard error": se, "Z statistic": float(z), "Unadjusted p-value": p})
+    order = np.argsort(raw_p)
+    adjusted = np.empty(len(raw_p), dtype=float)
+    running = 0.0
+    for i, original in enumerate(order):
+        running = max(running, min(1.0, (len(raw_p) - i) * raw_p[original]))
+        adjusted[original] = running
+    for row, p_adj in zip(rows, adjusted):
+        row["Holm-adjusted p-value"] = float(p_adj)
+        row["Significant at 0.05"] = bool(p_adj < 0.05)
+    pairwise = pd.DataFrame(rows)
+    summary = pd.DataFrame([{"Group": str(label), "Valid n": int(len(sample)), "Median": float(pd.Series(sample).median()), "Mean rank": float(valid.loc[valid[group_variable] == label, "_rank"].mean())} for label, sample in zip(labels, samples)])
+    significant = int(pairwise["Significant at 0.05"].sum())
+    findings = [
+        f"Dunn's procedure compared {len(rows)} group pairs using tie-corrected rank variance.",
+        f"Holm adjustment identified {significant} pairwise difference(s) at the 0.05 family-wise level.",
+        "Direction is shown by the mean rank difference (Group 1 minus Group 2).",
+    ]
+    limitations = [
+        "This independent-groups post-hoc procedure is commonly used after a significant Kruskal–Wallis omnibus test.",
+        "The normal approximation may be less reliable with very small samples.",
+        "The test compares rank distributions, not automatically medians; a location-shift interpretation requires similarly shaped distributions.",
+        "Not adjusted for survey weights, clustering, stratification, finite-population corrections or repeated-measures designs.",
+        "Missing and infinite outcomes are excluded; missing group labels are rejected.",
+    ]
+    if missing: limitations.append(f"{missing:,} missing outcome value(s) were excluded.")
+    if infinite: limitations.append(f"{infinite:,} infinite outcome value(s) were excluded.")
+    return AnalysisResult(
+        title=f"Dunn post-hoc comparisons: {outcome_variable} by {group_variable}",
+        status="success", method="Dunn's post-hoc test (Holm-adjusted)",
+        tables={"pairwise_comparisons": pairwise, "group_summary": summary},
+        findings=findings,
+        assumptions=["Groups and observations within groups are independent.", "The outcome is at least ordinal and numeric coding preserves its ordering.", "The pooled rank variance is appropriate for this independent-groups design.", "Holm adjustment controls family-wise error across all pairwise comparisons."],
+        limitations=limitations,
+        metadata={"outcome_variable": outcome_variable, "group_variable": group_variable, "group_labels": [str(x) for x in labels], "group_count": len(labels), "pairwise_comparisons": len(rows), "significant_comparisons": significant, "adjustment": "Holm", "familywise_alpha": 0.05, "n_observations": n_total, "missing_outcomes": missing, "infinite_outcomes": infinite, "sampling_design_aware": False, "study_design": "independent_groups"},
+    )
+
+
 def run_one_way_anova(
     df: pd.DataFrame,
     outcome_variable: str,
