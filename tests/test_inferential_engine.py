@@ -886,7 +886,7 @@ def test_friedman_pairwise_posthoc_uses_consistent_complete_case_set():
 
 def test_repeated_measures_anova_reports_sphericity_corrections_and_holm_followups():
     from timan_intelligence.core.statistical_engine import run_repeated_measures_anova
-    frame = pd.DataFrame({"baseline":[10,12,11,13,9,14,12,10,15,11],"midline":[12,14,13,15,11,16,14,12,17,13],"endline":[15,17,16,18,14,19,17,15,20,16]})
+    frame = pd.DataFrame({"baseline":[10,12,11,13,9,14,12,10,15,11],"midline":[12,14,12,16,10,17,15,13,18,14],"endline":[15,16,17,19,14,20,16,17,21,16]})
     result = run_repeated_measures_anova(frame, ["baseline","midline","endline"])
     summary = result.tables["test_summary"].iloc[0]
     assert result.status == "success" and summary["F statistic"] > 0
