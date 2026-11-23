@@ -1449,6 +1449,110 @@ def run_paired_mean_difference_confidence_interval(
 
 
 
+
+def run_friedman_test(
+    df: pd.DataFrame,
+    measurement_variables: list[str],
+) -> AnalysisResult:
+    """Compare three or more related measurements using the Friedman test.
+
+    Data are supplied in wide form: each row is one subject/unit and each
+    selected column is one repeated condition or time point.
+    """
+    from scipy.stats import friedmanchisquare
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Expected a pandas DataFrame.")
+    if not isinstance(measurement_variables, (list, tuple)) or len(measurement_variables) < 3:
+        raise ValueError("The Friedman test requires at least three repeated-measurement variables.")
+    if len(set(measurement_variables)) != len(measurement_variables):
+        raise ValueError("Select each repeated-measurement variable only once.")
+    missing_columns = [name for name in measurement_variables if not isinstance(name, str) or name not in df.columns]
+    if missing_columns:
+        raise ValueError(f"Measurement variables not found: {missing_columns}.")
+    for variable in measurement_variables:
+        if not pd.api.types.is_numeric_dtype(df[variable]):
+            raise TypeError(f"Measurement variable '{variable}' must be numeric or ordinal-coded.")
+    raw = df[list(measurement_variables)]
+    numeric = raw.astype(float)
+    finite_mask = numeric.notna().all(axis=1) & numeric.apply(lambda col: col.map(lambda value: abs(value) != float("inf"))).all(axis=1)
+    complete = numeric.loc[finite_mask]
+    incomplete = int(len(df) - len(complete))
+    if len(complete) < 2:
+        raise ValueError("The Friedman test requires at least two complete matched units across all selected measurements.")
+    if any(complete[column].nunique() < 2 for column in measurement_variables) and complete.nunique(axis=1).sum() == 0:
+        raise ValueError("The Friedman test is undefined when all repeated measurements are identical.")
+    arrays = [complete[column].to_numpy() for column in measurement_variables]
+    try:
+        statistic, p_value = friedmanchisquare(*arrays)
+    except ValueError as exc:
+        raise ValueError(f"The Friedman test could not be calculated: {exc}") from exc
+    if not pd.notna(statistic) or not pd.notna(p_value):
+        raise ValueError("The Friedman test is undefined for these repeated measurements (check for all-tied data).")
+    n, k = int(len(complete)), int(len(measurement_variables))
+    degrees_freedom = k - 1
+    kendall_w = float(statistic / (n * (k - 1)))
+    rank_rows = []
+    rank_matrix = complete.rank(axis=1, method="average")
+    for variable in measurement_variables:
+        rank_rows.append({
+            "Measurement": variable,
+            "Complete units": n,
+            "Mean within-unit rank": float(rank_matrix[variable].mean()),
+            "Median": float(complete[variable].median()),
+            "Mean": float(complete[variable].mean()),
+        })
+    summary = pd.DataFrame([{
+        "Friedman chi-square statistic": float(statistic),
+        "Degrees of freedom": degrees_freedom,
+        "p-value": float(p_value),
+        "Complete matched units": n,
+        "Repeated measurements": k,
+        "Kendall's W": kendall_w,
+        "Incomplete units excluded": incomplete,
+    }])
+    findings = [
+        f"Friedman statistic is {statistic:.4g} with {degrees_freedom} degrees of freedom (p = {p_value:.4g}).",
+        f"{n:,} complete matched units were analysed across {k} repeated measurements.",
+        f"Kendall's W is {kendall_w:.4g}; interpret the magnitude in the study context.",
+        "The result is statistically significant at the 0.05 level." if p_value < 0.05 else "The result is not statistically significant at the 0.05 level.",
+    ]
+    limitations = [
+        "Each row must represent the same correctly matched participant, household, facility or other unit across all selected measurement columns.",
+        "Units are assumed independent of one another; within-unit repeated measurements are handled by the Friedman procedure.",
+        "The test is an omnibus rank-based comparison; it does not identify which time points or conditions differ. Use a justified paired post-hoc procedure with multiplicity adjustment.",
+        "The ordinary Friedman test is not adjusted for survey weights, clustering, stratification or finite-population corrections.",
+        "Complete-case analysis excludes a unit if any selected repeated measurement is missing or infinite.",
+    ]
+    if incomplete:
+        limitations.append(f"{incomplete:,} unit(s) with incomplete or non-finite repeated measurements were excluded.")
+    return AnalysisResult(
+        title="Friedman test for related measurements",
+        method="Friedman test",
+        status="success",
+        tables={"test_summary": summary, "measurement_ranks": pd.DataFrame(rank_rows)},
+        findings=findings,
+        assumptions=[
+            "The selected columns represent at least three conditions or time points measured on the same units.",
+            "Each unit's repeated measurements are correctly aligned within one row.",
+            "Different units are independent.",
+            "The outcome is at least ordinal and numeric coding preserves its ordering.",
+        ],
+        limitations=limitations,
+        metadata={
+            "measurement_variables": list(measurement_variables),
+            "n_complete": n,
+            "n_incomplete": incomplete,
+            "k_measurements": k,
+            "statistic": float(statistic),
+            "degrees_of_freedom": degrees_freedom,
+            "p_value": float(p_value),
+            "kendall_w": kendall_w,
+            "sampling_design_aware": False,
+            "study_design": "repeated_measures",
+        },
+    )
+
+
 def run_wilcoxon_signed_rank_test(
     df: pd.DataFrame, before_variable: str, after_variable: str,
     alternative: str = "two-sided",

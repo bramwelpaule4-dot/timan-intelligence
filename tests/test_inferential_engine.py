@@ -817,3 +817,45 @@ def test_wilcoxon_signed_rank_service_returns_shared_analysis_result():
     result = run_wilcoxon_signed_rank_test_service(frame,"b","a")
     assert result.status == "success"
     assert result.method == "Wilcoxon signed-rank test"
+
+
+def test_friedman_test_detects_change_across_three_related_measurements():
+    from timan_intelligence.core.statistical_engine import run_friedman_test
+    frame = pd.DataFrame({"baseline":[1,2,3,4,5,6,7,8],"midline":[2,3,4,5,6,7,8,9],"endline":[4,5,6,7,8,9,10,11]})
+    result = run_friedman_test(frame, ["baseline","midline","endline"])
+    assert result.status == "success"
+    assert result.metadata["study_design"] == "repeated_measures"
+    assert result.metadata["n_complete"] == 8
+    assert result.metadata["p_value"] < 0.05
+    assert result.metadata["kendall_w"] == pytest.approx(1.0)
+    assert len(result.tables["measurement_ranks"]) == 3
+
+
+def test_friedman_test_excludes_incomplete_rows_and_reports_rank_order():
+    from timan_intelligence.core.statistical_engine import run_friedman_test
+    frame = pd.DataFrame({"t0":[1,2,3,4,5],"t1":[2,3,4,5,None],"t2":[3,4,5,6,7]})
+    result = run_friedman_test(frame, ["t0","t1","t2"])
+    assert result.metadata["n_complete"] == 4
+    assert result.metadata["n_incomplete"] == 1
+    ranks = result.tables["measurement_ranks"].set_index("Measurement")
+    assert ranks.loc["t0","Mean within-unit rank"] < ranks.loc["t2","Mean within-unit rank"]
+
+
+def test_friedman_test_validates_repeated_measurements_and_all_ties():
+    from timan_intelligence.core.statistical_engine import run_friedman_test
+    with pytest.raises(ValueError,match="at least three"):
+        run_friedman_test(pd.DataFrame({"a":[1,2],"b":[2,3]}),["a","b"])
+    with pytest.raises(ValueError,match="at least two complete"):
+        run_friedman_test(pd.DataFrame({"a":[1,None],"b":[2,3],"c":[3,4]}),["a","b","c"])
+    with pytest.raises(ValueError,match="undefined"):
+        run_friedman_test(pd.DataFrame({"a":[1,2,3],"b":[1,2,3],"c":[1,2,3]}),["a","b","c"])
+
+
+def test_friedman_service_returns_shared_analysis_result():
+    from timan_intelligence.services.analysis_service import run_friedman_test_service
+    frame = pd.DataFrame({"a":[1,2,3,4],"b":[2,3,4,5],"c":[3,4,5,6]})
+    result = run_friedman_test_service(frame,["a","b","c"])
+    assert result.status == "success"
+    assert result.method == "Friedman test"
+
+

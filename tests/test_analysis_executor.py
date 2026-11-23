@@ -558,3 +558,19 @@ def test_wilcoxon_signed_rank_executor_allows_paired_design_but_blocks_complex_s
     rec["design_context"]={"sampling_design":"cluster"}
     with pytest.raises(AnalysisExecutionError,match="not validated"):
         execute_recommendation(frame,rec,approved=True)
+
+
+def test_execution_runs_registered_friedman_test_for_repeated_measures():
+    frame = pd.DataFrame({"baseline":[1,2,3,4,5,6],"midline":[2,3,4,5,6,7],"endline":[3,4,5,6,7,8]})
+    rec = {"method":"Friedman test","method_id":"method.inference.comparison.friedman","variables":["baseline","midline","endline"],"status":"review_required","design_context":{"study_design":"repeated_measures"}}
+    result = execute_recommendation(frame,rec,approved=True)
+    assert result.status == "success"
+    assert result.metadata["method_id"] == "method.inference.comparison.friedman"
+    assert result.metadata["k_measurements"] == 3
+
+
+def test_friedman_executor_blocks_complex_sampling():
+    frame = pd.DataFrame({"a":[1,2,3,4],"b":[2,3,4,5],"c":[3,4,5,6]})
+    rec = {"method":"Friedman test","variables":["a","b","c"],"status":"review_required","design_context":{"sampling_design":"cluster"}}
+    with pytest.raises(AnalysisExecutionError,match="not validated"):
+        execute_recommendation(frame,rec,approved=True)

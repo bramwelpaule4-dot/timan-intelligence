@@ -39,6 +39,7 @@ IMPLEMENTED_METHODS = frozenset(
         "method.inference.comparison.kruskal_wallis",
         "method.inference.comparison.posthoc.dunn_holm",
         "method.inference.comparison.wilcoxon_signed_rank",
+        "method.inference.comparison.friedman",
     }
 )
 
@@ -396,6 +397,23 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             limitations=["Requires correctly matched pairs and independent pair-level differences.", "Not adjusted for complex survey sampling or clustering.", "The confidence interval is two-sided even when a one-sided alternative is selected."],
         ),
 
+
+        _method(
+            entity_id="method.inference.comparison.friedman",
+            name="Friedman test",
+            description="Compares three or more related conditions or time points using within-unit ranks.",
+            family="group_comparison", purpose="inference", priority="P1",
+            outcome_types=["ordinal", "numeric"],
+            required_roles=["repeated_measurement_variables", "unit_identifier"],
+            study_designs=["repeated_measure", "repeated_measures", "longitudinal"],
+            data_requirements=["At least three repeated measurement columns, with one row per unit and measurements aligned across columns."],
+            assumptions=["Repeated measurements are correctly matched within each unit.", "Different units are independent.", "The outcome is at least ordinal."],
+            outputs=["Friedman chi-square statistic", "Degrees of freedom", "P-value", "Kendall's W", "Mean within-unit ranks"],
+            use_cases=["Compare baseline, midline and endline measurements", "Compare three or more related treatment or programme conditions"],
+            aliases=["Friedman rank test", "Friedman two-way analysis of variance by ranks"],
+            implementation_status="implemented", verification_status="unit_tested", execution_eligibility="conditional",
+            limitations=["Omnibus test does not identify which pairs differ; use an appropriate paired post-hoc procedure with multiplicity adjustment.", "Not adjusted for complex survey sampling or clustering.", "Complete-case analysis is used."],
+        ),
         _method(
             entity_id="method.inference.comparison.wilcoxon_signed_rank",
             name="Wilcoxon signed-rank test",

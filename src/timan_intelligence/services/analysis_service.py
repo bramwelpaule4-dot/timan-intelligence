@@ -1971,6 +1971,12 @@ def run_dunn_posthoc_test_service(df: pd.DataFrame, outcome_variable: str, group
     return run_dunn_posthoc_test(df, outcome_variable, group_variable)
 
 
+def run_friedman_test_service(df: pd.DataFrame, measurement_variables: list[str]) -> AnalysisResult:
+    """Run the Friedman repeated-measures test through the shared service."""
+    from timan_intelligence.core.statistical_engine import run_friedman_test
+    return run_friedman_test(df, measurement_variables)
+
+
 def run_wilcoxon_signed_rank_test_service(df: pd.DataFrame, before_variable: str, after_variable: str, alternative: str = "two-sided") -> AnalysisResult:
     """Run Wilcoxon signed-rank testing through the shared service."""
     from timan_intelligence.core.statistical_engine import run_wilcoxon_signed_rank_test

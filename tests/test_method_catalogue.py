@@ -36,7 +36,7 @@ def test_only_existing_execution_methods_are_marked_implemented():
     }
 
     assert implemented == IMPLEMENTED_METHODS
-    assert len(implemented) == 18
+    assert len(implemented) == 19
 
 
 def test_exact_binomial_is_registered_as_conditionally_executable():
@@ -176,8 +176,8 @@ def test_catalogue_summary_reports_lifecycle_and_priorities():
     summary = get_statistical_method_summary()
 
     assert summary["catalogue_version"] == CATALOGUE_VERSION
-    assert summary["total_methods"] == 31
-    assert summary["implementation_status"]["implemented"] == 18
+    assert summary["total_methods"] == 32
+    assert summary["implementation_status"]["implemented"] == 19
     assert summary["implementation_status"]["planned"] == 13
     assert set(summary["release_priorities"]) == {"P1", "P2", "P3"}
 
@@ -280,6 +280,15 @@ def test_wilcoxon_signed_rank_is_registered_as_conditionally_executable():
     method = get_statistical_method("method.inference.comparison.wilcoxon_signed_rank")
     assert method is not None
     assert method.name == "Wilcoxon signed-rank test"
+    assert method.implementation_status == "implemented"
+    assert method.verification_status == "unit_tested"
+    assert method.execution_eligibility == "conditional"
+
+
+def test_friedman_is_registered_for_repeated_measures():
+    method = get_statistical_method("method.inference.comparison.friedman")
+    assert method is not None
+    assert method.name == "Friedman test"
     assert method.implementation_status == "implemented"
     assert method.verification_status == "unit_tested"
     assert method.execution_eligibility == "conditional"

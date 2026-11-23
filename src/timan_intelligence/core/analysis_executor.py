@@ -32,6 +32,7 @@ from timan_intelligence.core.statistical_engine import (
     run_kruskal_wallis_test,
     run_dunn_posthoc_test,
     run_wilcoxon_signed_rank_test,
+    run_friedman_test,
 )
 
 
@@ -58,6 +59,7 @@ _EXECUTOR_BY_METHOD_ID = {
     "method.inference.comparison.kruskal_wallis": "kruskal_wallis",
     "method.inference.comparison.posthoc.dunn_holm": "dunn_holm",
     "method.inference.comparison.wilcoxon_signed_rank": "wilcoxon_signed_rank",
+    "method.inference.comparison.friedman": "friedman",
 }
 
 
@@ -336,6 +338,10 @@ def execute_recommendation(
         if len(variables) != 2:
             raise AnalysisExecutionError("Wilcoxon signed-rank testing requires before and after measurement variables.")
         result = run_wilcoxon_signed_rank_test(df, variables[0], variables[1], options.get("alternative", "two-sided"))
+    elif executor == "friedman":
+        if len(variables) < 3:
+            raise AnalysisExecutionError("The Friedman test requires at least three repeated-measurement variables.")
+        result = run_friedman_test(df, variables)
     elif executor == "welch_t":
         if len(variables) != 2:
             raise AnalysisExecutionError(
