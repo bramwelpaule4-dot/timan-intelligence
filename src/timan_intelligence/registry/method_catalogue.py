@@ -413,7 +413,8 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             aliases=["Friedman post-hoc Wilcoxon Holm", "Pairwise Wilcoxon repeated measures Holm"],
             implementation_status="implemented", verification_status="unit_tested", execution_eligibility="conditional",
             limitations=["Use as follow-up to an omnibus Friedman test.", "Complete-case analysis across all selected measures.", "Not adjusted for complex survey sampling."]),
-
+        _method(
+            entity_id="method.inference.comparison.friedman",
             name="Friedman test",
             description="Compares three or more related conditions or time points using within-unit ranks.",
             family="group_comparison", purpose="inference", priority="P1",
