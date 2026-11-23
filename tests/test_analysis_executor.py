@@ -574,3 +574,12 @@ def test_friedman_executor_blocks_complex_sampling():
     rec = {"method":"Friedman test","variables":["a","b","c"],"status":"review_required","design_context":{"sampling_design":"cluster"}}
     with pytest.raises(AnalysisExecutionError,match="not validated"):
         execute_recommendation(frame,rec,approved=True)
+
+
+def test_execution_runs_registered_friedman_pairwise_posthoc():
+    frame = pd.DataFrame({"t0":[1,2,3,4,5,6,7,8],"t1":[2,3,4,5,6,7,8,9],"t2":[4,5,6,7,8,9,10,11]})
+    rec = {"method":"Pairwise Wilcoxon post-hoc test with Holm adjustment","method_id":"method.inference.comparison.posthoc.friedman_wilcoxon_holm","variables":["t0","t1","t2"],"status":"review_required","design_context":{"study_design":"repeated_measures"}}
+    result = execute_recommendation(frame, rec, approved=True)
+    assert result.status == "success"
+    assert result.metadata["method_id"] == "method.inference.comparison.posthoc.friedman_wilcoxon_holm"
+    assert result.metadata["adjustment"] == "Holm"

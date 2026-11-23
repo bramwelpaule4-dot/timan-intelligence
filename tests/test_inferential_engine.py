@@ -859,3 +859,25 @@ def test_friedman_service_returns_shared_analysis_result():
     assert result.method == "Friedman test"
 
 
+
+
+def test_friedman_pairwise_posthoc_uses_holm_adjustment():
+    from timan_intelligence.core.statistical_engine import run_friedman_pairwise_posthoc
+    frame = pd.DataFrame({"baseline":[1,2,3,4,5,6,7,8],"midline":[2,3,4,5,6,7,8,9],"endline":[4,5,6,7,8,9,10,11]})
+    result = run_friedman_pairwise_posthoc(frame, ["baseline","midline","endline"])
+    table = result.tables["pairwise_comparisons"]
+    assert result.status == "success"
+    assert result.metadata["number_of_comparisons"] == 3
+    assert result.metadata["adjustment"] == "Holm"
+    assert (table["Holm-adjusted p-value"] >= table["P-value"]).all()
+    assert table["Significant at 0.05"].all()
+
+
+def test_friedman_pairwise_posthoc_uses_consistent_complete_case_set():
+    from timan_intelligence.core.statistical_engine import run_friedman_pairwise_posthoc
+    frame = pd.DataFrame({"a":[1,2,3,4,5],"b":[2,3,4,5,None],"c":[3,4,5,6,7]})
+    result = run_friedman_pairwise_posthoc(frame, ["a","b","c"])
+    assert result.metadata["n_complete"] == 4
+    assert result.metadata["n_incomplete"] == 1
+    with pytest.raises(ValueError, match="at least three"):
+        run_friedman_pairwise_posthoc(frame, ["a","b"])

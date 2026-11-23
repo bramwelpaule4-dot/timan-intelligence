@@ -40,6 +40,7 @@ IMPLEMENTED_METHODS = frozenset(
         "method.inference.comparison.posthoc.dunn_holm",
         "method.inference.comparison.wilcoxon_signed_rank",
         "method.inference.comparison.friedman",
+        "method.inference.comparison.posthoc.friedman_wilcoxon_holm",
     }
 )
 
@@ -399,7 +400,20 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
 
 
         _method(
-            entity_id="method.inference.comparison.friedman",
+            entity_id="method.inference.comparison.posthoc.friedman_wilcoxon_holm",
+            name="Pairwise Wilcoxon post-hoc test with Holm adjustment",
+            description="Identifies which repeated measurements differ using paired Wilcoxon signed-rank tests with Holm family-wise error adjustment.",
+            family="group_comparison", purpose="inference", priority="P1", outcome_types=["ordinal", "numeric"],
+            required_roles=["repeated_measurement_variables", "unit_identifier"],
+            study_designs=["repeated_measure", "repeated_measures", "longitudinal"],
+            data_requirements=["At least three repeated measurement columns, one row per correctly matched unit; preferably follow a significant Friedman omnibus test."],
+            assumptions=["Measurements are matched within each unit.", "Different units are independent.", "Paired differences support signed-rank inference."],
+            outputs=["Pairwise Wilcoxon statistics", "Raw p-values", "Holm-adjusted p-values", "Rank-biserial correlations"],
+            use_cases=["Identify which programme time points differ after a Friedman test", "Compare related conditions with family-wise error control"],
+            aliases=["Friedman post-hoc Wilcoxon Holm", "Pairwise Wilcoxon repeated measures Holm"],
+            implementation_status="implemented", verification_status="unit_tested", execution_eligibility="conditional",
+            limitations=["Use as follow-up to an omnibus Friedman test.", "Complete-case analysis across all selected measures.", "Not adjusted for complex survey sampling."]),
+
             name="Friedman test",
             description="Compares three or more related conditions or time points using within-unit ranks.",
             family="group_comparison", purpose="inference", priority="P1",

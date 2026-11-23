@@ -1553,7 +1553,69 @@ def run_friedman_test(
     )
 
 
-def run_wilcoxon_signed_rank_test(
+def run_friedman_pairwise_posthoc(df: pd.DataFrame, measurement_variables: list[str]) -> AnalysisResult:
+    """Run paired Wilcoxon comparisons across repeated measures with Holm adjustment."""
+    from itertools import combinations
+    from scipy.stats import rankdata, wilcoxon
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Expected a pandas DataFrame.")
+    variables = list(measurement_variables or [])
+    if len(variables) < 3 or len(set(variables)) != len(variables):
+        raise ValueError("Friedman post-hoc comparisons require at least three distinct measurement variables.")
+    missing = [v for v in variables if v not in df.columns]
+    if missing:
+        raise ValueError(f"Measurement variables not found: {missing}.")
+    for variable in variables:
+        if not pd.api.types.is_numeric_dtype(df[variable]):
+            raise TypeError(f"Measurement variable '{variable}' must be numeric or ordinal-coded.")
+    values = df[variables].apply(pd.to_numeric, errors="coerce")
+    complete_mask = values.notna().all(axis=1)
+    for variable in variables:
+        complete_mask &= values[variable].map(lambda value: abs(float(value)) != float("inf"))
+    complete = values.loc[complete_mask]
+    if len(complete) < 2:
+        raise ValueError("Pairwise repeated-measurement comparisons require at least two complete matched units.")
+    rows, raw_p = [], []
+    for first, second in combinations(variables, 2):
+        differences = (complete[second] - complete[first]).to_numpy(dtype=float)
+        nonzero = differences[differences != 0]
+        if len(nonzero) < 2:
+            raise ValueError(f"Comparison '{second}' versus '{first}' has fewer than two non-zero paired differences.")
+        test = wilcoxon(differences, alternative="two-sided", zero_method="wilcox", correction=False, method="auto")
+        ranks = rankdata(abs(nonzero), method="average")
+        positive, negative = float(ranks[nonzero > 0].sum()), float(ranks[nonzero < 0].sum())
+        raw_p.append(float(test.pvalue))
+        rows.append({"Measurement 1": first, "Measurement 2": second, "Complete pairs": int(len(differences)),
+            "Non-zero differences": int(len(nonzero)), "Median change (2 - 1)": float(pd.Series(differences).median()),
+            "Wilcoxon statistic": float(test.statistic),
+            "Rank-biserial correlation (2 - 1)": float((positive-negative)/(positive+negative)),
+            "P-value": float(test.pvalue)})
+    order = sorted(range(len(raw_p)), key=lambda index: raw_p[index])
+    adjusted, running = [0.0] * len(raw_p), 0.0
+    for rank, index in enumerate(order):
+        running = max(running, min(1.0, (len(raw_p)-rank)*raw_p[index]))
+        adjusted[index] = running
+    for row, value in zip(rows, adjusted):
+        row["Holm-adjusted p-value"] = float(value)
+        row["Significant at 0.05"] = bool(value < 0.05)
+    table = pd.DataFrame(rows).sort_values("Holm-adjusted p-value").reset_index(drop=True)
+    return AnalysisResult(title="Pairwise Wilcoxon post-hoc comparisons for repeated measurements",
+        method="Pairwise Wilcoxon signed-rank post-hoc test with Holm adjustment", status="success",
+        tables={"pairwise_comparisons": table},
+        findings=[f"Performed {len(rows)} pairwise comparisons across {len(variables)} repeated measurements.",
+            f"Used {len(complete)} complete matched units; {len(df)-len(complete)} rows were excluded.",
+            "Holm-adjusted p-values control the family-wise error rate across all comparisons."],
+        assumptions=["Measurements are correctly matched within each row.", "Different units are independent.",
+            "The outcome is at least ordinal and paired differences are suitable for signed-rank inference."],
+        limitations=["Use as a follow-up to the omnibus Friedman test; it does not replace that test.",
+            "Complete-case analysis across all selected measurements is used for a consistent comparison set.",
+            "Not adjusted for complex survey weights, clustering, stratification or finite-population corrections."],
+        metadata={"measurement_variables": variables, "n_complete": int(len(complete)),
+            "n_incomplete": int(len(df)-len(complete)), "number_of_comparisons": len(rows),
+            "adjustment": "Holm", "study_design": "repeated_measures", "sampling_design_aware": False})
+
+
+
     df: pd.DataFrame, before_variable: str, after_variable: str,
     alternative: str = "two-sided",
 ) -> AnalysisResult:

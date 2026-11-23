@@ -78,6 +78,7 @@ from timan_intelligence.services.analysis_service import (
     run_dunn_posthoc_test_service,
     run_wilcoxon_signed_rank_test_service,
     run_friedman_test_service,
+    run_friedman_pairwise_posthoc_service,
     run_ppswor_total_service,
     run_ppswor_ratio_service,
     run_ppswor_domain_ratio_service,
@@ -7163,6 +7164,7 @@ elif page == "Statistical Inference":
                 "Dunn post-hoc test with Holm adjustment",
                 "Wilcoxon signed-rank test",
                 "Friedman test",
+                "Pairwise Wilcoxon post-hoc test with Holm adjustment",
             ],
             key="inference_method_choice",
         )
@@ -7366,6 +7368,14 @@ elif page == "Statistical Inference":
             outcome_variable = st.selectbox("Numeric or ordinal outcome (ordinal categories must be encoded in order)", numeric_cols, key="inference_dunn_outcome") if numeric_cols else None
             group_variable = st.selectbox("Independent grouping variable (at least three groups)", categorical_cols, key="inference_dunn_group") if categorical_cols else None
             st.caption("Performs pairwise rank comparisons with tie correction and Holm family-wise error adjustment. Normally use after a significant Kruskal–Wallis test. Review adjusted p-values and mean-rank differences; this does not replace the omnibus test.")
+        elif inference_method == "Pairwise Wilcoxon post-hoc test with Holm adjustment":
+            measurement_variables = st.multiselect(
+                "Repeated measurement columns (select at least three, in time/condition order)", numeric_cols,
+                default=[], key="inference_friedman_posthoc_measurements",
+                help="Use wide-format data with one row per matched unit and one column per measurement.")
+            outcome_variable = measurement_variables[0] if measurement_variables else None
+            group_variable = None
+            st.caption("Runs pairwise Wilcoxon signed-rank comparisons across selected measurements and applies Holm adjustment to the full family of p-values. Prefer this after a significant Friedman test.")
         elif inference_method == "Friedman test":
             measurement_variables = st.multiselect(
                 "Repeated measurement columns (select at least three, in time/condition order)",
@@ -7464,6 +7474,8 @@ elif page == "Statistical Inference":
                     )
                 elif inference_method == "Kruskal–Wallis test":
                     inference_result = run_kruskal_wallis_test_service(inference_df, outcome_variable, group_variable)
+                elif inference_method == "Pairwise Wilcoxon post-hoc test with Holm adjustment":
+                    inference_result = run_friedman_pairwise_posthoc_service(inference_df, measurement_variables)
                 elif inference_method == "Friedman test":
                     inference_result = run_friedman_test_service(inference_df, measurement_variables)
                 elif inference_method == "Dunn post-hoc test with Holm adjustment":
