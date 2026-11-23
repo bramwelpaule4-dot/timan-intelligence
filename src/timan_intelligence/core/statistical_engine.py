@@ -1616,6 +1616,7 @@ def run_friedman_pairwise_posthoc(df: pd.DataFrame, measurement_variables: list[
 
 
 
+def run_wilcoxon_signed_rank_test(
     df: pd.DataFrame, before_variable: str, after_variable: str,
     alternative: str = "two-sided",
 ) -> AnalysisResult:
