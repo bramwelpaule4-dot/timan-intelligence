@@ -57,6 +57,7 @@ IMPLEMENTED_METHODS = frozenset(
         "method.inference.survival.kaplan_meier",
         "method.inference.survival.cox",
         "method.measurement.reliability.cronbach_alpha",
+        "method.measurement.reliability.mcdonald_omega_total",
     }
 )
 
@@ -682,6 +683,20 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             implementation_status="implemented",
             verification_status="unit_tested",
             execution_eligibility="conditional",
+        ),
+        _method(
+            entity_id="method.measurement.reliability.mcdonald_omega_total",
+            name="McDonald's omega total",
+            description="Estimates total-score reliability using a one-factor congeneric maximum-likelihood measurement model.",
+            family="measurement_reliability", purpose="measurement", priority="P2",
+            outcome_types=["ordinal", "numeric"], required_roles=["multi_item_scale"],
+            data_requirements=["At least three numeric items intended to measure one construct and at least 30 complete respondents."],
+            assumptions=["A one-factor congeneric model is substantively appropriate.", "Items are consistently keyed and respondents are independent.", "The fitted model has positive uniqueness variances."],
+            outputs=["McDonald's omega total", "One-factor model fit statistics where identified", "Standardised loadings", "Item uniqueness and communality"],
+            use_cases=["Estimate scale reliability when item loadings are not assumed equal", "Complement Cronbach's alpha in questionnaire scale assessment"],
+            aliases=["Omega total", "McDonald omega", "McDonald's omega"],
+            limitations=["The estimate is conditional on a one-factor model and does not establish unidimensionality.", "Uses listwise complete cases and numeric/equidistant item scoring; ordinal omega is not provided.", "Not adjusted for complex survey sampling."],
+            implementation_status="implemented", verification_status="unit_tested", execution_eligibility="conditional",
         ),
         _method(
             entity_id="method.survey.estimation.weighted_proportion",

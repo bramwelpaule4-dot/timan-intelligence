@@ -2043,3 +2043,9 @@ def run_cronbach_alpha_service(df: pd.DataFrame, item_variables: list[str]) -> A
     """Run Cronbach's alpha through the shared analysis service."""
     from timan_intelligence.core.statistical_engine import run_cronbach_alpha
     return run_cronbach_alpha(df, item_variables)
+
+
+def run_mcdonald_omega_total_service(df: pd.DataFrame, item_variables: list[str]) -> AnalysisResult:
+    """Run McDonald's omega total through the shared analysis service."""
+    from timan_intelligence.core.statistical_engine import run_mcdonald_omega_total
+    return run_mcdonald_omega_total(df, item_variables)

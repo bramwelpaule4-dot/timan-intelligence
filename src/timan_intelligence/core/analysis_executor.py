@@ -51,6 +51,7 @@ from timan_intelligence.services.analysis_service import (
     run_kaplan_meier_service,
     run_cox_survival_service,
     run_cronbach_alpha_service,
+    run_mcdonald_omega_total_service,
 )
 
 
@@ -95,6 +96,7 @@ _EXECUTOR_BY_METHOD_ID = {
     "method.inference.survival.kaplan_meier": "kaplan_meier",
     "method.inference.survival.cox": "cox_survival",
     "method.measurement.reliability.cronbach_alpha": "cronbach_alpha",
+    "method.measurement.reliability.mcdonald_omega_total": "mcdonald_omega_total",
 }
 
 
@@ -241,7 +243,11 @@ def execute_recommendation(
 
     options = recommendation.get("options") or {}
 
-    if executor == "cronbach_alpha":
+    if executor == "mcdonald_omega_total":
+        if len(variables) < 3:
+            raise AnalysisExecutionError("McDonald omega requires at least three scale item variables.")
+        result = run_mcdonald_omega_total_service(df, variables)
+    elif executor == "cronbach_alpha":
         if len(variables) < 2:
             raise AnalysisExecutionError("Cronbach's alpha requires at least two scale item variables.")
         result = run_cronbach_alpha_service(df, variables)

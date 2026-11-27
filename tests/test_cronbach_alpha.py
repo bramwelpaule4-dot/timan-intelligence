@@ -72,3 +72,44 @@ def test_cronbach_alpha_runs_only_after_explicit_approval():
     result = execute_recommendation(frame, recommendation, approved=True)
     assert result.status == "success"
     assert result.metadata["method_id"] == "method.measurement.reliability.cronbach_alpha"
+
+
+
+def test_mcdonald_omega_total_is_executable_after_approval():
+    from timan_intelligence.core.statistical_engine import run_mcdonald_omega_total
+    frame = _scale_frame(n=320, seed=51)
+    result = run_mcdonald_omega_total(frame, ["item_a", "item_b", "item_c", "item_d"])
+    assert result.status == "success"
+    assert 0.70 < result.metadata["omega_total"] <= 1.0
+    assert result.metadata["factor_count"] == 1
+    assert len(result.tables["item_factor_diagnostics"]) == 4
+    recommendation = {
+        "method": "McDonald's omega total",
+        "method_id": "method.measurement.reliability.mcdonald_omega_total",
+        "variables": ["item_a", "item_b", "item_c", "item_d"],
+        "status": "review_required",
+    }
+    with pytest.raises(AnalysisExecutionError, match="approval"):
+        execute_recommendation(frame, recommendation)
+    approved = execute_recommendation(frame, recommendation, approved=True)
+    assert approved.metadata["method_id"] == "method.measurement.reliability.mcdonald_omega_total"
+
+
+def test_mcdonald_omega_reports_exclusions_and_model_fit():
+    from timan_intelligence.core.statistical_engine import run_mcdonald_omega_total
+    frame = _scale_frame(n=320, seed=52)
+    frame.loc[0, "item_a"] = np.nan
+    result = run_mcdonald_omega_total(frame, ["item_a", "item_b", "item_c", "item_d"])
+    assert result.metadata["excluded_n"] == 1
+    assert result.metadata["model_degrees_of_freedom"] == 2
+    assert any("listwise" in item for item in result.limitations)
+
+
+def test_mcdonald_omega_rejects_insufficient_items_and_singular_covariance():
+    from timan_intelligence.core.statistical_engine import run_mcdonald_omega_total
+    frame = _scale_frame(n=320, seed=53)
+    with pytest.raises(ValueError, match="at least three"):
+        run_mcdonald_omega_total(frame, ["item_a", "item_b"])
+    frame["duplicate"] = frame["item_a"]
+    with pytest.raises(ValueError, match="singular"):
+        run_mcdonald_omega_total(frame, ["item_a", "duplicate", "item_b"])

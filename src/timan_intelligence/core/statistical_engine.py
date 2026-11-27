@@ -2503,3 +2503,121 @@ def run_cronbach_alpha(df: pd.DataFrame, item_variables: list[str]) -> AnalysisR
             "valid_n": int(len(complete)), "excluded_n": excluded,
             "estimate_scope": "observed_complete_cases", "sampling_design_aware": False},
     )
+
+
+def run_mcdonald_omega_total(df: pd.DataFrame, item_variables: list[str]) -> AnalysisResult:
+    """Estimate omega total from a one-factor congeneric maximum-likelihood model."""
+    from scipy.optimize import minimize
+    from scipy.stats import chi2
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Expected a pandas DataFrame.")
+    if not isinstance(item_variables, list) or len(item_variables) < 3:
+        raise ValueError("McDonald's omega requires at least three item variables.")
+    if len(set(item_variables)) != len(item_variables):
+        raise ValueError("Each item variable may be selected only once.")
+    missing = [name for name in item_variables if not isinstance(name, str) or name not in df.columns]
+    if missing:
+        raise ValueError(f"Unknown item variable(s): {missing}.")
+    items = df[item_variables]
+    if any(not pd.api.types.is_numeric_dtype(items[name]) for name in item_variables):
+        raise TypeError("All reliability items must be numeric.")
+    numeric = items.astype(float).replace([np.inf, -np.inf], np.nan)
+    complete = numeric.dropna()
+    excluded_n = int(len(numeric) - len(complete))
+    n, k = complete.shape
+    if n < max(30, k + 5):
+        raise ValueError("McDonald's omega requires at least 30 complete respondents and more observations than item parameters.")
+    covariance = complete.cov().to_numpy(dtype=float)
+    if not np.isfinite(covariance).all() or np.any(np.diag(covariance) <= 0):
+        raise ValueError("Every item must have positive finite variance.")
+    eigenvalues, eigenvectors = np.linalg.eigh(covariance)
+    if eigenvalues.min() <= max(eigenvalues.max(), 1.0) * 1e-10:
+        raise ValueError("The item covariance matrix is singular or not positive definite.")
+    sign, logdet_s = np.linalg.slogdet(covariance)
+    if sign <= 0:
+        raise ValueError("The item covariance matrix must be positive definite.")
+    first = int(np.argmax(eigenvalues))
+    loadings0 = eigenvectors[:, first] * np.sqrt(max(eigenvalues[first] - np.median(np.diag(covariance)), 0.05))
+    if np.sum(loadings0) < 0:
+        loadings0 = -loadings0
+    uniqueness0 = np.clip(np.diag(covariance) - loadings0 ** 2, 0.05 * np.diag(covariance), np.diag(covariance))
+    initial = np.concatenate([loadings0, np.log(uniqueness0)])
+    def objective(parameters):
+        loadings = parameters[:k]
+        uniqueness = np.exp(parameters[k:])
+        model_cov = np.outer(loadings, loadings) + np.diag(uniqueness)
+        sign_model, logdet_model = np.linalg.slogdet(model_cov)
+        if sign_model <= 0:
+            return 1e100
+        try:
+            trace_term = float(np.trace(np.linalg.solve(model_cov, covariance)))
+        except np.linalg.LinAlgError:
+            return 1e100
+        return float(logdet_model + trace_term - logdet_s - k)
+    upper = np.log(max(float(np.diag(covariance).max()) * 10, 1.0))
+    bounds = [(None, None)] * k + [(np.log(1e-6), upper)] * k
+    fitted = minimize(objective, initial, method="L-BFGS-B", bounds=bounds, options={"maxiter": 5000, "ftol": 1e-12})
+    if not fitted.success or not np.isfinite(fitted.fun):
+        raise ValueError(f"The one-factor maximum-likelihood model did not converge: {fitted.message}")
+    loadings, uniqueness = fitted.x[:k], np.exp(fitted.x[k:])
+    if np.any(uniqueness <= 1.01e-6):
+        raise ValueError("The one-factor model produced a boundary uniqueness estimate; inspect the item set.")
+    common_variance = float(np.sum(loadings) ** 2)
+    total_variance = common_variance + float(np.sum(uniqueness))
+    if not np.isfinite(total_variance) or total_variance <= 0:
+        raise ValueError("The fitted model does not define a valid total-score variance.")
+    omega = float(np.clip(common_variance / total_variance, 0.0, 1.0))
+    item_sd = np.sqrt(np.diag(covariance))
+    diagnostics = pd.DataFrame({
+        "Item": item_variables,
+        "Unstandardized factor loading": loadings,
+        "Standardized factor loading": loadings / item_sd,
+        "Uniqueness variance": uniqueness,
+        "Communality": np.clip(1.0 - uniqueness / np.diag(covariance), 0.0, 1.0),
+    })
+    model_df = int(k * (k - 3) / 2)
+    model_chi_square = float(max(0.0, (n - 1) * fitted.fun))
+    model_p = float(chi2.sf(model_chi_square, model_df)) if model_df > 0 else None
+    findings = [
+        f"McDonald's omega total is {omega:.3f}, estimated from a one-factor congeneric maximum-likelihood model.",
+        f"The model used {n:,} complete respondents and {k} items; {excluded_n:,} records were excluded.",
+    ]
+    limitations = [
+        "Omega total is conditional on a one-factor congeneric measurement model; it is not model-free.",
+        "A one-factor solution does not establish substantive unidimensionality or construct validity.",
+        "Uses listwise complete cases and numeric/equidistant item scoring; ordinal/polychoric omega is not implemented.",
+        "Assumes independent respondents and is not adjusted for complex survey weights, clustering or stratification.",
+        "Reverse-keyed items must be recoded before estimation.",
+    ]
+    if excluded_n:
+        limitations.append(f"{excluded_n:,} incomplete or non-finite respondent records were excluded using listwise deletion.")
+    if model_df == 0:
+        limitations.append("With three items, the one-factor covariance model is just-identified; global model fit cannot be evaluated.")
+    else:
+        findings.append(f"One-factor model fit: chi-square({model_df}) = {model_chi_square:.4g}, p = {model_p:.4g}.")
+    return AnalysisResult(
+        title="Internal consistency: McDonald's omega total",
+        method="McDonald's omega total (one-factor congeneric ML)", status="success",
+        tables={
+            "reliability_summary": pd.DataFrame([{
+                "McDonald's omega total": omega, "Items": k, "Complete respondents": n,
+                "Excluded respondents": excluded_n, "One-factor model chi-square": model_chi_square,
+                "Model degrees of freedom": model_df, "Model fit p-value": model_p,
+            }]),
+            "item_factor_diagnostics": diagnostics,
+        },
+        findings=findings,
+        assumptions=[
+            "Items measure a common latent construct under a one-factor congeneric model.",
+            "The one-factor model is identified and has positive item uniqueness variances.",
+            "Respondents are independent; items are consistently keyed and numeric scores approximately equidistant.",
+        ],
+        limitations=limitations,
+        metadata={
+            "omega_total": omega, "item_variables": list(item_variables), "item_count": k,
+            "valid_n": n, "excluded_n": excluded_n, "factor_count": 1,
+            "estimator": "maximum_likelihood", "model_chi_square": model_chi_square,
+            "model_degrees_of_freedom": model_df, "model_fit_p_value": model_p,
+            "sampling_design_aware": False, "study_design": "independent_respondents",
+        },
+    )

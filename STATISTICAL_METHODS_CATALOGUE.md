@@ -2317,3 +2317,11 @@ These areas may be expanded as the knowledge catalogue matures.
 **END OF TIMANSTAT STATISTICAL METHODS CATALOGUE — VERSION 2.1**
 
 **Version note:** Version 2.1 preserves the comprehensive scope of Version 2.0 while introducing a multidimensional taxonomy, canonical entity records, explicit relationships, an expanded metadata schema and a clearer separation between statistical knowledge, method selection, model specification, diagnostics, computation, verification and reporting.
+
+
+## Measurement reliability: internal consistency
+
+- **Cronbach's alpha**: conventional raw-score internal-consistency coefficient.
+- **McDonald's omega total**: model-based reliability estimate from a one-factor congeneric maximum-likelihood model. It permits unequal item loadings and reports loadings, uniquenesses and model-fit information when identified.
+
+Neither coefficient establishes construct validity or measurement invariance. The current omega implementation uses numeric item scores and listwise complete cases; ordinal/polychoric reliability and complex-survey adjustments are not supported.
