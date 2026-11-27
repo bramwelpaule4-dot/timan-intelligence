@@ -2092,7 +2092,7 @@ def run_linear_mixed_effects_model(df: pd.DataFrame, outcome_variable: str, grou
                 for positions in grouped_positions.values():
                     if len(positions) < 3 or complete.iloc[positions][random_slope_variable].nunique() < 2:
                         raise ValueError("A random slope requires at least three observations and within-group predictor variation in every group.")
-            fitted = MixedLM(endog, exog, groups=groups, exog_re=random_design).fit(reml=True, method="lbfgs", maxiter=1000, disp=False)
+            fitted = MixedLM(endog, exog, groups=groups, exog_re=random_design).fit(reml=True, method=["lbfgs", "bfgs", "cg", "powell"], maxiter=2000, disp=False)
         except Exception as exc:
             raise ValueError(f"The linear mixed-effects model could not be fitted: {exc}") from exc
     if not fitted.converged:

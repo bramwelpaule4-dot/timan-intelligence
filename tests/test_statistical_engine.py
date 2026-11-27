@@ -250,7 +250,7 @@ def test_linear_mixed_effects_model_fits_optional_numeric_random_slope():
         slope = 0.7 + subject * 0.035
         intercept = subject * 0.25
         for time in range(5):
-            noise = ((subject * 3 + time * 5) % 7 - 3) * 0.035
+            noise = ((subject * 7 + time * 11) % 13 - 6) * 0.12
             rows.append({"subject": f"S{subject}", "time": float(time),
                          "score": intercept + slope * time + noise})
     result = run_linear_mixed_effects_model(pd.DataFrame(rows), "score", "subject", ["time"], random_slope_variable="time")

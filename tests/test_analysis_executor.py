@@ -631,7 +631,7 @@ def test_execution_passes_random_slope_option_to_linear_mixed_model():
     for subject in range(1, 13):
         for visit in range(4):
             slope = 0.8 + subject * 0.025
-            rows.append({"subject": subject, "visit": float(visit), "score": subject * 0.3 + slope * visit + ((subject + visit) % 3) * 0.03})
+            rows.append({"subject": subject, "visit": float(visit), "score": subject * 0.3 + slope * visit + ((subject * 7 + visit * 11) % 13 - 6) * 0.12})
     frame = pd.DataFrame(rows)
     recommendation = {"method":"Linear mixed-effects model (random intercept)","method_id":"method.inference.regression.linear_mixed_effects","variables":["score","subject","visit"],"status":"review_required","design_context":{"study_design":"longitudinal"},"options":{"random_slope_variable":"visit"}}
     result = execute_recommendation(frame, recommendation, approved=True)
