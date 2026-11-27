@@ -202,3 +202,11 @@ def test_linear_mixed_effects_model_uses_requested_confidence_level():
     assert result.metadata["confidence_level"] == pytest.approx(0.90)
     assert "90% CI lower" in result.tables["fixed_effects"].columns
     assert "90% CI upper" in result.tables["fixed_effects"].columns
+
+
+def test_linear_mixed_effects_model_rejects_invalid_confidence_level():
+    from timan_intelligence.core.statistical_engine import run_linear_mixed_effects_model
+    frame = pd.DataFrame({"subject": [1,1,2,2,3,3], "time": [0,1,0,1,0,1],
+                          "score": [1,2,2,3,3,4]})
+    with pytest.raises(ValueError, match="Confidence level"):
+        run_linear_mixed_effects_model(frame, "score", "subject", ["time"], 1.0)
