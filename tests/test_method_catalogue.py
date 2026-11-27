@@ -36,7 +36,7 @@ def test_only_existing_execution_methods_are_marked_implemented():
     }
 
     assert implemented == IMPLEMENTED_METHODS
-    assert len(implemented) == 28
+    assert len(implemented) == 35
 
 
 def test_exact_binomial_is_registered_as_conditionally_executable():
@@ -179,8 +179,8 @@ def test_catalogue_summary_reports_lifecycle_and_priorities():
     summary = get_statistical_method_summary()
 
     assert summary["catalogue_version"] == CATALOGUE_VERSION
-    assert summary["total_methods"] == 35
-    assert summary["implementation_status"]["implemented"] == 28
+    assert summary["total_methods"] == 41
+    assert summary["implementation_status"]["implemented"] == 35
     assert summary["implementation_status"]["planned"] == 7
     assert set(summary["release_priorities"]) == {"P1", "P2", "P3"}
 
@@ -338,6 +338,69 @@ def test_binary_logistic_regression_is_registered_as_conditionally_executable():
     method = get_statistical_method("method.inference.regression.logistic.binary")
     assert method is not None
     assert method.name == "Binary logistic regression"
+    assert method.implementation_status == "implemented"
+    assert method.verification_status == "unit_tested"
+    assert method.execution_eligibility == "conditional"
+
+
+def test_linear_simple_is_registered_as_conditionally_executable():
+    method = get_statistical_method("method.inference.regression.linear.simple")
+    assert method is not None
+    assert method.name == "Simple linear regression"
+    assert method.implementation_status == "implemented"
+    assert method.verification_status == "unit_tested"
+    assert method.execution_eligibility == "conditional"
+
+
+def test_logistic_ordinal_is_registered_as_conditionally_executable():
+    method = get_statistical_method("method.inference.regression.logistic.ordinal")
+    assert method is not None
+    assert method.name == "Ordinal logistic regression"
+    assert method.implementation_status == "implemented"
+    assert method.verification_status == "unit_tested"
+    assert method.execution_eligibility == "conditional"
+
+
+def test_logistic_multinomial_is_registered_as_conditionally_executable():
+    method = get_statistical_method("method.inference.regression.logistic.multinomial")
+    assert method is not None
+    assert method.name == "Multinomial logistic regression"
+    assert method.implementation_status == "implemented"
+    assert method.verification_status == "unit_tested"
+    assert method.execution_eligibility == "conditional"
+
+
+def test_count_poisson_is_registered_as_conditionally_executable():
+    method = get_statistical_method("method.inference.regression.count.poisson")
+    assert method is not None
+    assert method.name == "Poisson regression"
+    assert method.implementation_status == "implemented"
+    assert method.verification_status == "unit_tested"
+    assert method.execution_eligibility == "conditional"
+
+
+def test_count_negative_binomial_is_registered_as_conditionally_executable():
+    method = get_statistical_method("method.inference.regression.count.negative_binomial")
+    assert method is not None
+    assert method.name == "Negative binomial regression"
+    assert method.implementation_status == "implemented"
+    assert method.verification_status == "unit_tested"
+    assert method.execution_eligibility == "conditional"
+
+
+def test_survival_kaplan_meier_is_registered_as_conditionally_executable():
+    method = get_statistical_method("method.inference.survival.kaplan_meier")
+    assert method is not None
+    assert method.name == "Kaplan-Meier survival analysis"
+    assert method.implementation_status == "implemented"
+    assert method.verification_status == "unit_tested"
+    assert method.execution_eligibility == "conditional"
+
+
+def test_survival_cox_is_registered_as_conditionally_executable():
+    method = get_statistical_method("method.inference.survival.cox")
+    assert method is not None
+    assert method.name == "Cox proportional hazards regression"
     assert method.implementation_status == "implemented"
     assert method.verification_status == "unit_tested"
     assert method.execution_eligibility == "conditional"

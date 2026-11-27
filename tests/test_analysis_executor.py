@@ -798,3 +798,146 @@ def test_regression_execution_blocks_dependent_study_designs(method, variables):
     }
     with pytest.raises(AnalysisExecutionError, match="assumes independent groups"):
         execute_recommendation(frame, recommendation, approved=True)
+
+
+def test_execution_runs_approved_simple_linear_regression():
+    frame = pd.DataFrame({"income": [10, 20, 30, 40, 50, 60], "spending": [8, 15, 22, 29, 36, 43]})
+    recommendation = {
+        "method": "Simple linear regression",
+        "method_id": "method.inference.regression.linear.simple",
+        "variables": ["spending", "income"], "status": "review_required",
+    }
+    result = execute_recommendation(frame, recommendation, approved=True)
+    assert result.status == "success"
+    assert result.metadata["slope"] == pytest.approx(0.7)
+    assert "fitted_data" in result.tables
+
+
+def test_execution_runs_approved_ordinal_logistic_regression():
+    import numpy as np
+    rng = np.random.default_rng(301)
+    x = rng.normal(size=500)
+    latent = 0.8 * x + rng.logistic(size=500)
+    y = np.where(latent < -0.7, "Low", np.where(latent < 0.7, "Moderate", "High"))
+    frame = pd.DataFrame({"support": x, "satisfaction": y})
+    recommendation = {
+        "method": "Ordinal logistic regression",
+        "method_id": "method.inference.regression.logistic.ordinal",
+        "variables": ["satisfaction", "support"], "status": "review_required",
+        "options": {"ordered_categories": ["Low", "Moderate", "High"]},
+    }
+    result = execute_recommendation(frame, recommendation, approved=True)
+    assert result.status == "success"
+    assert result.metadata["ordered_categories"] == ["Low", "Moderate", "High"]
+    assert "category_probabilities" in result.tables
+
+
+def test_ordinal_logistic_execution_requires_explicit_category_order():
+    frame = pd.DataFrame({"y": ["low", "high"] * 20, "x": list(range(40))})
+    recommendation = {"method": "Ordinal logistic regression", "variables": ["y", "x"], "status": "review_required"}
+    with pytest.raises(AnalysisExecutionError, match="ordered_categories"):
+        execute_recommendation(frame, recommendation, approved=True)
+
+
+def test_execution_runs_approved_multinomial_logistic_regression():
+    import numpy as np
+    rng = np.random.default_rng(812)
+    n = 700
+    x = rng.normal(size=n)
+    logits = np.column_stack([0.8 * x, -0.5 * x, np.zeros(n)])
+    probabilities = np.exp(logits - logits.max(axis=1, keepdims=True))
+    probabilities /= probabilities.sum(axis=1, keepdims=True)
+    labels = ["Agriculture", "Cash transfer", "Training"]
+    outcome = [rng.choice(labels, p=row) for row in probabilities]
+    frame = pd.DataFrame({"access_score": x, "support_type": outcome})
+    recommendation = {
+        "method": "Multinomial logistic regression",
+        "method_id": "method.inference.regression.logistic.multinomial",
+        "variables": ["support_type", "access_score"], "status": "review_required",
+        "options": {"reference_category": "Training"},
+    }
+    result = execute_recommendation(frame, recommendation, approved=True)
+    assert result.status == "success"
+    assert result.metadata["reference_category"] == "Training"
+    assert "category_probabilities" in result.tables
+
+
+def test_execution_runs_approved_poisson_regression_with_exposure_offset():
+    import numpy as np
+    rng = np.random.default_rng(17)
+    x = rng.normal(size=500)
+    exposure = rng.uniform(0.5, 3.0, size=500)
+    events = rng.poisson(exposure * np.exp(0.2 + 0.3 * x))
+    frame = pd.DataFrame({"score": x, "person_time": exposure, "events": events})
+    recommendation = {
+        "method": "Poisson regression",
+        "method_id": "method.inference.regression.count.poisson",
+        "variables": ["events", "score"], "status": "review_required",
+        "options": {"exposure_variable": "person_time"},
+    }
+    result = execute_recommendation(frame, recommendation, approved=True)
+    assert result.status == "success"
+    assert result.metadata["valid_n"] == len(frame)
+    assert result.metadata.get("exposure_variable") == "person_time"
+
+
+def test_execution_runs_approved_negative_binomial_regression():
+    import numpy as np
+    rng = np.random.default_rng(29)
+    x = rng.normal(size=850)
+    mean = np.exp(0.25 + 0.3 * x)
+    alpha = 0.7
+    size = 1 / alpha
+    counts = rng.negative_binomial(size, size / (size + mean))
+    frame = pd.DataFrame({"score": x, "events": counts})
+    recommendation = {
+        "method": "Negative binomial regression",
+        "method_id": "method.inference.regression.count.negative_binomial",
+        "variables": ["events", "score"], "status": "review_required",
+    }
+    result = execute_recommendation(frame, recommendation, approved=True)
+    assert result.status == "success"
+    assert result.metadata["valid_n"] == len(frame)
+    assert result.metadata["dispersion_alpha"] > 0
+
+
+def test_execution_runs_approved_kaplan_meier_and_cox_models():
+    import numpy as np
+    rng = np.random.default_rng(67)
+    n = 750
+    score = rng.normal(size=n)
+    event_time = rng.exponential(1 / (0.12 * np.exp(0.4 * score)))
+    censor_time = rng.uniform(2, 15, n)
+    frame = pd.DataFrame({
+        "follow_up": np.minimum(event_time, censor_time),
+        "status": np.where(event_time <= censor_time, "event", "censored"),
+        "score": score,
+    })
+    km = execute_recommendation(frame, {
+        "method": "Kaplan-Meier survival analysis",
+        "method_id": "method.inference.survival.kaplan_meier",
+        "variables": ["follow_up", "status"], "status": "review_required",
+        "options": {"event_value": "event"},
+    }, approved=True)
+    assert km.status == "success"
+    assert km.metadata["event_n"] > 0
+    assert "survival_curve" in km.tables
+    cox = execute_recommendation(frame, {
+        "method": "Cox proportional hazards regression",
+        "method_id": "method.inference.survival.cox",
+        "variables": ["follow_up", "status", "score"], "status": "review_required",
+        "options": {"event_value": "event"},
+    }, approved=True)
+    assert cox.status == "success"
+    assert cox.tables["coefficients"].iloc[0]["Hazard ratio"] > 1
+
+
+@pytest.mark.parametrize("method,variables,options", [
+    ("Kaplan-Meier survival analysis", ["time", "event"], {}),
+    ("Cox proportional hazards regression", ["time", "event", "x"], {}),
+])
+def test_survival_execution_requires_explicit_event_value(method, variables, options):
+    frame = pd.DataFrame({"time": [1, 2, 3, 4], "event": [1, 0, 1, 0], "x": [2, 3, 4, 5]})
+    recommendation = {"method": method, "variables": variables, "status": "review_required", "options": options}
+    with pytest.raises(AnalysisExecutionError, match="event_value"):
+        execute_recommendation(frame, recommendation, approved=True)

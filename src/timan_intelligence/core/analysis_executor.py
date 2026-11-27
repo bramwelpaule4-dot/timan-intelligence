@@ -43,6 +43,13 @@ from timan_intelligence.core.numeric_association import run_numeric_association
 from timan_intelligence.services.analysis_service import (
     run_multiple_linear_regression_service,
     run_binary_logistic_regression_service,
+    run_simple_linear_regression_service,
+    run_ordinal_logistic_regression_service,
+    run_multinomial_logistic_regression_service,
+    run_poisson_regression_service,
+    run_negative_binomial_regression_service,
+    run_kaplan_meier_service,
+    run_cox_survival_service,
 )
 
 
@@ -79,6 +86,13 @@ _EXECUTOR_BY_METHOD_ID = {
     "method.inference.regression.linear_mixed_effects": "linear_mixed_effects",
     "method.inference.regression.linear.multiple": "multiple_linear_regression",
     "method.inference.regression.logistic.binary": "binary_logistic_regression",
+    "method.inference.regression.linear.simple": "simple_linear_regression",
+    "method.inference.regression.logistic.ordinal": "ordinal_logistic_regression",
+    "method.inference.regression.logistic.multinomial": "multinomial_logistic_regression",
+    "method.inference.regression.count.poisson": "poisson_regression",
+    "method.inference.regression.count.negative_binomial": "negative_binomial_regression",
+    "method.inference.survival.kaplan_meier": "kaplan_meier",
+    "method.inference.survival.cox": "cox_survival",
 }
 
 
@@ -128,7 +142,7 @@ def _validate_design_compatibility(
         "paired", "repeated_measure", "repeated_measures",
         "longitudinal", "time_series",
     }
-    if executor in {"welch_t", "anova", "mann_whitney", "kruskal_wallis", "dunn_holm", "welch_mean_difference_ci", "chi_square_independence", "fisher_exact", "two_proportions", "two_proportions_ci", "numeric_correlation", "multiple_linear_regression", "binary_logistic_regression"} and study_design in repeated_designs:
+    if executor in {"welch_t", "anova", "mann_whitney", "kruskal_wallis", "dunn_holm", "welch_mean_difference_ci", "chi_square_independence", "fisher_exact", "two_proportions", "two_proportions_ci", "numeric_correlation", "multiple_linear_regression", "binary_logistic_regression", "simple_linear_regression", "ordinal_logistic_regression", "multinomial_logistic_regression", "poisson_regression", "negative_binomial_regression", "kaplan_meier", "cox_survival"} and study_design in repeated_designs:
         raise AnalysisExecutionError(
             "Execution blocked: this executor assumes independent groups and "
             "is not validated for paired, repeated-measures, longitudinal or "
@@ -408,6 +422,52 @@ def execute_recommendation(
         result = run_binary_logistic_regression_service(
             df, variables[1:], variables[0],
             positive_class=options.get("positive_class"),
+        )
+    elif executor == "simple_linear_regression":
+        if len(variables) != 2:
+            raise AnalysisExecutionError("Simple linear regression requires an outcome and exactly one predictor.")
+        result = run_simple_linear_regression_service(df, variables[1], variables[0])
+    elif executor == "ordinal_logistic_regression":
+        ordered = options.get("ordered_categories")
+        if len(variables) < 2:
+            raise AnalysisExecutionError("Ordinal logistic regression requires an outcome and at least one predictor.")
+        if not isinstance(ordered, list) or len(ordered) < 2:
+            raise AnalysisExecutionError("Ordinal logistic regression requires ordered_categories in the options.")
+        result = run_ordinal_logistic_regression_service(df, variables[1:], variables[0], ordered)
+    elif executor == "multinomial_logistic_regression":
+        if len(variables) < 2:
+            raise AnalysisExecutionError("Multinomial logistic regression requires an outcome and at least one predictor.")
+        result = run_multinomial_logistic_regression_service(
+            df, variables[1:], variables[0], options.get("reference_category")
+        )
+    elif executor in {"poisson_regression", "negative_binomial_regression"}:
+        if len(variables) < 2:
+            raise AnalysisExecutionError("Count regression requires a count outcome and at least one predictor.")
+        exposure = options.get("exposure_variable")
+        if exposure is not None and (not isinstance(exposure, str) or exposure not in df.columns):
+            raise AnalysisExecutionError("The selected exposure_variable is not a valid dataset column.")
+        service = (
+            run_poisson_regression_service
+            if executor == "poisson_regression"
+            else run_negative_binomial_regression_service
+        )
+        result = service(df, variables[1:], variables[0], exposure_variable=exposure)
+    elif executor == "kaplan_meier":
+        if len(variables) not in {2, 3}:
+            raise AnalysisExecutionError("Kaplan-Meier analysis requires time and event variables, plus an optional grouping variable.")
+        if "event_value" not in options:
+            raise AnalysisExecutionError("Kaplan-Meier analysis requires an explicit event_value.")
+        result = run_kaplan_meier_service(
+            df, variables[0], variables[1], options["event_value"],
+            variables[2] if len(variables) == 3 else options.get("group_variable"),
+        )
+    elif executor == "cox_survival":
+        if len(variables) < 3:
+            raise AnalysisExecutionError("Cox regression requires time, event and at least one predictor variable.")
+        if "event_value" not in options:
+            raise AnalysisExecutionError("Cox regression requires an explicit event_value.")
+        result = run_cox_survival_service(
+            df, variables[2:], variables[0], variables[1], options["event_value"]
         )
     elif executor == "linear_mixed_effects":
         if len(variables) < 3:
