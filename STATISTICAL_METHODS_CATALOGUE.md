@@ -2360,3 +2360,8 @@ The weighted survey proportion method is executable through the controlled, appr
 ## Tukey HSD post-hoc comparisons
 
 Tukey's honestly significant difference procedure is executable for pairwise comparisons among at least three independent group means following a suitable one-way ANOVA. It reports Tukey-adjusted p-values and simultaneous confidence intervals for each mean difference. The implementation assumes independent observations, approximately normal within-group errors and a common within-group variance. It is not Games-Howell and is not adjusted for complex survey or repeated-measures designs.
+
+
+## Bootstrap confidence intervals
+
+The bootstrap confidence-interval method currently supports the IID row-level percentile bootstrap for a numeric mean, numeric median or a specified category proportion. It reports the original-sample estimate, percentile interval, bootstrap standard error and bias, resample count and Monte Carlo standard error of the bootstrap replicate mean. It requires at least 10 complete observations and 1,000 to 50,000 resamples. The procedure is not design-aware and is blocked for declared complex-sampling, paired, longitudinal or time-series designs.

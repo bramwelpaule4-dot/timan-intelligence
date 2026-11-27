@@ -40,6 +40,7 @@ from timan_intelligence.core.statistical_engine import (
     run_tukey_hsd_posthoc,
     run_linear_mixed_effects_model,
 )
+from timan_intelligence.core.bootstrap import run_bootstrap_confidence_interval
 from timan_intelligence.core.numeric_association import run_numeric_association
 from timan_intelligence.services.analysis_service import (
     run_multiple_linear_regression_service,
@@ -88,6 +89,7 @@ _EXECUTOR_BY_METHOD_ID = {
     "method.inference.comparison.friedman": "friedman",
     "method.inference.comparison.posthoc.friedman_wilcoxon_holm": "friedman_wilcoxon_holm",
     "method.inference.comparison.posthoc.tukey": "tukey_hsd",
+    "method.inference.resampling.bootstrap.confidence_interval": "bootstrap_ci",
     "method.inference.comparison.anova.repeated_measures": "repeated_measures_anova",
     "method.inference.regression.linear_mixed_effects": "linear_mixed_effects",
     "method.inference.regression.linear.multiple": "multiple_linear_regression",
@@ -150,7 +152,7 @@ def _validate_design_compatibility(
         "paired", "repeated_measure", "repeated_measures",
         "longitudinal", "time_series",
     }
-    if executor in {"welch_t", "anova", "tukey_hsd", "mann_whitney", "kruskal_wallis", "dunn_holm", "welch_mean_difference_ci", "chi_square_independence", "fisher_exact", "two_proportions", "two_proportions_ci", "numeric_correlation", "multiple_linear_regression", "binary_logistic_regression", "simple_linear_regression", "ordinal_logistic_regression", "multinomial_logistic_regression", "poisson_regression", "negative_binomial_regression", "kaplan_meier", "cox_survival"} and study_design in repeated_designs:
+    if executor in {"welch_t", "anova", "tukey_hsd", "bootstrap_ci", "mann_whitney", "kruskal_wallis", "dunn_holm", "welch_mean_difference_ci", "chi_square_independence", "fisher_exact", "two_proportions", "two_proportions_ci", "numeric_correlation", "multiple_linear_regression", "binary_logistic_regression", "simple_linear_regression", "ordinal_logistic_regression", "multinomial_logistic_regression", "poisson_regression", "negative_binomial_regression", "kaplan_meier", "cox_survival"} and study_design in repeated_designs:
         raise AnalysisExecutionError(
             "Execution blocked: this executor assumes independent groups and "
             "is not validated for paired, repeated-measures, longitudinal or "
@@ -389,6 +391,19 @@ def execute_recommendation(
             estimand="proportion", design=survey_design,
             strata_variable=strata_variable, cluster_variable=cluster_variable,
             confidence_level=options.get("confidence_level", 0.95),
+        )
+    elif executor == "bootstrap_ci":
+        if len(variables) != 1:
+            raise AnalysisExecutionError("A bootstrap confidence interval requires exactly one analysis variable.")
+        options = recommendation.get("options") or {}
+        result = run_bootstrap_confidence_interval(
+            df,
+            variables[0],
+            statistic=options.get("statistic", "mean"),
+            category_value=options.get("category_value"),
+            confidence_level=options.get("confidence_level", 0.95),
+            n_resamples=options.get("n_resamples", 2000),
+            random_state=options.get("random_state"),
         )
     elif executor == "proportion_ci":
         if len(variables) != 1:
