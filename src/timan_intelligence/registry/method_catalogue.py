@@ -36,6 +36,7 @@ IMPLEMENTED_METHODS = frozenset(
         "method.inference.association.correlation.spearman",
         "method.inference.confidence_interval.proportion",
         "method.survey.estimation.weighted_proportion",
+        "method.inference.comparison.posthoc.tukey",
         "method.inference.confidence_interval.mean_difference.welch",
         "method.inference.confidence_interval.mean_difference.paired",
         "method.inference.comparison.t_test.independent.welch",
@@ -765,8 +766,17 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             required_roles=["numeric_outcome", "grouping_factor"],
             data_requirements=["A suitable fitted group-comparison model with at least three groups."],
             assumptions=["The underlying model assumptions are assessed.", "The family of comparisons is defined."],
-            outputs=["Pairwise mean differences", "Simultaneous confidence intervals", "Multiplicity-adjusted p-values"],
-            use_cases=["Identify which group means differ after an omnibus comparison"],
+            outputs=["Pairwise mean differences", "Simultaneous confidence intervals", "Tukey-adjusted p-values", "Group sample sizes and means"],
+            use_cases=["Identify which group means differ after a suitable one-way ANOVA"],
+            study_designs=["independent_groups"],
+            limitations=[
+                "Assumes independent observations, approximately normal within-group errors and a common within-group variance.",
+                "Not adjusted for survey weights, clustering, stratification, repeated measures or finite-population corrections.",
+                "This implementation provides Tukey HSD for equal-variance one-way comparisons; it does not provide Games-Howell for heteroscedastic groups.",
+            ],
+            implementation_status="implemented",
+            verification_status="unit_tested",
+            execution_eligibility="conditional",
         ),
 
         _method(

@@ -37,6 +37,7 @@ from timan_intelligence.core.statistical_engine import (
     run_friedman_test,
     run_friedman_pairwise_posthoc,
     run_repeated_measures_anova,
+    run_tukey_hsd_posthoc,
     run_linear_mixed_effects_model,
 )
 from timan_intelligence.core.numeric_association import run_numeric_association
@@ -86,6 +87,7 @@ _EXECUTOR_BY_METHOD_ID = {
     "method.inference.comparison.wilcoxon_signed_rank": "wilcoxon_signed_rank",
     "method.inference.comparison.friedman": "friedman",
     "method.inference.comparison.posthoc.friedman_wilcoxon_holm": "friedman_wilcoxon_holm",
+    "method.inference.comparison.posthoc.tukey": "tukey_hsd",
     "method.inference.comparison.anova.repeated_measures": "repeated_measures_anova",
     "method.inference.regression.linear_mixed_effects": "linear_mixed_effects",
     "method.inference.regression.linear.multiple": "multiple_linear_regression",
@@ -148,7 +150,7 @@ def _validate_design_compatibility(
         "paired", "repeated_measure", "repeated_measures",
         "longitudinal", "time_series",
     }
-    if executor in {"welch_t", "anova", "mann_whitney", "kruskal_wallis", "dunn_holm", "welch_mean_difference_ci", "chi_square_independence", "fisher_exact", "two_proportions", "two_proportions_ci", "numeric_correlation", "multiple_linear_regression", "binary_logistic_regression", "simple_linear_regression", "ordinal_logistic_regression", "multinomial_logistic_regression", "poisson_regression", "negative_binomial_regression", "kaplan_meier", "cox_survival"} and study_design in repeated_designs:
+    if executor in {"welch_t", "anova", "tukey_hsd", "mann_whitney", "kruskal_wallis", "dunn_holm", "welch_mean_difference_ci", "chi_square_independence", "fisher_exact", "two_proportions", "two_proportions_ci", "numeric_correlation", "multiple_linear_regression", "binary_logistic_regression", "simple_linear_regression", "ordinal_logistic_regression", "multinomial_logistic_regression", "poisson_regression", "negative_binomial_regression", "kaplan_meier", "cox_survival"} and study_design in repeated_designs:
         raise AnalysisExecutionError(
             "Execution blocked: this executor assumes independent groups and "
             "is not validated for paired, repeated-measures, longitudinal or "
@@ -474,6 +476,13 @@ def execute_recommendation(
         if len(variables) != 2:
             raise AnalysisExecutionError("Dunn post-hoc testing requires an outcome and a grouping variable.")
         result = run_dunn_posthoc_test(df, variables[0], variables[1])
+    elif executor == "tukey_hsd":
+        if len(variables) != 2:
+            raise AnalysisExecutionError("Tukey HSD requires a numeric outcome and an independent grouping factor.")
+        result = run_tukey_hsd_posthoc(
+            df, variables[0], variables[1],
+            confidence_level=options.get("confidence_level", 0.95),
+        )
     elif executor == "wilcoxon_signed_rank":
         if len(variables) != 2:
             raise AnalysisExecutionError("Wilcoxon signed-rank testing requires before and after measurement variables.")

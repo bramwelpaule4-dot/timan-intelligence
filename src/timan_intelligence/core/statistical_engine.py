@@ -2733,3 +2733,134 @@ def run_mcdonald_omega_total(df: pd.DataFrame, item_variables: list[str]) -> Ana
             "sampling_design_aware": False, "study_design": "independent_respondents",
         },
     )
+
+
+
+def run_tukey_hsd_posthoc(
+    df: pd.DataFrame,
+    outcome_variable: str,
+    group_variable: str,
+    confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Run Tukey's HSD for all pairwise means after a suitable one-way ANOVA."""
+    from itertools import combinations
+    from statsmodels.stats.multicomp import pairwise_tukeyhsd
+
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Expected a pandas DataFrame.")
+    if not isinstance(outcome_variable, str) or outcome_variable not in df.columns:
+        raise ValueError("Select a valid numeric outcome variable.")
+    if not isinstance(group_variable, str) or group_variable not in df.columns:
+        raise ValueError("Select a valid grouping variable.")
+    if outcome_variable == group_variable:
+        raise ValueError("Outcome and grouping variables must be different.")
+    if isinstance(confidence_level, bool) or not isinstance(confidence_level, (int, float)):
+        raise TypeError("Confidence level must be numeric.")
+    level = float(confidence_level)
+    if not 0 < level < 1:
+        raise ValueError("Confidence level must be greater than 0 and less than 1.")
+    if not pd.api.types.is_numeric_dtype(df[outcome_variable]):
+        raise TypeError("Tukey HSD requires a numeric outcome variable.")
+    if df[group_variable].isna().any():
+        raise ValueError("The grouping variable contains missing group labels.")
+
+    outcome = pd.to_numeric(df[outcome_variable], errors="coerce")
+    finite_mask = outcome.notna() & np.isfinite(outcome.to_numpy(dtype=float, na_value=np.nan))
+    valid = pd.DataFrame({
+        "_outcome": outcome.loc[finite_mask].astype(float),
+        "_group": df.loc[finite_mask, group_variable],
+    })
+    labels = list(pd.unique(valid["_group"]))
+    if len(labels) < 3:
+        raise ValueError("Tukey HSD requires at least three independent groups.")
+    group_values = [
+        valid.loc[valid["_group"] == label, "_outcome"].to_numpy(dtype=float)
+        for label in labels
+    ]
+    if any(len(values) < 2 for values in group_values):
+        raise ValueError("Tukey HSD requires at least two finite observations in each group.")
+    total_n = int(len(valid))
+    group_count = len(group_values)
+    pooled_error_ss = float(sum(
+        np.square(values - values.mean()).sum() for values in group_values
+    ))
+    if pooled_error_ss <= 0:
+        raise ValueError("Tukey HSD is undefined when the pooled within-group error variance is zero.")
+
+    alpha = 1.0 - level
+    tukey = pairwise_tukeyhsd(
+        endog=valid["_outcome"].to_numpy(dtype=float),
+        groups=valid["_group"].to_numpy(),
+        alpha=alpha,
+    )
+    ordered_groups = list(tukey._multicomp.groupsunique)
+    pairs = list(combinations(ordered_groups, 2))
+    rows = []
+    for index, (first, second) in enumerate(pairs):
+        first_values = valid.loc[valid["_group"] == first, "_outcome"]
+        second_values = valid.loc[valid["_group"] == second, "_outcome"]
+        rows.append({
+            "Group 1": str(first),
+            "Group 2": str(second),
+            "Group 1 n": int(len(first_values)),
+            "Group 2 n": int(len(second_values)),
+            "Group 1 mean": float(first_values.mean()),
+            "Group 2 mean": float(second_values.mean()),
+            "Mean difference (Group 2 - Group 1)": float(tukey.meandiffs[index]),
+            "Tukey-adjusted p-value": float(tukey.pvalues[index]),
+            f"{level:.0%} simultaneous CI lower": float(tukey.confint[index, 0]),
+            f"{level:.0%} simultaneous CI upper": float(tukey.confint[index, 1]),
+            "Reject equal means": bool(tukey.reject[index]),
+        })
+    pairwise = pd.DataFrame(rows)
+    group_summary = pd.DataFrame([{
+        "Group": str(label),
+        "Observations": int(len(values)),
+        "Mean": float(np.mean(values)),
+        "Standard deviation": float(np.std(values, ddof=1)),
+    } for label, values in zip(labels, group_values)])
+    significant = int(pairwise["Reject equal means"].sum())
+    findings = [
+        f"Tukey HSD evaluated {len(pairs)} pairwise mean comparisons across {group_count} independent groups.",
+        f"{significant} pairwise difference(s) were significant at alpha={alpha:.3g} after Tukey family-wise adjustment.",
+        f"Mean differences are reported as Group 2 minus Group 1 with {level:.1%} simultaneous confidence intervals.",
+    ]
+    limitations = [
+        "Use as a post-hoc procedure for a suitable independent-groups one-way ANOVA; it does not replace the omnibus test.",
+        "Assumes independent observations, approximately normal within-group errors and a common within-group variance.",
+        "This is the equal-variance Tukey HSD procedure; it is not Games-Howell and may be inappropriate under substantial heteroscedasticity.",
+        "Not adjusted for survey weights, clustering, stratification, repeated measures or finite-population corrections.",
+    ]
+    excluded = int(len(df) - total_n)
+    if excluded:
+        limitations.append(f"{excluded:,} rows with missing or non-finite outcome values were excluded.")
+    return AnalysisResult(
+        title=f"Tukey HSD post-hoc comparisons: {outcome_variable} by {group_variable}",
+        method="Tukey's honestly significant difference",
+        status="success",
+        tables={"pairwise_comparisons": pairwise, "group_summary": group_summary},
+        findings=findings,
+        assumptions=[
+            "The outcome is numeric and the grouping factor defines at least three independent groups.",
+            "Observations are independent within and between groups.",
+            "Within-group residuals are approximately normally distributed.",
+            "Population variances are approximately equal across groups.",
+            "Tukey's procedure adjusts the family-wise error rate across all pairwise comparisons.",
+        ],
+        limitations=limitations,
+        metadata={
+            "outcome_variable": outcome_variable,
+            "group_variable": group_variable,
+            "group_labels": [str(label) for label in ordered_groups],
+            "group_sizes": [int((valid["_group"] == label).sum()) for label in ordered_groups],
+            "n_observations": total_n,
+            "excluded_outcomes": excluded,
+            "number_of_comparisons": len(pairs),
+            "significant_comparisons": significant,
+            "confidence_level": level,
+            "alpha": alpha,
+            "adjustment": "Tukey HSD",
+            "sampling_design_aware": False,
+            "study_design": "independent_groups",
+        },
+    )

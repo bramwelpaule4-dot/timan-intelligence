@@ -36,7 +36,7 @@ def test_only_existing_execution_methods_are_marked_implemented():
     }
 
     assert implemented == IMPLEMENTED_METHODS
-    assert len(implemented) == 38
+    assert len(implemented) == 39
 
 
 def test_exact_binomial_is_registered_as_conditionally_executable():
@@ -183,8 +183,8 @@ def test_catalogue_summary_reports_lifecycle_and_priorities():
 
     assert summary["catalogue_version"] == CATALOGUE_VERSION
     assert summary["total_methods"] == 42
-    assert summary["implementation_status"]["implemented"] == 38
-    assert summary["implementation_status"]["planned"] == 4
+    assert summary["implementation_status"]["implemented"] == 39
+    assert summary["implementation_status"]["planned"] == 3
     assert set(summary["release_priorities"]) == {"P1", "P2", "P3"}
 
 

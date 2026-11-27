@@ -2355,3 +2355,8 @@ The two-independent-proportions procedure additionally reports the risk ratio an
 ## Weighted survey proportion execution
 
 The weighted survey proportion method is executable through the controlled, approval-gated analysis executor. It supports weighted descriptive category proportions, stratified SRS proportions with constant expansion weights within strata, and with-replacement ultimate-PSU Taylor variance estimation. Design-based standard errors and confidence intervals are reported only for the supported probability-sample designs. General multistage variance estimation and finite-population corrections remain outside the current implementation. A declared complex sample cannot fall back silently to weighted-descriptive output.
+
+
+## Tukey HSD post-hoc comparisons
+
+Tukey's honestly significant difference procedure is executable for pairwise comparisons among at least three independent group means following a suitable one-way ANOVA. It reports Tukey-adjusted p-values and simultaneous confidence intervals for each mean difference. The implementation assumes independent observations, approximately normal within-group errors and a common within-group variance. It is not Games-Howell and is not adjusted for complex survey or repeated-measures designs.
