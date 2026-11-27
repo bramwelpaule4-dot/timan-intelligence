@@ -2385,3 +2385,8 @@ SARIMA extends non-seasonal ARIMA with seasonal autoregressive, differencing and
 ## STL time-series decomposition
 
 STL (Seasonal-Trend decomposition using LOESS) decomposes a regular univariate series into observed, trend, seasonal and remainder components. The implementation uses robust fitting by default and reports descriptive trend- and seasonal-strength diagnostics. The analyst specifies the seasonal period; at least two complete cycles, a unique regular time index and complete finite observations are required. Component-strength values are descriptive diagnostics, not hypothesis tests. STL does not forecast, model multiple seasonal periods or adjust for complex survey designs.
+
+
+## ADF and KPSS stationarity diagnostics
+
+The stationarity diagnostic workflow reports the Augmented Dickey-Fuller (ADF) unit-root test and the KPSS stationarity test for a regular univariate series. ADF has a unit-root null hypothesis; KPSS has a level- or trend-stationarity null hypothesis. Results include test statistics, p-values, selected lags and critical values. Both tests should be interpreted jointly and in the context of the selected deterministic terms, structural breaks and data-generating process. These diagnostics guide differencing and model specification but do not automatically choose an ARIMA/SARIMA order or prove stationarity. At least 30 complete, finite, regularly spaced observations are required; complex survey adjustments are not supported.

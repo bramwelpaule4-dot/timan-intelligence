@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 from typing import Any
+import warnings
 
 import numpy as np
 import pandas as pd
 from scipy.stats import jarque_bera
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.stats.diagnostic import acorr_ljungbox
+from statsmodels.tsa.stattools import adfuller, kpss
 
 from timan_intelligence.core.contracts import AnalysisResult
 
@@ -47,10 +49,6 @@ def run_arima_time_series_model(
         raise TypeError("forecast_steps must be an integer.")
     if not 1 <= int(forecast_steps) <= 100:
         raise ValueError("forecast_steps must be between 1 and 100.")
-    if isinstance(validation_steps, bool) or not isinstance(validation_steps, (int, np.integer)):
-        raise TypeError("validation_steps must be an integer.")
-    if not 0 <= int(validation_steps) <= 100:
-        raise ValueError("validation_steps must be between zero and 100.")
     if isinstance(confidence_level, bool) or not isinstance(confidence_level, (int, float)):
         raise TypeError("Confidence level must be numeric.")
     level = float(confidence_level)
@@ -264,6 +262,10 @@ def run_sarima_time_series_model(
         raise TypeError("forecast_steps must be an integer.")
     if not 1 <= int(forecast_steps) <= 100:
         raise ValueError("forecast_steps must be between 1 and 100.")
+    if isinstance(validation_steps, bool) or not isinstance(validation_steps, (int, np.integer)):
+        raise TypeError("validation_steps must be an integer.")
+    if not 0 <= int(validation_steps) <= 100:
+        raise ValueError("validation_steps must be between zero and 100.")
     if isinstance(confidence_level, bool) or not isinstance(confidence_level, (int, float)):
         raise TypeError("Confidence level must be numeric.")
     level = float(confidence_level)
@@ -544,6 +546,133 @@ def run_stl_time_series_decomposition(
             "robust": robust,
             "trend_strength": trend_strength,
             "seasonal_strength": seasonal_strength,
+            "sampling_design_aware": False,
+            "study_design": "time_series",
+        },
+    )
+
+
+def run_stationarity_diagnostics(
+    df: pd.DataFrame,
+    time_variable: str,
+    outcome_variable: str,
+    regression: str = "c",
+    max_lag: int | None = None,
+) -> AnalysisResult:
+    """Run complementary ADF and KPSS tests on a regular univariate time series."""
+    if not isinstance(df, pd.DataFrame) or df.empty:
+        raise ValueError("A non-empty pandas DataFrame is required.")
+    if not isinstance(time_variable, str) or time_variable not in df.columns:
+        raise ValueError("Select a valid time-index variable.")
+    if not isinstance(outcome_variable, str) or outcome_variable not in df.columns:
+        raise ValueError("Select a valid numeric outcome variable.")
+    if time_variable == outcome_variable:
+        raise ValueError("Time-index and outcome variables must be different.")
+    if not pd.api.types.is_numeric_dtype(df[outcome_variable]):
+        raise TypeError("Stationarity diagnostics require a numeric outcome variable.")
+    if regression not in {"c", "ct"}:
+        raise ValueError("regression must be 'c' (constant) or 'ct' (constant and linear trend).")
+    if max_lag is not None:
+        if isinstance(max_lag, bool) or not isinstance(max_lag, (int, np.integer)):
+            raise TypeError("max_lag must be an integer or None.")
+        if not 0 <= int(max_lag) <= 20:
+            raise ValueError("max_lag must be between 0 and 20.")
+
+    dates = pd.to_datetime(df[time_variable], errors="coerce")
+    if dates.isna().any():
+        raise ValueError("Time-index values must be valid and complete.")
+    if dates.duplicated().any():
+        raise ValueError("Time-index values must be unique.")
+    positions = np.argsort(dates.to_numpy())
+    dates = pd.DatetimeIndex(dates.iloc[positions])
+    values = pd.to_numeric(df[outcome_variable], errors="coerce").to_numpy(dtype=float)[positions]
+    if not np.isfinite(values).all():
+        raise ValueError("Outcome values must be complete and finite; resolve missing or infinite values first.")
+    if len(values) < 30:
+        raise ValueError("At least 30 regularly spaced observations are required for stationarity diagnostics.")
+    inferred_frequency = pd.infer_freq(dates)
+    if inferred_frequency is None:
+        raise ValueError("The time index is not regularly spaced.")
+    frequency = getattr(inferred_frequency, "freqstr", str(inferred_frequency))
+    if np.ptp(values) <= np.finfo(float).eps:
+        raise ValueError("Stationarity tests are undefined for a constant series.")
+
+    # The tests have complementary null hypotheses: ADF tests a unit root;
+    # KPSS tests level or trend stationarity.
+    adf_kwargs = {"regression": regression, "autolag": "AIC"}
+    if max_lag is not None:
+        adf_kwargs["maxlag"] = int(max_lag)
+    try:
+        adf_stat, adf_p, adf_lags, adf_nobs, adf_critical, _ = adfuller(values, **adf_kwargs)
+        with warnings.catch_warnings(record=True) as captured:
+            warnings.simplefilter("always")
+            kpss_stat, kpss_p, kpss_lags, kpss_critical = kpss(
+                values, regression=regression, nlags="auto"
+            )
+        kpss_warnings = [str(item.message) for item in captured]
+    except (ValueError, np.linalg.LinAlgError) as exc:
+        raise ValueError(f"Stationarity diagnostics could not be estimated: {exc}") from exc
+
+    results = pd.DataFrame([
+        {
+            "test": "Augmented Dickey-Fuller (ADF)",
+            "null_hypothesis": "The series has a unit root (is non-stationary).",
+            "alternative_hypothesis": "The series is stationary under the selected deterministic terms.",
+            "statistic": float(adf_stat),
+            "p_value": float(adf_p),
+            "lags_used": int(adf_lags),
+            "observations_used": int(adf_nobs),
+            "critical_value_1_percent": float(adf_critical["1%"]),
+            "critical_value_5_percent": float(adf_critical["5%"]),
+            "critical_value_10_percent": float(adf_critical["10%"]),
+        },
+        {
+            "test": "Kwiatkowski-Phillips-Schmidt-Shin (KPSS)",
+            "null_hypothesis": "The series is level- or trend-stationary under the selected deterministic terms.",
+            "alternative_hypothesis": "The series has a unit root (is non-stationary).",
+            "statistic": float(kpss_stat),
+            "p_value": float(kpss_p),
+            "lags_used": int(kpss_lags),
+            "observations_used": int(len(values)),
+            "critical_value_1_percent": float(kpss_critical["1%"]),
+            "critical_value_5_percent": float(kpss_critical["5%"]),
+            "critical_value_10_percent": float(kpss_critical["10%"]),
+        },
+    ])
+    findings = [
+        f"ADF p-value={adf_p:.4g}; its null hypothesis is a unit root.",
+        f"KPSS p-value={kpss_p:.4g}; its null hypothesis is stationarity.",
+        "Interpret the two tests jointly: agreement can strengthen a conclusion, while disagreement may indicate near-unit-root behaviour, structural breaks, changing variance or misspecified deterministic terms.",
+    ]
+    limitations = [
+        "ADF and KPSS have opposite null hypotheses; neither test alone proves stationarity or non-stationarity.",
+        "Results depend on the selected deterministic terms and lag selection; structural breaks, outliers and changing variance can distort inference.",
+        "P-values may be reported at table boundaries by the underlying implementation; interpret alongside test statistics and critical values.",
+        "These are univariate time-series diagnostics, not forecasting models and not adjustments for complex survey designs.",
+    ]
+    if kpss_warnings:
+        limitations.append("KPSS numerical warnings: " + " | ".join(kpss_warnings))
+    return AnalysisResult(
+        title=f"Stationarity diagnostics: {outcome_variable}",
+        method="Augmented Dickey-Fuller and KPSS stationarity tests",
+        status="success",
+        tables={"stationarity_tests": results},
+        findings=findings,
+        assumptions=[
+            "The time index is unique, ordered and regularly spaced.",
+            "The selected constant or constant-plus-trend deterministic specification is appropriate.",
+            "The series is not constant and has sufficient observations for the asymptotic tests.",
+        ],
+        limitations=limitations,
+        metadata={
+            "time_variable": time_variable,
+            "outcome_variable": outcome_variable,
+            "frequency": frequency,
+            "n_observations": int(len(values)),
+            "regression": regression,
+            "adf_max_lag": max_lag,
+            "adf_lags_used": int(adf_lags),
+            "kpss_lags_used": int(kpss_lags),
             "sampling_design_aware": False,
             "study_design": "time_series",
         },
