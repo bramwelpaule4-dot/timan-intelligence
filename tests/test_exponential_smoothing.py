@@ -56,7 +56,7 @@ def test_exponential_smoothing_validates_model_options_and_series():
     frame = _frame()
     with pytest.raises(ValueError, match="trend"):
         run_exponential_smoothing_forecast(frame, "month", "value", trend="linear")
-    with pytest.raises(ValueError, match="seasonal_period"):
+    with pytest.raises(TypeError, match="seasonal_period"):
         run_exponential_smoothing_forecast(
             frame, "month", "value", seasonal="add"
         )
