@@ -89,15 +89,36 @@ def test_execution_runs_one_way_anova():
     assert result.tables["summary"]["groups"] == 3
 
 
-def test_execution_rejects_methods_without_an_execution_implementation():
-    df = pd.DataFrame({"category": ["A", "B", "A"]})
+def test_execution_runs_approved_categorical_frequency_distribution():
+    df = pd.DataFrame({"category": ["A", "B", "A", None, "B", "A"]})
     recommendation = {
         "method": "Frequencies and proportions",
         "variables": ["category"],
         "status": "review_required",
     }
 
-    with pytest.raises(AnalysisExecutionError, match="does not yet"):
+    result = execute_recommendation(df, recommendation, approved=True)
+    table = result.tables["frequency_table"]
+
+    assert result.status == "success"
+    assert result.method == "Categorical frequency distribution"
+    assert result.metadata["valid_n"] == 5
+    assert result.metadata["missing_n"] == 1
+    assert table.loc[table["category"] == "A", "count"].iloc[0] == 3
+    assert table.loc[table["category"] == "A", "valid_percent"].iloc[0] == pytest.approx(60.0)
+    assert table.loc[table["is_missing"], "total_percent"].iloc[0] == pytest.approx(100 / 6)
+    assert result.metadata["population_representative"] is False
+
+
+def test_frequency_distribution_rejects_numeric_measurement_variable():
+    df = pd.DataFrame({"score": [1, 2, 3]})
+    recommendation = {
+        "method": "Frequency distribution",
+        "variables": ["score"],
+        "status": "review_required",
+    }
+
+    with pytest.raises(TypeError, match="categorical"):
         execute_recommendation(df, recommendation, approved=True)
 
 

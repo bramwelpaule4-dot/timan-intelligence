@@ -2188,3 +2188,75 @@ def run_linear_mixed_effects_model(df: pd.DataFrame, outcome_variable: str, grou
     warning_text = [str(w.message) for w in caught if issubclass(w.category, (ConvergenceWarning, RuntimeWarning))]
     if warning_text: limits.append("Model fitting warnings: " + " | ".join(warning_text[:3]))
     return AnalysisResult(title=f"Linear mixed-effects model: {outcome_variable}", method="Linear mixed-effects model (random intercept and slope)" if random_slope_variable is not None else "Linear mixed-effects model (random intercept)", status="success", tables={"fixed_effects": pd.DataFrame(rows), "model_summary": summary, "diagnostic_summary": pd.DataFrame(diagnostic_rows), "residual_diagnostics": residual_frame, "normal_qq": qq_frame, "random_intercepts": pd.DataFrame(random_intercepts)}, findings=[f"Model fitted {len(complete):,} observations across {groups.nunique():,} groups.", f"Estimated random-intercept variance: {random_var:.4g}; residual variance: {residual_var:.4g}.", f"Residual diagnostic checks were calculated for {n_diag:,} fitted observations; review the diagnostic summary and plots before drawing conclusions."] + ([f"Estimated intraclass correlation: {icc:.3f}."] if icc is not None else []), assumptions=["The outcome is continuous and the conditional mean is adequately represented by the fixed effects.", "Random intercepts are approximately normally distributed and independent across groups.", "Conditional residuals are approximately normal with constant variance.", "Observations are conditionally independent given random effects and fixed effects."], limitations=limits, metadata={"outcome_variable": outcome_variable, "group_variable": group_variable, "fixed_effect_variables": list(fixed_effect_variables), "n_observations": len(complete), "n_groups": int(groups.nunique()), "missing_rows_excluded": excluded, "random_intercept_variance": random_var, "residual_variance": residual_var, "intraclass_correlation": icc, "converged": bool(fitted.converged), "estimation": "REML", "confidence_level": float(confidence_level), "random_effect_structure": "random_intercept_and_slope" if random_slope_variable is not None else "random_intercept", "random_slope_variable": random_slope_variable, "random_slope_variance": slope_var, "intercept_slope_covariance": intercept_slope_covariance, "intercept_slope_correlation": intercept_slope_correlation, "sampling_design_aware": False, "study_design": "longitudinal"})
+
+
+
+def run_categorical_frequency_distribution(
+    df: pd.DataFrame,
+    variable: str,
+) -> AnalysisResult:
+    """Summarise category counts and percentages without modifying the input.
+
+    Valid percentages use non-missing observations as their denominator;
+    total percentages use all rows. Missing values are retained as an
+    explicit row so their contribution is visible.
+    """
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Expected a pandas DataFrame.")
+    if not isinstance(variable, str) or variable not in df.columns:
+        raise ValueError("Select a valid categorical variable.")
+    series = df[variable]
+    if pd.api.types.is_numeric_dtype(series) and not pd.api.types.is_bool_dtype(series):
+        raise TypeError(
+            "Frequency distribution requires a categorical, ordinal, binary or boolean variable. "
+            "Review numeric category codes and convert them to a categorical type first."
+        )
+    counts = series.value_counts(dropna=False, sort=True)
+    valid_n = int(series.notna().sum())
+    total_n = int(len(series))
+    missing_n = total_n - valid_n
+    if valid_n == 0:
+        raise ValueError("The selected variable contains no non-missing categories.")
+    rows = []
+    for category, count in counts.items():
+        is_missing = bool(pd.isna(category))
+        rows.append({
+            "category": "(Missing)" if is_missing else str(category),
+            "count": int(count),
+            "valid_percent": float(count / valid_n * 100) if not is_missing else None,
+            "total_percent": float(count / total_n * 100) if total_n else 0.0,
+            "is_missing": is_missing,
+        })
+    table = pd.DataFrame(rows, columns=[
+        "category", "count", "valid_percent", "total_percent", "is_missing"
+    ])
+    findings = [
+        f"{variable} contains {len(counts) - (1 if missing_n else 0)} observed category/categories across {valid_n:,} valid responses.",
+        f"{missing_n:,} of {total_n:,} records ({missing_n / total_n:.1%} if total_n else 0) are missing.",
+    ]
+    limitations = [
+        "Percentages are unweighted and describe the observed dataset; they are not population estimates.",
+        "Valid percentages exclude missing values; total percentages include missing values in the denominator.",
+    ]
+    return AnalysisResult(
+        title=f"Frequency distribution: {variable}",
+        method="Categorical frequency distribution",
+        status="success",
+        tables={"frequency_table": table},
+        findings=findings,
+        assumptions=[
+            "Category labels and any special missing-value codes have been reviewed.",
+            "Each row represents one observational unit for this variable.",
+        ],
+        limitations=limitations,
+        metadata={
+            "variable": variable,
+            "total_n": total_n,
+            "valid_n": valid_n,
+            "missing_n": missing_n,
+            "observed_categories": int(len(counts) - (1 if missing_n else 0)),
+            "estimate_scope": "observed_dataset",
+            "population_representative": False,
+            "sampling_design_aware": False,
+        },
+    )

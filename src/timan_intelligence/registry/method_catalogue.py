@@ -177,6 +177,13 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             outputs=["Category counts", "Valid percentages", "Cumulative percentages", "Missing count"],
             use_cases=["Describe categorical responses", "Summarise survey questions", "Profile population characteristics"],
             aliases=["Frequencies", "Frequencies and proportions", "Frequency table", "Counts and percentages"],
+            implementation_status="implemented",
+            verification_status="unit_tested",
+            execution_eligibility="eligible",
+            limitations=[
+                "Percentages are unweighted and describe the observed dataset, not a population estimate.",
+                "Valid percentages exclude missing values; total percentages include them.",
+            ],
         ),
         _method(
             entity_id="method.descriptive.categorical.cross_tabulation",

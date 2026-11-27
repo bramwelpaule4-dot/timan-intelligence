@@ -14,7 +14,7 @@ from timan_intelligence.registry.method_catalogue import get_statistical_methods
 
 from timan_intelligence.core.contracts import AnalysisResult
 from timan_intelligence.core.statistical_engine import (
-    run_descriptive_statistics,
+    run_descriptive_statistics,\n    run_categorical_frequency_distribution,
     run_independent_samples_t_test,
     run_mean_confidence_interval,
     run_one_sample_t_test,
@@ -45,7 +45,7 @@ class AnalysisExecutionError(ValueError):
 
 
 _EXECUTOR_BY_METHOD_ID = {
-    "method.descriptive.numeric.summary": "descriptive",
+    "method.descriptive.numeric.summary": "descriptive",\n    "method.descriptive.categorical.frequency": "categorical_frequency",
     "method.inference.confidence_interval.mean": "mean_ci",
     "method.inference.comparison.t_test.one_sample": "one_sample_t",
     "method.inference.comparison.binomial.one_sample": "one_sample_binomial",
@@ -215,7 +215,7 @@ def execute_recommendation(
 
     options = recommendation.get("options") or {}
 
-    if executor == "descriptive":
+    if executor == "categorical_frequency":\n        if len(variables) != 1:\n            raise AnalysisExecutionError("A frequency distribution requires exactly one categorical variable.")\n        result = run_categorical_frequency_distribution(df, variables[0])\n    elif executor == "descriptive":
         if len(variables) != 1:
             raise AnalysisExecutionError(
                 "Descriptive statistics require exactly one numeric variable."
