@@ -941,3 +941,39 @@ def test_survival_execution_requires_explicit_event_value(method, variables, opt
     recommendation = {"method": method, "variables": variables, "status": "review_required", "options": options}
     with pytest.raises(AnalysisExecutionError, match="event_value"):
         execute_recommendation(frame, recommendation, approved=True)
+
+
+
+def test_execution_runs_approved_survey_sample_size_planning():
+    recommendation = {
+        "method": "Survey sample-size determination",
+        "method_id": "method.design.sample_size.proportion_mean",
+        "variables": [],
+        "status": "review_required",
+        "options": {
+            "parameter": "proportion",
+            "confidence_level": 0.95,
+            "margin_of_error": 0.05,
+            "population_size": 10000,
+            "prevalence": 0.5,
+            "design_effect": 1.5,
+            "nonresponse_rate": 0.1,
+        },
+    }
+    result = execute_recommendation(pd.DataFrame({"unused": [1, 2, 3]}), recommendation, approved=True)
+    assert result.status == "success"
+    assert result.metadata["recommended_sample_size"] > 0
+    assert result.metadata["finite_population_correction_applied"] is True
+    assert result.metadata["design_effect"] == 1.5
+
+
+def test_sample_size_execution_rejects_dataset_variables():
+    recommendation = {
+        "method": "Survey sample-size determination",
+        "method_id": "method.design.sample_size.proportion_mean",
+        "variables": ["unused"],
+        "status": "review_required",
+        "options": {"parameter": "proportion"},
+    }
+    with pytest.raises(AnalysisExecutionError, match="does not take dataset variables"):
+        execute_recommendation(pd.DataFrame({"unused": [1, 2, 3]}), recommendation, approved=True)

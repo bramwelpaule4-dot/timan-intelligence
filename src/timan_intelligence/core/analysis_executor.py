@@ -62,6 +62,7 @@ from timan_intelligence.services.analysis_service import (
     run_cronbach_alpha_service,
     run_mcdonald_omega_total_service,
     run_survey_estimation_service,
+    run_sample_size_service,
 )
 
 
@@ -119,6 +120,7 @@ _EXECUTOR_BY_METHOD_ID = {
     "method.inference.survival.cox": "cox_survival",
     "method.measurement.reliability.cronbach_alpha": "cronbach_alpha",
     "method.measurement.reliability.mcdonald_omega_total": "mcdonald_omega_total",
+    "method.design.sample_size.proportion_mean": "sample_size",
 }
 
 
@@ -265,7 +267,11 @@ def execute_recommendation(
 
     options = recommendation.get("options") or {}
 
-    if executor == "mcdonald_omega_total":
+    if executor == "sample_size":
+        if variables:
+            raise AnalysisExecutionError("Sample-size determination is a planning calculation and does not take dataset variables.")
+        result = run_sample_size_service(**options)
+    elif executor == "mcdonald_omega_total":
         if len(variables) < 3:
             raise AnalysisExecutionError("McDonald omega requires at least three scale item variables.")
         result = run_mcdonald_omega_total_service(df, variables)

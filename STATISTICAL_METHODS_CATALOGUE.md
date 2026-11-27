@@ -2422,3 +2422,10 @@ STL decomposition now adds a robust remainder z-score based on the median absolu
 ## Games-Howell post-hoc comparisons
 
 Games-Howell provides pairwise independent-group mean comparisons without assuming equal variances. Each pair uses its own sample variances, Welch-Satterthwaite degrees of freedom and studentized-range adjustment for family-wise error across the comparison set. It reports Group 2 minus Group 1 mean differences, q statistics, adjusted p-values and simultaneous confidence intervals. It is commonly used after Welch one-way ANOVA when heteroscedasticity makes Tukey HSD inappropriate. Independent observations and reasonably well-behaved within-group distributions are still required; it is not adjusted for complex survey designs or repeated measures.
+
+
+## Survey sample-size determination
+
+TimanStat provides a planning calculation for a population proportion or mean using a normal-approximation precision formula. The calculation can apply finite-population correction, a user-supplied design effect and expected nonresponse inflation. It reports the sample size at each adjustment stage and records the planning assumptions.
+
+This procedure is not a hypothesis-test power analysis. The design effect is an explicit external assumption; the calculation does not estimate intraclass correlation, determine optimal stratified allocation, or guarantee representativeness. Users should justify prevalence or standard-deviation inputs from prior studies or pilot data and review the sampling frame and fieldwork constraints.

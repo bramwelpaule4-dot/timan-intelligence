@@ -1104,6 +1104,32 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             execution_eligibility="conditional",
         ),
 
+        _method(
+            entity_id="method.design.sample_size.proportion_mean",
+            name="Survey sample-size determination",
+            description="Calculates a planning sample size for estimating a population proportion or mean, with optional finite-population correction, design-effect inflation and nonresponse adjustment.",
+            family="survey_design",
+            purpose="study_planning",
+            priority="P1",
+            outcome_types=["proportion", "mean"],
+            required_roles=[],
+            data_requirements=["A defensible confidence level and margin of error; for a mean, a planning standard deviation; optionally a known finite population size, design effect and expected nonresponse rate."],
+            assumptions=["The normal-approximation formula is suitable for the planned estimand and precision.", "Planning prevalence or standard deviation is supplied from prior evidence or a pilot when available.", "The design effect is an externally supplied planning assumption, not estimated by this calculation."],
+            outputs=["Base sample size", "Finite-population corrected sample size", "Design-effect adjusted sample size", "Nonresponse-adjusted recommended sample size"],
+            use_cases=["Plan household and community surveys", "Estimate sample size for a proportion or mean", "Account transparently for finite populations, clustering design effect and expected nonresponse"],
+            study_designs=["cross_sectional", "survey", "cohort", "general_research"],
+            sampling_design_aware=True,
+            aliases=["Sample size calculation", "Sample size calculator", "Survey sample size"],
+            limitations=[
+                "This is a normal-approximation precision calculation, not a power analysis for a hypothesis test.",
+                "The supplied design effect is an assumption; no intraclass correlation or cluster structure is estimated.",
+                "The calculation does not allocate respondents across strata or account for unequal inclusion probabilities.",
+                "The recommended sample size is a planning target and does not guarantee representativeness or adequate precision under nonresponse or frame error.",
+            ],
+            implementation_status="implemented",
+            verification_status="unit_tested",
+            execution_eligibility="eligible",
+        ),
     ]
     return tuple(methods)
 
