@@ -70,6 +70,7 @@ IMPLEMENTED_METHODS = frozenset(
         "method.inference.survival.cox",
         "method.measurement.reliability.cronbach_alpha",
         "method.measurement.reliability.mcdonald_omega_total",
+        "method.design.sample_size.proportion_mean",
     }
 )
 
