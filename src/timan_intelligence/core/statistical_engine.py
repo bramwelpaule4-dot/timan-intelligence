@@ -1377,6 +1377,29 @@ def run_two_independent_proportions_test(df: pd.DataFrame, outcome_variable: str
     p1, p2 = x1 / n1, x2 / n2
     difference = p1 - p2
     cohen_h = float(2.0 * (np.arcsin(np.sqrt(p1)) - np.arcsin(np.sqrt(p2))))
+    failures_1, failures_2 = n1 - x1, n2 - x2
+    risk_ratio = (float(p1 / p2) if p2 > 0 else (float("inf") if p1 > 0 else None))
+    odds_denominator = failures_1 * x2
+    odds_numerator = x1 * failures_2
+    odds_ratio = (
+        float(odds_numerator / odds_denominator)
+        if odds_denominator > 0
+        else (float("inf") if odds_numerator > 0 else None)
+    )
+    rr_ci = or_ci = None
+    if x1 > 0 and failures_1 > 0 and x2 > 0 and failures_2 > 0:
+        from scipy.stats import norm as normal_distribution
+        log_critical = float(normal_distribution.ppf(0.5 + level / 2.0))
+        rr_se_log = float(np.sqrt(1.0 / x1 - 1.0 / n1 + 1.0 / x2 - 1.0 / n2))
+        or_se_log = float(np.sqrt(1.0 / x1 + 1.0 / failures_1 + 1.0 / x2 + 1.0 / failures_2))
+        rr_ci = (
+            float(np.exp(np.log(risk_ratio) - log_critical * rr_se_log)),
+            float(np.exp(np.log(risk_ratio) + log_critical * rr_se_log)),
+        )
+        or_ci = (
+            float(np.exp(np.log(odds_ratio) - log_critical * or_se_log)),
+            float(np.exp(np.log(odds_ratio) + log_critical * or_se_log)),
+        )
     pooled = (x1 + x2) / (n1 + n2)
     pooled_se = (pooled * (1 - pooled) * (1 / n1 + 1 / n2)) ** 0.5
     z = difference / pooled_se if pooled_se else (0.0 if difference == 0 else (float("inf") if difference > 0 else float("-inf")))
@@ -1393,12 +1416,22 @@ def run_two_independent_proportions_test(df: pd.DataFrame, outcome_variable: str
     lower = max(-1.0, difference - ((p1-l1)**2 + (u2-p2)**2)**0.5)
     upper = min(1.0, difference + ((u1-p1)**2 + (p2-l2)**2)**0.5)
     se = (p1*(1-p1)/n1 + p2*(1-p2)/n2)**0.5
-    summary = pd.DataFrame([{"Group 1": str(labels[0]), "Group 2": str(labels[1]), "Group 1 successes": x1, "Group 1 n": n1, "Group 1 proportion": p1, "Group 2 successes": x2, "Group 2 n": n2, "Group 2 proportion": p2, "Difference (group 1 - group 2)": difference, "Cohen's h": cohen_h, "Standard error": se, "Pooled z statistic": z, "p-value": p_value, "Alternative": alternative, "Confidence level": level, "CI lower": lower, "CI upper": upper, "Incomplete pairs excluded": excluded}])
-    findings = [f"Group {labels[0]}: {x1}/{n1} events ({p1:.1%}); group {labels[1]}: {x2}/{n2} events ({p2:.1%}).", f"Estimated difference (group 1 minus group 2): {difference:.1%}.", f"Cohen's h = {cohen_h:.4g} (group 1 minus group 2).", f"Pooled score z = {z:.4g}; p = {p_value:.4g} ({alternative}).", f"{level:.0%} Newcombe-Wilson confidence interval: [{lower:.1%}, {upper:.1%}]."]
-    limitations = ["Assumes two independent groups and independent Bernoulli observations within each group.", "Cohen's h is a directional arcsine-transformed standardized difference in proportions; direction is Group 1 minus Group 2.", "The hypothesis test uses the pooled two-proportion score z statistic without continuity correction.", "The confidence interval uses Newcombe's method combining two Wilson score intervals.", "Not adjusted for survey weights, clustering, stratification, repeated measures or finite-population corrections."]
+    summary = pd.DataFrame([{"Group 1": str(labels[0]), "Group 2": str(labels[1]), "Group 1 successes": x1, "Group 1 n": n1, "Group 1 proportion": p1, "Group 2 successes": x2, "Group 2 n": n2, "Group 2 proportion": p2, "Difference (group 1 - group 2)": difference, "Cohen's h": cohen_h,
+        "Risk ratio (group 1 / group 2)": risk_ratio,
+        "Risk ratio CI lower": rr_ci[0] if rr_ci else None,
+        "Risk ratio CI upper": rr_ci[1] if rr_ci else None,
+        "Odds ratio (group 1 vs group 2)": odds_ratio,
+        "Odds ratio CI lower": or_ci[0] if or_ci else None,
+        "Odds ratio CI upper": or_ci[1] if or_ci else None,
+        "Standard error": se, "Pooled z statistic": z, "p-value": p_value, "Alternative": alternative, "Confidence level": level, "CI lower": lower, "CI upper": upper, "Incomplete pairs excluded": excluded}])
+    findings = [f"Group {labels[0]}: {x1}/{n1} events ({p1:.1%}); group {labels[1]}: {x2}/{n2} events ({p2:.1%}).", f"Estimated difference (group 1 minus group 2): {difference:.1%}.", f"Cohen's h = {cohen_h:.4g} (group 1 minus group 2).", f"Risk ratio = {risk_ratio if risk_ratio is not None else 'undefined'}; odds ratio = {odds_ratio if odds_ratio is not None else 'undefined'}.", f"Pooled score z = {z:.4g}; p = {p_value:.4g} ({alternative}).", f"{level:.0%} Newcombe-Wilson confidence interval: [{lower:.1%}, {upper:.1%}]."]
+    limitations = ["Assumes two independent groups and independent Bernoulli observations within each group.", "Cohen's h is a directional arcsine-transformed standardized difference in proportions; direction is Group 1 minus Group 2.", "Risk-ratio and odds-ratio confidence intervals use log-Wald approximations and are reported only when all four 2x2 cells are non-zero; they may be unreliable with sparse counts.", "When a zero cell makes a ratio undefined or infinite, no continuity correction is silently applied.", "The hypothesis test uses the pooled two-proportion score z statistic without continuity correction.", "The confidence interval uses Newcombe's method combining two Wilson score intervals.", "Not adjusted for survey weights, clustering, stratification, repeated measures or finite-population corrections."]
     if excluded:
         limitations.append(f"{excluded:,} rows with a missing outcome or group label were excluded.")
-    return AnalysisResult(title=f"Two independent proportions: {outcome_variable} by {group_variable}", method="Two-independent-proportions score test", status="success", tables={"test_summary": summary}, findings=findings, assumptions=["Outcome is binary (1=event, 0=non-event).", "The grouping variable defines exactly two independent groups.", "Observations are independent within each group."], limitations=limitations, metadata={"outcome_variable": outcome_variable, "group_variable": group_variable, "group_1_label": str(labels[0]), "group_2_label": str(labels[1]), "group_1_successes": x1, "group_1_n": n1, "group_1_proportion": p1, "group_2_successes": x2, "group_2_n": n2, "group_2_proportion": p2, "estimate": difference, "cohen_h": cohen_h, "standard_error": se, "z_statistic": float(z), "p_value": p_value, "alternative": alternative, "confidence_level": level, "confidence_interval": (float(lower), float(upper)), "incomplete_pairs_excluded": excluded, "sampling_design_aware": False, "study_design": "independent_groups", "inference_framework": "pooled_two_proportion_score_newcombe_wilson"})
+    return AnalysisResult(title=f"Two independent proportions: {outcome_variable} by {group_variable}", method="Two-independent-proportions score test", status="success", tables={"test_summary": summary}, findings=findings, assumptions=["Outcome is binary (1=event, 0=non-event).", "The grouping variable defines exactly two independent groups.", "Observations are independent within each group."], limitations=limitations, metadata={"outcome_variable": outcome_variable, "group_variable": group_variable, "group_1_label": str(labels[0]), "group_2_label": str(labels[1]), "group_1_successes": x1, "group_1_n": n1, "group_1_proportion": p1, "group_2_successes": x2, "group_2_n": n2, "group_2_proportion": p2, "estimate": difference, "cohen_h": cohen_h,
+        "risk_ratio": risk_ratio, "risk_ratio_confidence_interval": rr_ci,
+        "odds_ratio": odds_ratio, "odds_ratio_confidence_interval": or_ci,
+        "standard_error": se, "z_statistic": float(z), "p_value": p_value, "alternative": alternative, "confidence_level": level, "confidence_interval": (float(lower), float(upper)), "incomplete_pairs_excluded": excluded, "sampling_design_aware": False, "study_design": "independent_groups", "inference_framework": "pooled_two_proportion_score_newcombe_wilson"})
 
 def run_one_sample_binomial_test(df: pd.DataFrame, variable: str, reference_proportion: float,
                                 alternative: str = "two-sided", confidence_level: float = 0.95) -> AnalysisResult:

@@ -2345,3 +2345,8 @@ Neither coefficient establishes construct validity or measurement invariance. Th
 ## Welch independent-samples t-test confidence interval
 
 The Welch independent-samples t-test now reports a two-sided confidence interval for the Group 1 minus Group 2 mean difference. Its standard error and Satterthwaite degrees of freedom are used for the interval; the normal critical value is used only when the degrees of freedom are infinite. The confidence level is configurable and defaults to 95%.
+
+
+## Binary-outcome effect measures for two independent groups
+
+The two-independent-proportions procedure additionally reports the risk ratio and odds ratio, each oriented as Group 1 relative to Group 2. When all four cells in the 2×2 table are non-zero, log-Wald confidence intervals are reported using the selected confidence level. If any cell is zero, the raw ratio may be zero, infinite or undefined and the corresponding interval is withheld. No continuity correction is applied implicitly; sparse-cell results require cautious interpretation.
