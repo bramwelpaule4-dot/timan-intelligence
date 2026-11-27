@@ -37,6 +37,7 @@ from timan_intelligence.core.statistical_engine import (
     run_repeated_measures_anova,
     run_linear_mixed_effects_model,
 )
+from timan_intelligence.core.numeric_association import run_numeric_association
 
 
 class AnalysisExecutionError(ValueError):
@@ -56,6 +57,8 @@ _EXECUTOR_BY_METHOD_ID = {
     "method.inference.comparison.t_test.paired": "paired_t",
     "method.inference.association.chi_square.independence": "chi_square_independence",
     "method.inference.association.fisher_exact": "fisher_exact",
+    "method.inference.association.correlation.pearson": "numeric_correlation",
+    "method.inference.association.correlation.spearman": "numeric_correlation",
     "method.inference.comparison.t_test.independent.welch": "welch_t",
     "method.inference.comparison.anova.one_way": "anova",
     "method.inference.comparison.mann_whitney": "mann_whitney",
@@ -115,7 +118,7 @@ def _validate_design_compatibility(
         "paired", "repeated_measure", "repeated_measures",
         "longitudinal", "time_series",
     }
-    if executor in {"welch_t", "anova", "mann_whitney", "kruskal_wallis", "dunn_holm", "welch_mean_difference_ci", "chi_square_independence", "fisher_exact", "two_proportions", "two_proportions_ci"} and study_design in repeated_designs:
+    if executor in {"welch_t", "anova", "mann_whitney", "kruskal_wallis", "dunn_holm", "welch_mean_difference_ci", "chi_square_independence", "fisher_exact", "two_proportions", "two_proportions_ci", "numeric_correlation"} and study_design in repeated_designs:
         raise AnalysisExecutionError(
             "Execution blocked: this executor assumes independent groups and "
             "is not validated for paired, repeated-measures, longitudinal or "
@@ -286,6 +289,28 @@ def execute_recommendation(
         )
         result = run_proportion_confidence_interval(
             df, variables[0], confidence_level=confidence_level
+        )
+    elif executor == "numeric_correlation":
+        if len(variables) != 2:
+            raise AnalysisExecutionError("Correlation requires exactly two numeric variables.")
+        association = run_numeric_association(df, variables[0], variables[1])
+        result = AnalysisResult(
+            title=f"Numeric association: {variables[0]} and {variables[1]}",
+            method="Pearson product-moment and Spearman rank correlation",
+            status="success",
+            tables={
+                "descriptive_summary": pd.DataFrame(association["descriptive_summary"]).T,
+                "paired_observations": association["paired_data"].rename(
+                    columns={"first": variables[0], "second": variables[1]}
+                ),
+            },
+            findings=list(association["findings"]),
+            assumptions=[
+                "Each complete pair represents one independent observational unit.",
+                "Pearson correlation describes linear association; Spearman correlation describes monotonic rank association.",
+            ],
+            limitations=list(association["warnings"]),
+            metadata=dict(association["metadata"]),
         )
     elif executor == "fisher_exact":
         if len(variables) != 2:

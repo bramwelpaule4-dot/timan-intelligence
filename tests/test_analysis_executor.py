@@ -637,3 +637,39 @@ def test_execution_passes_random_slope_option_to_linear_mixed_model():
     result = execute_recommendation(frame, recommendation, approved=True)
     assert result.metadata["random_effect_structure"] == "random_intercept_and_slope"
     assert result.metadata["random_slope_variable"] == "visit"
+
+
+@pytest.mark.parametrize("method,method_id", [
+    ("Pearson correlation", "method.inference.association.correlation.pearson"),
+    ("Spearman rank correlation", "method.inference.association.correlation.spearman"),
+])
+def test_execution_runs_registered_numeric_correlation(method, method_id):
+    df = pd.DataFrame({
+        "income": [10, 12, 15, 18, 21, 25, 29, 34],
+        "expenditure": [8, 11, 13, 17, 19, 23, 27, 31],
+    })
+    recommendation = {
+        "method": method,
+        "method_id": method_id,
+        "variables": ["income", "expenditure"],
+        "status": "review_required",
+    }
+    result = execute_recommendation(df, recommendation, approved=True)
+    assert result.status == "success"
+    assert result.metadata["method_id"] == method_id
+    assert result.metadata["valid_n"] == 8
+    assert "pearson_r" in result.metadata
+    assert "spearman_rho" in result.metadata
+
+
+@pytest.mark.parametrize("study_design", ["paired", "repeated_measures", "longitudinal", "time_series"])
+def test_execution_blocks_correlation_for_dependent_study_designs(study_design):
+    df = pd.DataFrame({"x": [1, 2, 3, 4], "y": [2, 4, 5, 8]})
+    recommendation = {
+        "method": "Pearson correlation",
+        "variables": ["x", "y"],
+        "status": "review_required",
+        "design_context": {"study_design": study_design},
+    }
+    with pytest.raises(AnalysisExecutionError, match="assumes independent groups"):
+        execute_recommendation(df, recommendation, approved=True)
