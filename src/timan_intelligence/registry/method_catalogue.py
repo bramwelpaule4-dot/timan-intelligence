@@ -56,6 +56,7 @@ IMPLEMENTED_METHODS = frozenset(
         "method.inference.regression.count.negative_binomial",
         "method.inference.survival.kaplan_meier",
         "method.inference.survival.cox",
+        "method.measurement.reliability.cronbach_alpha",
     }
 )
 
