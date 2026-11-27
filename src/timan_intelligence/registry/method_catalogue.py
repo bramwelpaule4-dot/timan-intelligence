@@ -39,6 +39,7 @@ IMPLEMENTED_METHODS = frozenset(
         "method.inference.comparison.posthoc.tukey",
         "method.inference.resampling.bootstrap.confidence_interval",
         "method.forecasting.time_series.arima",
+        "method.forecasting.time_series.sarima",
         "method.survey.inference.complex_design",
         "method.inference.confidence_interval.mean_difference.welch",
         "method.inference.confidence_interval.mean_difference.paired",
@@ -930,6 +931,31 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             verification_status="unit_tested",
             execution_eligibility="conditional",
         ),
+        _method(
+            entity_id="method.forecasting.time_series.sarima",
+            name="Seasonal ARIMA (SARIMA) time-series model",
+            description="Models non-seasonal and seasonal autoregressive and moving-average structure in a univariate regularly spaced time series.",
+            family="time_series",
+            purpose="prediction",
+            priority="P3",
+            outcome_types=["numeric_time_series"],
+            required_roles=["time_index", "numeric_outcome"],
+            data_requirements=["A unique, complete and regularly spaced time index with at least two seasonal cycles and sufficient observations."],
+            assumptions=["The seasonal period reflects the actual data-generating calendar.", "Non-seasonal and seasonal differencing orders are justified.", "Residual diagnostics and out-of-sample forecast validation are reviewed."],
+            outputs=["SARIMA and seasonal orders", "Parameter estimates", "Out-of-sample forecasts", "Forecast prediction intervals", "Information criteria", "Residual diagnostics"],
+            use_cases=["Forecast monthly, quarterly, weekly or other regularly seasonal numeric outcomes"],
+            study_designs=["time_series"],
+            limitations=[
+                "Univariate seasonal ARIMA only; no exogenous regressors, automatic order selection, intervention terms or multiple seasonal periods.",
+                "Requires a regular unique time index, complete finite outcomes and at least two seasonal cycles.",
+                "Forecast intervals are conditional on the selected model and do not account for model-selection uncertainty.",
+                "Not adjusted for complex survey weights, clustering or stratification.",
+            ],
+            implementation_status="implemented",
+            verification_status="unit_tested",
+            execution_eligibility="conditional",
+        ),
+
     ]
     return tuple(methods)
 

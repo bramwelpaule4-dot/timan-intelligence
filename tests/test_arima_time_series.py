@@ -142,3 +142,79 @@ def test_arima_validation_excludes_zero_denominators_from_mape():
     validation = result.tables["holdout_validation"].iloc[0]
     assert validation["mape_denominator_excluded"] == 5
     assert pd.isna(validation["mean_absolute_percentage_error"])
+
+
+
+def _seasonal_series():
+    rng = np.random.default_rng(2026)
+    periods = 84
+    t = np.arange(periods)
+    values = 25 + 0.08 * t + 4.0 * np.sin(2 * np.pi * t / 12) + rng.normal(0, 0.8, periods)
+    return pd.DataFrame({
+        "month": pd.date_range("2018-01-01", periods=periods, freq="MS"),
+        "value": values,
+    })
+
+
+def test_sarima_fits_seasonal_model_and_returns_prediction_intervals_and_diagnostics():
+    from timan_intelligence.core.time_series import run_sarima_time_series_model
+
+    result = run_sarima_time_series_model(
+        _seasonal_series(), "month", "value",
+        order=(1, 0, 0), seasonal_order=(1, 0, 0, 12), forecast_steps=4,
+    )
+    forecast = result.tables["forecasts"]
+    assert result.status == "success"
+    assert len(forecast) == 4
+    assert forecast["prediction_interval_lower"].le(forecast["forecast"]).all()
+    assert forecast["prediction_interval_upper"].ge(forecast["forecast"]).all()
+    assert set(result.tables) == {"parameter_estimates", "forecasts", "residual_diagnostics"}
+    assert result.metadata["seasonal_order"] == (1, 0, 0, 12)
+    assert result.metadata["frequency"] == "MS"
+    assert result.metadata["converged"] is True
+
+
+def test_sarima_rejects_insufficient_seasonal_cycles_invalid_order_and_irregular_index():
+    from timan_intelligence.core.time_series import run_sarima_time_series_model
+
+    frame = _seasonal_series()
+    with pytest.raises(ValueError, match="At least 30 observations"):
+        run_sarima_time_series_model(
+            frame.head(20), "month", "value",
+            order=(1, 0, 0), seasonal_order=(1, 0, 0, 12),
+        )
+    with pytest.raises(ValueError, match="Seasonal order"):
+        run_sarima_time_series_model(
+            frame, "month", "value",
+            order=(1, 0, 0), seasonal_order=(1, 2, 0, 12),
+        )
+    with pytest.raises(ValueError, match="regularly spaced"):
+        run_sarima_time_series_model(
+            frame.drop(index=3), "month", "value",
+            order=(1, 0, 0), seasonal_order=(1, 0, 0, 12),
+        )
+
+
+def test_sarima_executor_requires_approval_and_accepts_time_series_design():
+    from timan_intelligence.core.time_series import run_sarima_time_series_model
+
+    from timan_intelligence.core.analysis_executor import (
+        AnalysisExecutionError, available_execution_methods, execute_recommendation,
+    )
+    frame = _seasonal_series()
+    recommendation = {
+        "method": "Seasonal ARIMA (SARIMA) time-series model",
+        "method_id": "method.forecasting.time_series.sarima",
+        "variables": ["month", "value"],
+        "status": "review_required",
+        "options": {
+            "order": [1, 0, 0], "seasonal_order": [1, 0, 0, 12], "forecast_steps": 3,
+        },
+        "design_context": {"study_design": "time_series"},
+    }
+    assert "Seasonal ARIMA (SARIMA) time-series model" in available_execution_methods()
+    with pytest.raises(AnalysisExecutionError, match="approval"):
+        execute_recommendation(frame, recommendation)
+    result = execute_recommendation(frame, recommendation, approved=True)
+    assert result.status == "success"
+    assert result.metadata["method_id"] == "method.forecasting.time_series.sarima"

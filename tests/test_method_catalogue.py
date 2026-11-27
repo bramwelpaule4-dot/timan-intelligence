@@ -39,6 +39,15 @@ def test_only_existing_execution_methods_are_marked_implemented():
     assert len(implemented) == 42
 
 
+def test_sarima_is_registered_as_conditionally_executable():
+    method = get_statistical_method("method.forecasting.time_series.sarima")
+    assert method is not None
+    assert method.name == "Seasonal ARIMA (SARIMA) time-series model"
+    assert method.implementation_status == "implemented"
+    assert method.verification_status == "unit_tested"
+    assert method.execution_eligibility == "conditional"
+
+
 def test_exact_binomial_is_registered_as_conditionally_executable():
     method = get_statistical_method("method.inference.comparison.binomial.one_sample")
     assert method is not None
@@ -177,9 +186,9 @@ def test_catalogue_summary_reports_lifecycle_and_priorities():
     summary = get_statistical_method_summary()
 
     assert summary["catalogue_version"] == CATALOGUE_VERSION
-    assert summary["total_methods"] == 42
+    assert summary["total_methods"] == 43
     assert summary["implementation_status"]["implemented"] == 42
-    assert summary["implementation_status"].get("planned", 0) == 0
+    assert summary["implementation_status"].get("planned", 0) == 1
     assert set(summary["release_priorities"]) == {"P1", "P2", "P3"}
 
 

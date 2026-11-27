@@ -2375,3 +2375,8 @@ The ARIMA implementation fits a user-specified non-seasonal univariate ARIMA(p,d
 ## Complex survey estimation execution
 
 The complex survey estimation method now executes design-based means, totals and category proportions for the currently supported probability-sample designs: stratified SRS with constant expansion weights within strata, and with-replacement ultimate-PSU variance estimation (optionally stratified). It returns design-weighted estimates, standard errors, confidence intervals and the estimator's design details. General multistage variance estimation, finite-population corrections and replicate-weight variance estimation remain unsupported. The method is approval-gated and requires the analyst to declare the design and supply the corresponding strata or PSU identifier.
+
+
+## Seasonal ARIMA (SARIMA)
+
+SARIMA extends non-seasonal ARIMA with seasonal autoregressive, differencing and moving-average terms. The implementation fits a univariate SARIMAX model with no exogenous regressors, requires a unique complete regular time index and at least two seasonal cycles, and returns forecasts with model-based prediction intervals, parameter estimates, information criteria and residual diagnostics. The analyst must specify and justify both the non-seasonal order (p,d,q) and seasonal order (P,D,Q,s). It does not automatically select orders, handle multiple seasonal periods, impute missing periods or account for complex survey designs. Execution remains approval-gated and restricted to time-series designs.
