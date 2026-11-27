@@ -2081,7 +2081,7 @@ def run_linear_mixed_effects_model(df: pd.DataFrame, outcome_variable: str, grou
     rows = []
     for name in exog.columns:
         lo, hi = map(float, ci.loc[name].tolist())
-        rows.append({"Term": name, "Coefficient": float(fitted.fe_params[name]), "Standard error": float(fitted.bse_fe[name]), "z statistic": float(fitted.tvalues[name]), "p-value": float(fitted.pvalues[name]), "95% CI lower": lo, "95% CI upper": hi})
+        rows.append({"Term": name, "Coefficient": float(fitted.fe_params[name]), "Standard error": float(fitted.bse_fe[list(exog.columns).index(name)]), "z statistic": float(fitted.tvalues[name]), "p-value": float(fitted.pvalues[name]), "95% CI lower": lo, "95% CI upper": hi})
     random_var = float(np.asarray(fitted.cov_re)[0, 0])
     residual_var = float(fitted.scale)
     icc = random_var / (random_var + residual_var) if random_var + residual_var > 0 else None
