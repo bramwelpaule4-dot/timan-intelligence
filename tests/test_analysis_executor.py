@@ -231,7 +231,8 @@ def test_execution_registry_exposes_only_implemented_methods():
     assert "Descriptive statistics" in methods
     assert "Independent-samples t-test" in methods
     assert "One-way ANOVA" in methods
-    assert "Frequencies and proportions" not in methods
+    assert "Frequencies and proportions" in methods
+    assert "Frequency distribution" in methods
 
 def test_execution_blocks_catalogued_but_unimplemented_method():
     df = pd.DataFrame({

@@ -22,6 +22,7 @@ CATALOGUE_VERSION = "1.0.0"
 IMPLEMENTED_METHODS = frozenset(
     {
         "method.descriptive.numeric.summary",
+        "method.descriptive.categorical.frequency",
         "method.inference.confidence_interval.mean",
         "method.inference.comparison.t_test.one_sample",
         "method.inference.comparison.binomial.one_sample",
