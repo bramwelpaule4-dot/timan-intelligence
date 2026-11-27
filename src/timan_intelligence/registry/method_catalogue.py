@@ -947,7 +947,7 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             required_roles=["time_index", "numeric_outcome"],
             data_requirements=["A unique, complete, regularly spaced numeric time series with at least two seasonal cycles."],
             assumptions=["The selected seasonal period reflects the calendar cycle.", "The series has a stable enough seasonal pattern for additive decomposition to be informative."],
-            outputs=["Observed series", "Trend component", "Seasonal component", "Remainder component", "Trend and seasonal strength diagnostics"],
+            outputs=["Observed series", "Trend component", "Seasonal component", "Remainder component", "Trend and seasonal strength diagnostics", "MAD-based remainder outlier flags"],
             use_cases=["Explore trend and recurring seasonal patterns before forecasting", "Separate observed time-series variation into interpretable components"],
             study_designs=["time_series"],
             limitations=[
@@ -955,6 +955,7 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
                 "The seasonal period must be specified by the analyst; multiple seasonal periods are not modelled simultaneously.",
                 "Requires a unique regular time index and complete finite observations; no missing-period imputation is performed.",
                 "Component strength measures are descriptive diagnostics and are not hypothesis tests.",
+                "Remainder outlier flags use a robust MAD threshold as a screening heuristic, not a formal anomaly test or proof of erroneous data.",
             ],
             implementation_status="implemented",
             verification_status="unit_tested",

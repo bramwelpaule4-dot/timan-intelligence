@@ -28,7 +28,7 @@ def test_stl_returns_observed_trend_seasonal_and_remainder_components():
     summary = result.tables["summary"].iloc[0]
     assert result.status == "success"
     assert len(components) == 84
-    assert {"observed", "trend", "seasonal", "remainder"}.issubset(components.columns)
+    assert {"observed", "trend", "seasonal", "remainder", "robust_remainder_z", "is_remainder_outlier"}.issubset(components.columns)
     assert np.allclose(
         components["observed"],
         components["trend"] + components["seasonal"] + components["remainder"],
@@ -74,3 +74,30 @@ def test_stl_executor_is_approval_gated_and_allows_time_series_design():
     result = execute_recommendation(frame, recommendation, approved=True)
     assert result.status == "success"
     assert result.metadata["method_id"] == "method.forecasting.time_series.stl_decomposition"
+
+
+
+def test_stl_flags_extreme_remainder_using_mad_score():
+    frame = _seasonal_series()
+    frame.loc[30, "value"] += 25.0
+    result = run_stl_time_series_decomposition(
+        frame, "month", "value", seasonal_period=12, robust=True,
+        outlier_threshold=3.5,
+    )
+    components = result.tables["decomposition"]
+    summary = result.tables["summary"].iloc[0]
+    assert bool(components.loc[30, "is_remainder_outlier"])
+    assert abs(components.loc[30, "robust_remainder_z"]) > 3.5
+    assert summary["remainder_outlier_count"] >= 1
+    assert result.metadata["remainder_outlier_count"] >= 1
+
+
+def test_stl_validates_outlier_threshold():
+    with pytest.raises(ValueError, match="outlier_threshold"):
+        run_stl_time_series_decomposition(
+            _seasonal_series(), "month", "value", outlier_threshold=1.0
+        )
+    with pytest.raises(TypeError, match="outlier_threshold"):
+        run_stl_time_series_decomposition(
+            _seasonal_series(), "month", "value", outlier_threshold=True
+        )

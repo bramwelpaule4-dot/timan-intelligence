@@ -2405,3 +2405,8 @@ The naïve benchmark repeats the latest observed value across the forecast horiz
 ## Exponential-smoothing forecasting
 
 The exponential-smoothing implementation supports simple level smoothing, Holt trend smoothing and Holt-Winters seasonal smoothing, including additive or multiplicative trend/seasonal components and optional damped trend. It reports point forecasts, fitted smoothing parameters, SSE, AIC and BIC. Optional terminal holdout validation reports MAE and RMSE without using holdout observations to fit the validation model. At least 30 training observations are required; seasonal models require at least two complete seasonal cycles in the training data. Multiplicative components require strictly positive values. Prediction intervals and rolling-origin cross-validation are not currently provided; complex survey adjustments are not supported.
+
+
+### STL remainder outlier screening
+
+STL decomposition now adds a robust remainder z-score based on the median absolute deviation (MAD), with a configurable absolute-score threshold (default 3.5). It reports flagged observations and the number of flagged remainders in the summary and metadata. These are heuristic screening signals for analyst review, not formal anomaly tests and not evidence that a record is erroneous. If the remainder MAD is zero or numerically negligible, the scores are unavailable and no observations are flagged.

@@ -464,6 +464,7 @@ def execute_recommendation(
             outcome_variable=variables[1],
             seasonal_period=options.get("seasonal_period", 12),
             robust=options.get("robust", True),
+            outlier_threshold=options.get("outlier_threshold", 3.5),
         )
     elif executor == "stationarity_diagnostics":
         if len(variables) != 2:

@@ -440,8 +440,9 @@ def run_stl_time_series_decomposition(
     outcome_variable: str,
     seasonal_period: int = 12,
     robust: bool = True,
+    outlier_threshold: float = 3.5,
 ) -> AnalysisResult:
-    """Decompose a regular univariate time series into trend, seasonal and remainder."""
+    """Decompose a regular univariate time series and flag extreme STL remainders."""
     from statsmodels.tsa.seasonal import STL
 
     if not isinstance(df, pd.DataFrame) or df.empty:
@@ -461,6 +462,11 @@ def run_stl_time_series_decomposition(
         raise ValueError("seasonal_period must be between 2 and 52.")
     if not isinstance(robust, bool):
         raise TypeError("robust must be a boolean.")
+    if isinstance(outlier_threshold, bool) or not isinstance(outlier_threshold, (int, float)):
+        raise TypeError("outlier_threshold must be numeric.")
+    threshold = float(outlier_threshold)
+    if not np.isfinite(threshold) or not 2.0 <= threshold <= 10.0:
+        raise ValueError("outlier_threshold must be between 2 and 10.")
 
     dates = pd.to_datetime(df[time_variable], errors="coerce")
     if dates.isna().any():
@@ -497,12 +503,21 @@ def run_stl_time_series_decomposition(
 
     trend_strength = _strength(trend)
     seasonal_strength = _strength(seasonal)
+    remainder_median = float(np.median(remainder))
+    remainder_mad = float(np.median(np.abs(remainder - remainder_median)))
+    if remainder_mad > np.finfo(float).eps:
+        robust_remainder_z = 0.6744897501960817 * (remainder - remainder_median) / remainder_mad
+    else:
+        robust_remainder_z = np.full(len(remainder), np.nan, dtype=float)
+    remainder_outlier = np.isfinite(robust_remainder_z) & (np.abs(robust_remainder_z) > threshold)
     decomposition = pd.DataFrame({
         time_variable: dates,
         "observed": observed,
         "trend": trend,
         "seasonal": seasonal,
         "remainder": remainder,
+        "robust_remainder_z": robust_remainder_z,
+        "is_remainder_outlier": remainder_outlier,
     })
     summary = pd.DataFrame([{
         "observations": int(len(values)),
@@ -513,11 +528,15 @@ def run_stl_time_series_decomposition(
         "seasonal_strength": seasonal_strength,
         "remainder_mean": float(np.mean(remainder)),
         "remainder_standard_deviation": float(np.std(remainder, ddof=1)),
+        "remainder_mad": remainder_mad,
+        "outlier_threshold": threshold,
+        "remainder_outlier_count": int(remainder_outlier.sum()),
     }])
     findings = [
         f"STL decomposed {len(values):,} observations at frequency {frequency} using seasonal period {period}.",
         f"Descriptive trend strength is {trend_strength:.3f}; seasonal strength is {seasonal_strength:.3f}.",
-        "Review the component plot and remainder pattern; component strengths are descriptive summaries, not significance tests.",
+        f"Flagged {int(remainder_outlier.sum())} unusually large STL remainder(s) using a robust MAD z-score threshold of {threshold:g}.",
+        "Review flagged observations against source data and contextual events; these flags are screening signals, not automatic data errors.",
     ]
     limitations = [
         "STL is an additive descriptive decomposition, not a forecasting model or inferential test.",
@@ -525,6 +544,8 @@ def run_stl_time_series_decomposition(
         "Only one seasonal period is modelled; multiple or evolving seasonal cycles may require other methods.",
         "A regular unique time index and complete finite observations are required; no missing-period imputation is performed.",
         "Trend and seasonal strength values are descriptive diagnostics and do not have inferential p-values or confidence intervals.",
+        "Remainder outlier flags use a median-absolute-deviation threshold; they are heuristic screening signals, not formal anomaly tests or proof of erroneous observations.",
+        "If the remainder MAD is zero or numerically negligible, robust remainder z-scores are unavailable and no outliers are flagged.",
     ]
     return AnalysisResult(
         title=f"STL time-series decomposition: {outcome_variable}",
@@ -547,6 +568,9 @@ def run_stl_time_series_decomposition(
             "robust": robust,
             "trend_strength": trend_strength,
             "seasonal_strength": seasonal_strength,
+            "outlier_threshold": threshold,
+            "remainder_outlier_count": int(remainder_outlier.sum()),
+            "remainder_mad": remainder_mad,
             "sampling_design_aware": False,
             "study_design": "time_series",
         },
