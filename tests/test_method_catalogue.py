@@ -36,7 +36,7 @@ def test_only_existing_execution_methods_are_marked_implemented():
     }
 
     assert implemented == IMPLEMENTED_METHODS
-    assert len(implemented) == 41
+    assert len(implemented) == 42
 
 
 def test_exact_binomial_is_registered_as_conditionally_executable():
@@ -50,15 +50,7 @@ def test_exact_binomial_is_registered_as_conditionally_executable():
 def test_planned_methods_are_not_marked_executable():
     planned = get_statistical_methods(implementation_status="planned")
 
-    assert planned
-    assert all(
-        method.execution_eligibility == "not_assessed"
-        for method in planned
-    )
-    assert all(
-        method.verification_status == "not_tested"
-        for method in planned
-    )
+    assert not planned
 
 
 def test_method_lookup_returns_expected_record():
@@ -168,14 +160,17 @@ def test_survey_methods_explicitly_declare_sampling_design_requirements():
     assert "sampling_weight" in weighted.statistical_specification[
         "required_variable_roles"
     ]
-    assert "stratum_identifier" in complex_design.statistical_specification[
+    assert "design_identifier" in complex_design.statistical_specification[
         "required_variable_roles"
     ]
     assert weighted.implementation_status == "implemented"
     assert weighted.verification_status == "unit_tested"
     assert weighted.execution_eligibility == "conditional"
     assert weighted.statistical_specification["sampling_design_aware"] is True
-    assert complex_design.implementation_status == "planned"
+    assert complex_design.implementation_status == "implemented"
+    assert complex_design.verification_status == "unit_tested"
+    assert complex_design.execution_eligibility == "conditional"
+    assert complex_design.statistical_specification["sampling_design_aware"] is True
 
 
 def test_catalogue_summary_reports_lifecycle_and_priorities():
@@ -183,8 +178,8 @@ def test_catalogue_summary_reports_lifecycle_and_priorities():
 
     assert summary["catalogue_version"] == CATALOGUE_VERSION
     assert summary["total_methods"] == 42
-    assert summary["implementation_status"]["implemented"] == 41
-    assert summary["implementation_status"]["planned"] == 1
+    assert summary["implementation_status"]["implemented"] == 42
+    assert summary["implementation_status"].get("planned", 0) == 0
     assert set(summary["release_priorities"]) == {"P1", "P2", "P3"}
 
 

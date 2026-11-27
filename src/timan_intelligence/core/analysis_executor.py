@@ -74,6 +74,7 @@ _EXECUTOR_BY_METHOD_ID = {
     "method.inference.confidence_interval.proportions.independent": "two_proportions_ci",
     "method.inference.confidence_interval.proportion": "proportion_ci",
     "method.survey.estimation.weighted_proportion": "weighted_survey_proportion",
+    "method.survey.inference.complex_design": "complex_survey_estimation",
     "method.inference.confidence_interval.mean_difference.welch": "welch_mean_difference_ci",
     "method.inference.confidence_interval.mean_difference.paired": "paired_mean_difference_ci",
     "method.inference.comparison.t_test.paired": "paired_t",
@@ -336,31 +337,47 @@ def execute_recommendation(
             confidence_level=options.get("confidence_level", 0.95),
             alternative=options.get("alternative", "two-sided"),
         )
-    elif executor == "weighted_survey_proportion":
+    elif executor in {"weighted_survey_proportion", "complex_survey_estimation"}:
         if len(variables) != 2:
             raise AnalysisExecutionError(
-                "Weighted survey proportion requires a categorical outcome and a sampling-weight variable."
+                "Survey estimation requires an outcome variable and a sampling-weight variable."
             )
         options = recommendation.get("options") or {}
-        estimand = options.get("estimand", "proportion")
-        if estimand != "proportion":
-            raise AnalysisExecutionError("This catalogue method executes category proportions only.")
-        survey_design = options.get("design", "weighted_descriptive")
-        if survey_design not in {"weighted_descriptive", "stratified_srs", "cluster_wr"}:
-            raise AnalysisExecutionError(
-                "Supported survey designs are weighted_descriptive, stratified_srs and cluster_wr; general multistage designs are not yet supported."
-            )
         declared_sampling_design = str(
             design_context.get("sampling_design") or recommendation.get("sampling_design") or ""
         ).strip().casefold().replace("-", "_").replace(" ", "_")
         if declared_sampling_design == "multistage":
             raise AnalysisExecutionError("General multistage survey variance estimation is not yet supported.")
+        if declared_sampling_design in {"stratified", "stratified_srs"}:
+            declared_sampling_design = "stratified"
+        elif declared_sampling_design in {"cluster", "clustered", "cluster_wr"}:
+            declared_sampling_design = "cluster"
+        if executor == "weighted_survey_proportion":
+            estimand = options.get("estimand", "proportion")
+            if estimand != "proportion":
+                raise AnalysisExecutionError("Weighted survey proportion executes category proportions only.")
+            default_design = "weighted_descriptive"
+            allowed_designs = {"weighted_descriptive", "stratified_srs", "cluster_wr"}
+        else:
+            estimand = options.get("estimand", "mean")
+            if estimand not in {"mean", "total", "proportion"}:
+                raise AnalysisExecutionError("Complex survey estimation supports mean, total or proportion estimands.")
+            default_design = (
+                "stratified_srs" if declared_sampling_design == "stratified"
+                else "cluster_wr" if declared_sampling_design == "cluster"
+                else None
+            )
+            allowed_designs = {"stratified_srs", "cluster_wr"}
+        survey_design = options.get("design", default_design)
+        if survey_design not in allowed_designs:
+            allowed_text = ", ".join(sorted(allowed_designs))
+            raise AnalysisExecutionError(f"Select a supported survey design: {allowed_text}.")
         complex_declared = (
             declared_sampling_design in {"stratified", "cluster"}
             or str(design_context.get("study_design") or "").casefold() in {"clustered", "complex_survey"}
             or bool(design_context.get("sampling_weight"))
         )
-        if complex_declared and survey_design == "weighted_descriptive":
+        if executor == "weighted_survey_proportion" and complex_declared and survey_design == "weighted_descriptive":
             raise AnalysisExecutionError(
                 "Weights alone cannot provide design-based uncertainty. Select a supported stratified_srs or cluster_wr design and its design identifiers."
             )
@@ -368,16 +385,21 @@ def execute_recommendation(
             raise AnalysisExecutionError("The declared stratified sample requires design='stratified_srs'.")
         if declared_sampling_design == "cluster" and survey_design != "cluster_wr":
             raise AnalysisExecutionError("The declared cluster sample requires design='cluster_wr'.")
-        strata_variable = options.get("strata_variable")
-        cluster_variable = options.get("cluster_variable")
+        declared_study_design = str(design_context.get("study_design") or "").casefold()
+        if declared_study_design == "stratified" and survey_design != "stratified_srs":
+            raise AnalysisExecutionError("The declared stratified study requires design='stratified_srs'.")
+        if declared_study_design == "clustered" and survey_design != "cluster_wr":
+            raise AnalysisExecutionError("The declared clustered study requires design='cluster_wr'.")
+        strata_variable = options.get("strata_variable") or design_context.get("strata_variable")
+        cluster_variable = options.get("cluster_variable") or design_context.get("cluster_variable")
         if survey_design == "stratified_srs" and (
             not isinstance(strata_variable, str) or strata_variable not in df.columns
         ):
-            raise AnalysisExecutionError("Stratified survey proportions require a valid strata_variable.")
+            raise AnalysisExecutionError("Stratified survey estimation requires a valid strata_variable.")
         if survey_design == "cluster_wr" and (
             not isinstance(cluster_variable, str) or cluster_variable not in df.columns
         ):
-            raise AnalysisExecutionError("Cluster survey proportions require a valid cluster_variable.")
+            raise AnalysisExecutionError("Cluster survey estimation requires a valid cluster_variable.")
         if strata_variable is not None and (
             not isinstance(strata_variable, str) or strata_variable not in df.columns
         ):
@@ -390,7 +412,7 @@ def execute_recommendation(
             raise AnalysisExecutionError("Strata and cluster identifiers must differ from the outcome and weight variables.")
         result = run_survey_estimation_service(
             df, variables[0], variables[1],
-            estimand="proportion", design=survey_design,
+            estimand=estimand, design=survey_design,
             strata_variable=strata_variable, cluster_variable=cluster_variable,
             confidence_level=options.get("confidence_level", 0.95),
         )

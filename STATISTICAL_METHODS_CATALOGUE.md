@@ -2370,3 +2370,8 @@ The bootstrap confidence-interval method currently supports the IID row-level pe
 ## ARIMA time-series forecasting
 
 The ARIMA implementation fits a user-specified non-seasonal univariate ARIMA(p,d,q) model to a regularly spaced, complete numeric series. It returns parameter estimates, AIC/BIC, residual diagnostics, forecasts and model-based prediction intervals. It requires at least 30 observations, a unique and inferable regular time index, and a user-selected order (p and q from 0 to 3, d from 0 to 2). It does not perform automatic order selection, seasonal modelling, exogenous regression, or complex-survey adjustment.
+
+
+## Complex survey estimation execution
+
+The complex survey estimation method now executes design-based means, totals and category proportions for the currently supported probability-sample designs: stratified SRS with constant expansion weights within strata, and with-replacement ultimate-PSU variance estimation (optionally stratified). It returns design-weighted estimates, standard errors, confidence intervals and the estimator's design details. General multistage variance estimation, finite-population corrections and replicate-weight variance estimation remain unsupported. The method is approval-gated and requires the analyst to declare the design and supply the corresponding strata or PSU identifier.
