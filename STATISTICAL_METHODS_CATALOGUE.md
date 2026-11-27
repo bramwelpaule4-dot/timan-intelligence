@@ -2400,3 +2400,8 @@ The autocorrelation diagnostic workflow reports sample autocorrelation (ACF), pa
 ## Naïve forecasting benchmarks
 
 The naïve benchmark repeats the latest observed value across the forecast horizon. An optional seasonal-naïve benchmark repeats the latest complete seasonal cycle. When a terminal holdout is specified, the method reports MAE and RMSE for each benchmark using only the training observations to construct predictions. At least 30 training observations are required; seasonal-naïve evaluation requires at least two seasonal cycles in the training data. These are point-forecast baselines without prediction intervals, trend extrapolation, exogenous predictors or rolling-origin validation. Compare their holdout errors with those from more complex forecasting models on the same holdout window.
+
+
+## Exponential-smoothing forecasting
+
+The exponential-smoothing implementation supports simple level smoothing, Holt trend smoothing and Holt-Winters seasonal smoothing, including additive or multiplicative trend/seasonal components and optional damped trend. It reports point forecasts, fitted smoothing parameters, SSE, AIC and BIC. Optional terminal holdout validation reports MAE and RMSE without using holdout observations to fit the validation model. At least 30 training observations are required; seasonal models require at least two complete seasonal cycles in the training data. Multiplicative components require strictly positive values. Prediction intervals and rolling-origin cross-validation are not currently provided; complex survey adjustments are not supported.

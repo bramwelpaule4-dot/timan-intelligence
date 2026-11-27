@@ -45,6 +45,7 @@ from timan_intelligence.core.time_series import (
     run_arima_time_series_model, run_sarima_time_series_model,
     run_stl_time_series_decomposition, run_stationarity_diagnostics,
     run_autocorrelation_diagnostics, run_naive_forecast_benchmarks,
+    run_exponential_smoothing_forecast,
 )
 from timan_intelligence.core.numeric_association import run_numeric_association
 from timan_intelligence.services.analysis_service import (
@@ -102,6 +103,7 @@ _EXECUTOR_BY_METHOD_ID = {
     "method.diagnostic.time_series.stationarity": "stationarity_diagnostics",
     "method.diagnostic.time_series.autocorrelation": "autocorrelation_diagnostics",
     "method.forecasting.time_series.naive_benchmarks": "naive_forecast_benchmarks",
+    "method.forecasting.time_series.exponential_smoothing": "exponential_smoothing",
     "method.inference.comparison.anova.repeated_measures": "repeated_measures_anova",
     "method.inference.regression.linear_mixed_effects": "linear_mixed_effects",
     "method.inference.regression.linear.multiple": "multiple_linear_regression",
@@ -504,6 +506,24 @@ def execute_recommendation(
             outcome_variable=variables[1],
             forecast_steps=options.get("forecast_steps", 12),
             seasonal_period=options.get("seasonal_period"),
+            validation_steps=options.get("validation_steps", 0),
+        )
+    elif executor == "exponential_smoothing":
+        if len(variables) != 2:
+            raise AnalysisExecutionError("Exponential smoothing requires a time-index variable and one numeric outcome variable.")
+        options = recommendation.get("options") or {}
+        declared_design = str(design_context.get("study_design") or "").casefold().replace("-", "_")
+        if declared_design != "time_series":
+            raise AnalysisExecutionError("Exponential smoothing requires an explicitly declared time_series study design.")
+        result = run_exponential_smoothing_forecast(
+            df,
+            time_variable=variables[0],
+            outcome_variable=variables[1],
+            forecast_steps=options.get("forecast_steps", 12),
+            trend=options.get("trend", "add"),
+            seasonal=options.get("seasonal"),
+            seasonal_period=options.get("seasonal_period"),
+            damped_trend=options.get("damped_trend", False),
             validation_steps=options.get("validation_steps", 0),
         )
     elif executor == "bootstrap_ci":

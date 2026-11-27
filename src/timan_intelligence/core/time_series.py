@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import jarque_bera
 from statsmodels.tsa.arima.model import ARIMA
+from statsmodels.tsa.holtwinters import ExponentialSmoothing
 from statsmodels.stats.diagnostic import acorr_ljungbox
 from statsmodels.tsa.stattools import adfuller, kpss, acf, pacf
 
@@ -923,6 +924,190 @@ def run_naive_forecast_benchmarks(
             "forecast_steps": int(forecast_steps),
             "seasonal_period": period,
             "validation_steps": validation_steps,
+            "sampling_design_aware": False,
+            "study_design": "time_series",
+        },
+    )
+
+
+
+def run_exponential_smoothing_forecast(
+    df: pd.DataFrame,
+    time_variable: str,
+    outcome_variable: str,
+    forecast_steps: int = 12,
+    trend: str | None = "add",
+    seasonal: str | None = None,
+    seasonal_period: int | None = None,
+    damped_trend: bool = False,
+    validation_steps: int = 0,
+) -> AnalysisResult:
+    """Fit a guarded Holt/Winters exponential-smoothing model and forecast."""
+    if not isinstance(df, pd.DataFrame) or df.empty:
+        raise ValueError("A non-empty pandas DataFrame is required.")
+    if not isinstance(time_variable, str) or time_variable not in df.columns:
+        raise ValueError("Select a valid time-index variable.")
+    if not isinstance(outcome_variable, str) or outcome_variable not in df.columns:
+        raise ValueError("Select a valid numeric outcome variable.")
+    if time_variable == outcome_variable:
+        raise ValueError("Time-index and outcome variables must be different.")
+    if not pd.api.types.is_numeric_dtype(df[outcome_variable]):
+        raise TypeError("Exponential smoothing requires a numeric outcome variable.")
+    if trend not in {None, "add", "mul"}:
+        raise ValueError("trend must be None, 'add' or 'mul'.")
+    if seasonal not in {None, "add", "mul"}:
+        raise ValueError("seasonal must be None, 'add' or 'mul'.")
+    if isinstance(damped_trend, bool) is False:
+        raise TypeError("damped_trend must be a boolean.")
+    for name, value, lower, upper in (
+        ("forecast_steps", forecast_steps, 1, 100),
+        ("validation_steps", validation_steps, 0, 100),
+    ):
+        if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
+            raise TypeError(f"{name} must be an integer.")
+        if not lower <= int(value) <= upper:
+            raise ValueError(f"{name} must be between {lower} and {upper}.")
+    if damped_trend and trend is None:
+        raise ValueError("damped_trend requires an additive or multiplicative trend.")
+    if seasonal is None:
+        if seasonal_period is not None:
+            raise ValueError("seasonal_period can only be supplied when seasonal is 'add' or 'mul'.")
+        period = None
+    else:
+        if isinstance(seasonal_period, bool) or not isinstance(seasonal_period, (int, np.integer)):
+            raise TypeError("seasonal_period must be an integer when seasonal terms are requested.")
+        if not 2 <= int(seasonal_period) <= 52:
+            raise ValueError("seasonal_period must be between 2 and 52.")
+        period = int(seasonal_period)
+
+    dates = pd.to_datetime(df[time_variable], errors="coerce")
+    if dates.isna().any():
+        raise ValueError("Time-index values must be valid and complete.")
+    if dates.duplicated().any():
+        raise ValueError("Time-index values must be unique.")
+    positions = np.argsort(dates.to_numpy())
+    dates = pd.DatetimeIndex(dates.iloc[positions])
+    values = pd.to_numeric(df[outcome_variable], errors="coerce").to_numpy(dtype=float)[positions]
+    if not np.isfinite(values).all():
+        raise ValueError("Outcome values must be complete and finite; resolve missing or infinite values first.")
+    if len(values) < 30:
+        raise ValueError("At least 30 regularly spaced observations are required for exponential smoothing.")
+    inferred_frequency = pd.infer_freq(dates)
+    if inferred_frequency is None:
+        raise ValueError("The time index is not regularly spaced.")
+    frequency = getattr(inferred_frequency, "freqstr", str(inferred_frequency))
+    validation_steps = int(validation_steps)
+    if validation_steps and len(values) - validation_steps < 30:
+        raise ValueError("Holdout validation requires at least 30 training observations.")
+    training_n = len(values) - validation_steps
+    if period is not None and training_n < 2 * period:
+        raise ValueError("At least two complete seasonal cycles are required in the training data.")
+    if (trend == "mul" or seasonal == "mul") and np.any(values <= 0):
+        raise ValueError("Multiplicative trend or seasonality requires strictly positive outcome values.")
+
+    def _fit(series_values: np.ndarray):
+        series_index = pd.DatetimeIndex(dates[:len(series_values)], freq=frequency)
+        series = pd.Series(series_values, index=series_index, name=outcome_variable)
+        model = ExponentialSmoothing(
+            series,
+            trend=trend,
+            damped_trend=damped_trend if trend is not None else False,
+            seasonal=seasonal,
+            seasonal_periods=period,
+            initialization_method="estimated",
+        )
+        with warnings.catch_warnings(record=True) as captured:
+            warnings.simplefilter("always")
+            fitted_model = model.fit(optimized=True, remove_bias=False)
+        return fitted_model, [str(item.message) for item in captured]
+
+    validation = pd.DataFrame()
+    if validation_steps:
+        validation_model, validation_warnings = _fit(values[:-validation_steps])
+        predicted = np.asarray(validation_model.forecast(validation_steps), dtype=float)
+        actual = values[-validation_steps:]
+        errors = actual - predicted
+        validation = pd.DataFrame([{
+            "training_observations": int(len(values) - validation_steps),
+            "holdout_observations": int(validation_steps),
+            "validation_start": dates[-validation_steps].isoformat(),
+            "validation_end": dates[-1].isoformat(),
+            "mean_absolute_error": float(np.mean(np.abs(errors))),
+            "root_mean_squared_error": float(np.sqrt(np.mean(errors ** 2))),
+        }])
+    else:
+        validation_warnings = []
+
+    fitted, fit_warnings = _fit(values)
+    forecast_values = np.asarray(fitted.forecast(int(forecast_steps)), dtype=float)
+    future_dates = pd.date_range(
+        start=dates[-1], periods=int(forecast_steps) + 1, freq=frequency
+    )[1:]
+    forecasts = pd.DataFrame({
+        time_variable: future_dates,
+        "forecast": forecast_values,
+    })
+    parameter_rows = []
+    for name, value in fitted.params.items():
+        if np.isscalar(value) and isinstance(value, (int, float, np.integer, np.floating)):
+            parameter_rows.append({"parameter": name, "estimate": float(value)})
+    parameters = pd.DataFrame(parameter_rows)
+    summary = pd.DataFrame([{
+        "trend": trend or "none",
+        "seasonal": seasonal or "none",
+        "seasonal_period": period,
+        "damped_trend": bool(damped_trend),
+        "observations": int(len(values)),
+        "sse": float(fitted.sse),
+        "aic": float(fitted.aic),
+        "bic": float(fitted.bic),
+    }])
+    findings = [
+        f"Fitted exponential smoothing with trend={trend or 'none'}, seasonality={seasonal or 'none'} to {len(values):,} observations.",
+        f"Generated {int(forecast_steps)} point forecast(s); the model's in-sample SSE is {float(fitted.sse):.4g}.",
+        *([f"Terminal holdout accuracy: MAE={float(validation.iloc[0]['mean_absolute_error']):.4g}, RMSE={float(validation.iloc[0]['root_mean_squared_error']):.4g}."] if validation_steps else ["No holdout validation was requested; out-of-sample accuracy has not been evaluated."]),
+    ]
+    limitations = [
+        "Exponential-smoothing forecasts are conditional on the selected trend, seasonal and damping specification.",
+        "This implementation reports point forecasts only; it does not currently provide prediction intervals.",
+        "Holdout validation uses one terminal holdout rather than rolling-origin cross-validation.",
+        "Multiplicative trend or seasonal components require strictly positive observations.",
+        "The method is univariate and is not adjusted for complex survey weights, clustering or stratification.",
+    ]
+    warning_messages = list(dict.fromkeys(validation_warnings + fit_warnings))
+    if warning_messages:
+        limitations.append("Model-fitting warnings were raised: " + " | ".join(warning_messages))
+    return AnalysisResult(
+        title=f"Exponential-smoothing forecast: {outcome_variable}",
+        method="Exponential smoothing (Holt/Holt-Winters)",
+        status="success",
+        tables={
+            "forecasts": forecasts,
+            "model_summary": summary,
+            "parameter_estimates": parameters,
+            **({"holdout_validation": validation} if validation_steps else {}),
+        },
+        findings=findings,
+        assumptions=[
+            "The time index is unique, ordered and regularly spaced.",
+            "The chosen trend and seasonal components are appropriate for the series.",
+            "The fitted smoothing parameters provide an adequate representation of level, trend and seasonality.",
+        ],
+        limitations=limitations,
+        metadata={
+            "time_variable": time_variable,
+            "outcome_variable": outcome_variable,
+            "frequency": frequency,
+            "n_observations": int(len(values)),
+            "forecast_steps": int(forecast_steps),
+            "trend": trend,
+            "seasonal": seasonal,
+            "seasonal_period": period,
+            "damped_trend": bool(damped_trend),
+            "validation_steps": validation_steps,
+            "sse": float(fitted.sse),
+            "aic": float(fitted.aic),
+            "bic": float(fitted.bic),
             "sampling_design_aware": False,
             "study_design": "time_series",
         },
