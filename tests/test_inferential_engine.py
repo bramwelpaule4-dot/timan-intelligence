@@ -387,9 +387,6 @@ def test_paired_mean_change_interval_uses_after_minus_before():
     lower, upper = result.metadata["confidence_interval"]
     assert lower < 2.5 < upper
     assert result.metadata["study_design"] == "paired"
-    assert result.tables["test"].loc[0, "Matched-pairs rank-biserial correlation"] == pytest.approx(
-        result.metadata["rank_biserial_correlation"]
-    )
 
 def test_paired_mean_change_interval_excludes_incomplete_pairs():
     from timan_intelligence.core.statistical_engine import run_paired_mean_difference_confidence_interval
@@ -796,6 +793,9 @@ def test_wilcoxon_signed_rank_reports_paired_change_and_effect_size():
     result = run_wilcoxon_signed_rank_test(frame,"before","after")
     assert result.status == "success"
     assert result.metadata["study_design"] == "paired"
+    assert result.tables["test"].loc[0, "Matched-pairs rank-biserial correlation"] == pytest.approx(
+        result.metadata["rank_biserial_correlation"]
+    )
     assert result.metadata["p_value"] < 0.05
     assert result.metadata["rank_biserial_correlation"] == pytest.approx(1.0)
     assert result.metadata["complete_pairs"] == 8
