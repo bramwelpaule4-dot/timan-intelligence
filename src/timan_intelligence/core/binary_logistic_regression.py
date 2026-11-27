@@ -168,6 +168,9 @@ def run_binary_logistic_regression(
     lr_statistic = max(0.0, 2.0 * (log_likelihood - null_log_likelihood))
     lr_p_value = float(stats.chi2.sf(lr_statistic, p))
     mcfadden_r2 = float(1.0 - log_likelihood / null_log_likelihood)
+    cox_snell_r2 = float(max(0.0, 1.0 - np.exp((2.0 / n) * (null_log_likelihood - log_likelihood))))
+    null_model_maximum = 1.0 - np.exp((2.0 / n) * null_log_likelihood)
+    nagelkerke_r2 = float(cox_snell_r2 / null_model_maximum) if null_model_maximum > 0 else 0.0
     aic = float(-2.0 * log_likelihood + 2.0 * (p + 1))
     brier_score = float(np.mean((y - probabilities) ** 2))
     predicted_class = (probabilities >= 0.5).astype(int)
@@ -216,7 +219,7 @@ def run_binary_logistic_regression(
         "findings": [
             f"The model used {n:,} complete records: {event_n:,} events and {non_event_n:,} non-events; {excluded_n:,} records were excluded.",
             f"The overall likelihood-ratio test was chi-square({p}) = {lr_statistic:.4g}, p = {lr_p_value:.4g}.",
-            f"McFadden's pseudo-R² was {mcfadden_r2:.4f}; AIC was {aic:.4g} and Brier score was {brier_score:.4f}.",
+            f"Pseudo-R²: McFadden {mcfadden_r2:.4f}, Cox–Snell {cox_snell_r2:.4f}, Nagelkerke {nagelkerke_r2:.4f}; AIC was {aic:.4g} and Brier score was {brier_score:.4f}.",
         ],
         "warnings": warnings,
         "metadata": {
@@ -235,6 +238,9 @@ def run_binary_logistic_regression(
             "likelihood_ratio_chi_square": lr_statistic,
             "model_p_value": lr_p_value,
             "mcfadden_pseudo_r_squared": mcfadden_r2,
+            "cox_snell_pseudo_r_squared": cox_snell_r2,
+            "nagelkerke_pseudo_r_squared": nagelkerke_r2,
+            "pseudo_r_squared_note": "McFadden, Cox-Snell and Nagelkerke are distinct likelihood-based fit indices; they are not interchangeable with OLS R-squared.",
             "aic": aic,
             "brier_score": brier_score,
             "apparent_accuracy": accuracy,

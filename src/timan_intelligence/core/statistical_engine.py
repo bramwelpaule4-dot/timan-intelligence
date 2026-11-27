@@ -45,9 +45,20 @@ def run_chi_square_test_of_independence(df: pd.DataFrame, row_variable: str, col
     cells = int(expected_values.size)
     r, k = observed.shape
     cramers_v = float((statistic / (n * min(r - 1, k - 1))) ** 0.5)
+    # Bergsma's finite-sample bias correction for Cramer's V.
+    phi_squared = statistic / n
+    phi_squared_corrected = max(0.0, phi_squared - ((k - 1) * (r - 1)) / max(n - 1, 1))
+    corrected_rows = r - ((r - 1) ** 2) / max(n - 1, 1)
+    corrected_columns = k - ((k - 1) ** 2) / max(n - 1, 1)
+    corrected_dimension = min(corrected_rows - 1, corrected_columns - 1)
+    cramers_v_corrected = (
+        float(np.sqrt(phi_squared_corrected / corrected_dimension))
+        if corrected_dimension > 0 else 0.0
+    )
     residuals = (observed - expected) / expected.pow(0.5)
     summary = pd.DataFrame([{"Chi-square statistic": float(statistic), "Degrees of freedom": int(dfree),
-        "p-value": float(p_value), "Cramer's V": cramers_v, "Complete observations": n,
+        "p-value": float(p_value), "Cramer's V": cramers_v,
+        "Bias-corrected Cramer's V": cramers_v_corrected, "Complete observations": n,
         "Excluded missing pairs": excluded, "Minimum expected count": minimum_expected,
         "Expected cells below 5": small, "Expected cell count": cells}])
     findings = [f"Pearson chi-square statistic is {statistic:.4g} with {dfree} degrees of freedom (p = {p_value:.4g}).",
@@ -56,7 +67,7 @@ def run_chi_square_test_of_independence(df: pd.DataFrame, row_variable: str, col
     limitations = [
         "The ordinary Pearson chi-square test assumes independent observational units and is not adjusted for survey weights, clustering, stratification or finite-population corrections.",
         "The test identifies evidence of association, not causation or the direction of a relationship.",
-        "Cramer's V is an uncorrected effect-size estimate; interpret it in context."]
+        "Cramer's V is the conventional uncorrected effect-size estimate; the bias-corrected value reduces small-sample upward bias. Interpret both in context."]
     if small:
         limitations.append(f"{small} of {cells} expected cells ({small / cells:.1%}) are below 5; the asymptotic chi-square approximation may be unreliable.")
     if minimum_expected < 1:
@@ -73,7 +84,7 @@ def run_chi_square_test_of_independence(df: pd.DataFrame, row_variable: str, col
             "Expected cell counts are adequate for the asymptotic chi-square approximation."],
         limitations=limitations, metadata={"row_variable": row_variable, "column_variable": column_variable,
             "chi_square": float(statistic), "degrees_of_freedom": int(dfree), "p_value": float(p_value),
-            "cramers_v": cramers_v, "n_observations": n, "missing_pairs_excluded": excluded,
+            "cramers_v": cramers_v, "cramers_v_bias_corrected": cramers_v_corrected, "n_observations": n, "missing_pairs_excluded": excluded,
             "minimum_expected_count": minimum_expected, "expected_cells_below_5": small,
             "expected_cell_count": cells, "sampling_design_aware": False,
             "study_design": "independent_observations", "continuity_correction": False})
