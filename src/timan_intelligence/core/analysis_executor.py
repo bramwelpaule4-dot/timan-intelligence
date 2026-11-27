@@ -344,6 +344,24 @@ def execute_recommendation(
             raise AnalysisExecutionError(
                 "Supported survey designs are weighted_descriptive, stratified_srs and cluster_wr; general multistage designs are not yet supported."
             )
+        declared_sampling_design = str(
+            design_context.get("sampling_design") or recommendation.get("sampling_design") or ""
+        ).strip().casefold().replace("-", "_").replace(" ", "_")
+        if declared_sampling_design == "multistage":
+            raise AnalysisExecutionError("General multistage survey variance estimation is not yet supported.")
+        complex_declared = (
+            declared_sampling_design in {"stratified", "cluster"}
+            or str(design_context.get("study_design") or "").casefold() in {"clustered", "complex_survey"}
+            or bool(design_context.get("sampling_weight"))
+        )
+        if complex_declared and survey_design == "weighted_descriptive":
+            raise AnalysisExecutionError(
+                "Weights alone cannot provide design-based uncertainty. Select a supported stratified_srs or cluster_wr design and its design identifiers."
+            )
+        if declared_sampling_design == "stratified" and survey_design != "stratified_srs":
+            raise AnalysisExecutionError("The declared stratified sample requires design='stratified_srs'.")
+        if declared_sampling_design == "cluster" and survey_design != "cluster_wr":
+            raise AnalysisExecutionError("The declared cluster sample requires design='cluster_wr'.")
         strata_variable = options.get("strata_variable")
         cluster_variable = options.get("cluster_variable")
         if survey_design == "stratified_srs" and (
@@ -364,24 +382,6 @@ def execute_recommendation(
             raise AnalysisExecutionError("The selected cluster_variable is not a valid dataset column.")
         if strata_variable in {variables[0], variables[1]} or cluster_variable in {variables[0], variables[1]}:
             raise AnalysisExecutionError("Strata and cluster identifiers must differ from the outcome and weight variables.")
-        declared_sampling_design = str(
-            design_context.get("sampling_design") or recommendation.get("sampling_design") or ""
-        ).strip().casefold().replace("-", "_").replace(" ", "_")
-        complex_declared = (
-            declared_sampling_design in {"stratified", "cluster", "multistage"}
-            or str(design_context.get("study_design") or "").casefold() in {"clustered", "complex_survey"}
-            or bool(design_context.get("sampling_weight"))
-        )
-        if complex_declared and survey_design == "weighted_descriptive":
-            raise AnalysisExecutionError(
-                "Weights alone cannot provide design-based uncertainty. Select a supported stratified_srs or cluster_wr design and its design identifiers."
-            )
-        if declared_sampling_design == "stratified" and survey_design != "stratified_srs":
-            raise AnalysisExecutionError("The declared stratified sample requires design='stratified_srs'.")
-        if declared_sampling_design == "cluster" and survey_design != "cluster_wr":
-            raise AnalysisExecutionError("The declared cluster sample requires design='cluster_wr'.")
-        if declared_sampling_design == "multistage":
-            raise AnalysisExecutionError("General multistage survey variance estimation is not yet supported.")
         result = run_survey_estimation_service(
             df, variables[0], variables[1],
             estimand="proportion", design=survey_design,
