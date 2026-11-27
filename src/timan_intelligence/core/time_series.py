@@ -19,6 +19,7 @@ def run_arima_time_series_model(
     order: tuple[int, int, int] | list[int] = (1, 1, 1),
     forecast_steps: int = 12,
     confidence_level: float = 0.95,
+    validation_steps: int = 0,
 ) -> AnalysisResult:
     """Fit ARIMA(p,d,q), diagnose residuals and forecast a regular univariate series."""
     if not isinstance(df, pd.DataFrame) or df.empty:
@@ -42,6 +43,10 @@ def run_arima_time_series_model(
         raise TypeError("forecast_steps must be an integer.")
     if not 1 <= int(forecast_steps) <= 100:
         raise ValueError("forecast_steps must be between 1 and 100.")
+    if isinstance(validation_steps, bool) or not isinstance(validation_steps, (int, np.integer)):
+        raise TypeError("validation_steps must be an integer.")
+    if not 0 <= int(validation_steps) <= 100:
+        raise ValueError("validation_steps must be between zero and 100.")
     if isinstance(confidence_level, bool) or not isinstance(confidence_level, (int, float)):
         raise TypeError("Confidence level must be numeric.")
     level = float(confidence_level)
@@ -79,6 +84,44 @@ def run_arima_time_series_model(
     if not converged:
         raise ValueError("ARIMA estimation did not converge; reconsider the order or inspect the series.")
 
+    validation_steps = int(validation_steps)
+    validation_summary = pd.DataFrame()
+    if validation_steps:
+        if len(values) - validation_steps < 30:
+            raise ValueError("Rolling-origin validation requires at least 30 training observations before the holdout period.")
+        training_series = pd.Series(
+            values[:-validation_steps],
+            index=pd.DatetimeIndex(dates[:-validation_steps], freq=frequency),
+            name=outcome_variable,
+        )
+        validation_model = ARIMA(
+            training_series,
+            order=(p, d, q),
+            enforce_stationarity=True,
+            enforce_invertibility=True,
+        ).fit()
+        validation_convergence = getattr(validation_model, "mle_retvals", {}) or {}
+        if not bool(validation_convergence.get("converged", True)):
+            raise ValueError("The ARIMA validation model did not converge; reconsider the order or holdout size.")
+        validation_forecast = validation_model.get_forecast(steps=validation_steps)
+        predicted = np.asarray(validation_forecast.predicted_mean, dtype=float)
+        observed = np.asarray(values[-validation_steps:], dtype=float)
+        errors = observed - predicted
+        mae = float(np.mean(np.abs(errors)))
+        rmse = float(np.sqrt(np.mean(errors ** 2)))
+        nonzero_observed = np.abs(observed) > np.finfo(float).eps
+        mape = float(np.mean(np.abs(errors[nonzero_observed] / observed[nonzero_observed])) * 100.0) if nonzero_observed.any() else np.nan
+        validation_dates = dates[-validation_steps:]
+        validation_summary = pd.DataFrame([{
+            "holdout_observations": validation_steps,
+            "training_observations": int(len(training_series)),
+            "validation_start": validation_dates[0],
+            "validation_end": validation_dates[-1],
+            "mean_absolute_error": mae,
+            "root_mean_squared_error": rmse,
+            "mean_absolute_percentage_error": mape,
+            "mape_denominator_excluded": int((~nonzero_observed).sum()),
+        }])
     forecast_result = fitted.get_forecast(steps=int(forecast_steps))
     forecast_frame = forecast_result.summary_frame(alpha=1.0 - level).copy()
     future_index = pd.date_range(
@@ -125,6 +168,7 @@ def run_arima_time_series_model(
         f"Fitted non-seasonal ARIMA({p},{d},{q}) to {len(values):,} regularly spaced observations ({frequency}).",
         f"Model information criteria: AIC={aic:.4g}; BIC={bic:.4g}.",
         f"Forecasted {int(forecast_steps)} future time point(s) with {level:.1%} model-based prediction intervals.",
+        *([f"Rolling-origin holdout validation ({validation_steps} observations): MAE={mae:.4g}, RMSE={rmse:.4g}." ] if validation_steps else []),
         f"Ljung-Box residual autocorrelation test p-value: {lb_p:.4g}.",
     ]
     limitations = [
@@ -132,6 +176,7 @@ def run_arima_time_series_model(
         "The differencing order d is user-specified; stationarity and differencing choices must be assessed before interpreting the model.",
         "Prediction intervals are conditional on the selected model and do not include model-selection uncertainty.",
         "The model assumes a regular time index and complete outcome values; no missing-time or missing-outcome imputation is performed.",
+        "Holdout validation, when requested, is a single terminal holdout rather than rolling-origin cross-validation; MAE and RMSE are scale-dependent and MAPE is omitted when all holdout actuals are zero.",
         "Not adjusted for complex survey weights, clustering, stratification or multistage sampling.",
     ]
     return AnalysisResult(
@@ -142,6 +187,7 @@ def run_arima_time_series_model(
             "parameter_estimates": params,
             "forecasts": forecast_frame,
             "residual_diagnostics": diagnostics,
+            **({"holdout_validation": validation_summary} if validation_steps else {}),
         },
         findings=findings,
         assumptions=[
@@ -160,6 +206,7 @@ def run_arima_time_series_model(
             "end": dates[-1].isoformat(),
             "n_observations": int(len(values)),
             "forecast_steps": int(forecast_steps),
+            "validation_steps": validation_steps,
             "confidence_level": level,
             "aic": aic,
             "bic": bic,

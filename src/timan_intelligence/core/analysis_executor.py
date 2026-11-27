@@ -405,6 +405,7 @@ def execute_recommendation(
             order=options.get("order", (1, 1, 1)),
             forecast_steps=options.get("forecast_steps", 12),
             confidence_level=options.get("confidence_level", 0.95),
+            validation_steps=options.get("validation_steps", 0),
         )
     elif executor == "bootstrap_ci":
         if len(variables) != 1:

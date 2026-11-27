@@ -103,3 +103,42 @@ def test_arima_executor_blocks_complex_sampling_design():
     }
     with pytest.raises(AnalysisExecutionError, match="not validated"):
         execute_recommendation(_series(), recommendation, approved=True)
+
+
+
+def test_arima_reports_terminal_holdout_validation_metrics_without_training_on_holdout():
+    frame = _series()
+    result = run_arima_time_series_model(
+        frame, "month", "value", order=(1, 0, 0), forecast_steps=3,
+        validation_steps=8,
+    )
+    validation = result.tables["holdout_validation"].iloc[0]
+    assert validation["holdout_observations"] == 8
+    assert validation["training_observations"] == 52
+    assert validation["mean_absolute_error"] >= 0
+    assert validation["root_mean_squared_error"] >= validation["mean_absolute_error"] - 1e-10
+    assert result.metadata["validation_steps"] == 8
+    assert len(result.tables["forecasts"]) == 3
+
+
+def test_arima_validation_requires_minimum_training_length_and_valid_step_count():
+    frame = _series()
+    with pytest.raises(ValueError, match="validation_steps"):
+        run_arima_time_series_model(
+            frame, "month", "value", order=(1, 0, 0), validation_steps=101
+        )
+    with pytest.raises(ValueError, match="at least 30 training"):
+        run_arima_time_series_model(
+            frame.head(35), "month", "value", order=(1, 0, 0), validation_steps=10
+        )
+
+
+def test_arima_validation_excludes_zero_denominators_from_mape():
+    frame = _series()
+    frame.loc[55:, "value"] = 0.0
+    result = run_arima_time_series_model(
+        frame, "month", "value", order=(1, 0, 0), validation_steps=5
+    )
+    validation = result.tables["holdout_validation"].iloc[0]
+    assert validation["mape_denominator_excluded"] == 5
+    assert pd.isna(validation["mean_absolute_percentage_error"])
