@@ -2325,3 +2325,11 @@ These areas may be expanded as the knowledge catalogue matures.
 - **McDonald's omega total**: model-based reliability estimate from a one-factor congeneric maximum-likelihood model. It permits unequal item loadings and reports loadings, uniquenesses and model-fit information when identified.
 
 Neither coefficient establishes construct validity or measurement invariance. The current omega implementation uses numeric item scores and listwise complete cases; ordinal/polychoric reliability and complex-survey adjustments are not supported.
+
+
+## Standardized mean differences for t-tests
+
+- **Welch independent-samples t-test:** reports directional Cohen's d and small-sample corrected Hedges' g using the conventional pooled within-group standard deviation. The inferential test remains Welch's unequal-variance procedure; interpret the pooled-SD standardized effect cautiously when group variances differ materially. Direction is Group 1 minus Group 2.
+- **Paired-samples t-test:** reports Cohen's dz (mean after-minus-before difference divided by the standard deviation of paired differences) and Hedges' gz when the small-sample correction is estimable. Direction is after minus before.
+- Effect sizes are returned as unavailable when the relevant standard deviation is zero. Hedges' correction is withheld when the paired sample has only one degree of freedom.
+- These are unadjusted sample-level standardized differences; they do not account for complex survey weights, clustering or design effects.

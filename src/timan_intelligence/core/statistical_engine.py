@@ -381,6 +381,18 @@ def run_independent_samples_t_test(
             else float((standard_error_squared ** 2) / denominator)
         )
 
+    pooled_df = group_1_n + group_2_n - 2
+    pooled_variance = ((group_1_n - 1) * group_1_variance + (group_2_n - 1) * group_2_variance) / pooled_df
+    pooled_sd = float(np.sqrt(pooled_variance))
+    mean_difference = group_1_mean - group_2_mean
+    cohen_d = float(mean_difference / pooled_sd) if pooled_sd > 0 else None
+    if cohen_d is not None:
+        from scipy.special import gammaln
+        hedges_j = float(np.exp(gammaln(pooled_df / 2.0) - 0.5 * np.log(pooled_df / 2.0) - gammaln((pooled_df - 1.0) / 2.0)))
+        hedges_g = float(hedges_j * cohen_d)
+    else:
+        hedges_j, hedges_g = None, None
+
     summary: dict[str, Any] = {
         "group_1_n": group_1_n,
         "group_2_n": group_2_n,
@@ -389,6 +401,11 @@ def run_independent_samples_t_test(
         "t_statistic": t_statistic,
         "p_value": p_value,
         "degrees_of_freedom": degrees_of_freedom,
+        "mean_difference_group_1_minus_group_2": mean_difference,
+        "pooled_standard_deviation": pooled_sd,
+        "cohen_d": cohen_d,
+        "hedges_g": hedges_g,
+        "hedges_correction": hedges_j,
         "missing_outcomes": missing_outcomes,
         "infinite_outcomes": infinite_outcomes,
     }
@@ -398,6 +415,8 @@ def run_independent_samples_t_test(
         "The outcome variable is numeric.",
         "Observations are independent within and between groups.",
         "Welch's t-test does not assume equal population variances.",
+        "Cohen's d and Hedges' g use the conventional pooled within-group standard deviation; interpret these standardized differences cautiously when group variances differ materially.",
+        "Effect-size direction is Group 1 minus Group 2.",
         "Missing outcome values were excluded.",
         "Infinite outcome values were excluded.",
         "The test evaluates a difference between group means.",
@@ -429,6 +448,10 @@ def run_independent_samples_t_test(
             f"with p-value {p_value:.4g}."
         ),
     ]
+    if cohen_d is not None:
+        findings.append(f"Standardized mean difference (Group 1 minus Group 2): Cohen's d = {cohen_d:.4g}; Hedges' g = {hedges_g:.4g}.")
+    else:
+        findings.append("Cohen's d and Hedges' g are undefined because the pooled within-group standard deviation is zero.")
 
     if p_value < 0.05:
         findings.append(
@@ -454,6 +477,13 @@ def run_independent_samples_t_test(
             "group_variable": group_variable,
             "group_1_label": str(group_1_label),
             "group_2_label": str(group_2_label),
+            "mean_difference_group_1_minus_group_2": mean_difference,
+            "pooled_standard_deviation": pooled_sd,
+            "cohen_d": cohen_d,
+            "hedges_g": hedges_g,
+            "hedges_correction": hedges_j,
+            "sampling_design_aware": False,
+            "study_design": "independent_groups",
         },
     )
 
@@ -1892,6 +1922,13 @@ def run_paired_samples_t_test(
     mean_change = float(differences.mean())
     sd_change = float(differences.std(ddof=1))
     dfree = n - 1
+    cohen_dz = float(mean_change / sd_change) if sd_change > 0 else None
+    if cohen_dz is not None and dfree > 1:
+        from scipy.special import gammaln
+        hedges_j_paired = float(np.exp(gammaln(dfree / 2.0) - 0.5 * np.log(dfree / 2.0) - gammaln((dfree - 1.0) / 2.0)))
+        hedges_gz = float(hedges_j_paired * cohen_dz)
+    else:
+        hedges_j_paired, hedges_gz = None, None
     se = sd_change / (n ** 0.5)
     if se == 0:
         if mean_change == 0:
@@ -1915,6 +1952,7 @@ def run_paired_samples_t_test(
         "Complete pairs": n, "Mean before": float(before[finite_pair].mean()),
         "Mean after": float(after[finite_pair].mean()), "Mean change (after - before)": mean_change,
         "Standard error": se, "t statistic": statistic, "Degrees of freedom": dfree,
+        "Cohen's dz": cohen_dz, "Hedges' gz": hedges_gz,
         "Alternative": alternative, "p-value": p_value, "Confidence level": float(confidence_level),
         "CI lower": lower, "CI upper": upper, "Incomplete pairs excluded": incomplete_pairs,
     }])
@@ -1922,6 +1960,7 @@ def run_paired_samples_t_test(
         f"Mean within-pair change (after minus before) is {mean_change:.4g}.",
         f"{n:,} complete matched pairs were analysed.",
         f"Paired t statistic: {statistic:.4g} with {dfree} degrees of freedom; p-value: {p_value:.4g}.",
+        (f"Standardized paired change: Cohen's dz = {cohen_dz:.4g}" + (f"; Hedges' gz = {hedges_gz:.4g}." if hedges_gz is not None else "; Hedges' gz correction is unavailable for this sample size.")) if cohen_dz is not None else "Standardized paired effect sizes are undefined because paired differences have zero variance.",
         f"{float(confidence_level):.1%} two-sided confidence interval for mean change: [{lower:.4g}, {upper:.4g}].",
         "The result is statistically significant at the 0.05 level." if p_value < 0.05 else "The result is not statistically significant at the 0.05 level.",
     ]
@@ -1929,6 +1968,7 @@ def run_paired_samples_t_test(
         "Each row is assumed to contain correctly matched before-and-after measurements from the same unit.",
         "Pair-level differences are assumed independent across rows; this test is not adjusted for complex survey sampling or clustering.",
         "The Student-t model applies to paired differences; inspect outliers and distributional shape, especially for small samples.",
+        "Cohen's dz standardizes the mean paired change by the standard deviation of paired differences; Hedges' gz applies a small-sample correction when estimable.",
         "The confidence interval is two-sided even when a one-sided alternative is selected for the p-value.",
     ]
     if incomplete_pairs:
@@ -1945,6 +1985,8 @@ def run_paired_samples_t_test(
             "before_variable": before_variable, "after_variable": after_variable,
             "estimate": mean_change, "standard_error": se, "t_statistic": statistic,
             "degrees_of_freedom": dfree, "p_value": p_value, "alternative": alternative,
+            "cohen_dz": cohen_dz, "hedges_gz": hedges_gz,
+            "hedges_correction": hedges_j_paired,
             "confidence_level": float(confidence_level), "confidence_interval": (float(lower), float(upper)),
             "complete_pairs": n, "incomplete_pairs": incomplete_pairs, "missing_pairs": missing_pairs,
             "infinite_pairs": infinite_pairs, "sampling_design_aware": False, "study_design": "paired",
