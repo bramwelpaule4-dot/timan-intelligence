@@ -233,11 +233,13 @@ def test_linear_mixed_effects_model_returns_residual_and_random_effect_diagnosti
 def test_linear_mixed_effects_model_diagnostics_flag_large_standardized_residuals():
     from timan_intelligence.core.statistical_engine import run_linear_mixed_effects_model
     rows = []
-    for subject in range(1, 11):
-        for time in range(3):
-            value = subject * 0.2 + time * 1.1 + ((subject + time) % 3) * 0.05
-            if subject == 10 and time == 2:
-                value += 15
+    for subject in range(1, 16):
+        subject_effect = ((subject * 7) % 13) * 0.45
+        for time in range(4):
+            noise = (((subject * 5 + time * 3) % 9) - 4) * 0.22
+            value = subject_effect + time * 1.1 + noise
+            if subject == 15 and time == 3:
+                value += 12
             rows.append({"subject": subject, "time": float(time), "score": value})
     result = run_linear_mixed_effects_model(pd.DataFrame(rows), "score", "subject", ["time"])
     diag = result.tables["diagnostic_summary"]
