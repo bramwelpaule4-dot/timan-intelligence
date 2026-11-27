@@ -151,3 +151,41 @@ def test_descriptive_statistics_does_not_modify_data_with_infinities():
     run_descriptive_statistics(df, "score")
 
     pd.testing.assert_frame_equal(df, original)
+
+
+def test_linear_mixed_effects_model_fits_random_intercept_and_fixed_time_effect():
+    from timan_intelligence.core.statistical_engine import run_linear_mixed_effects_model
+    rows = []
+    for subject in range(1, 13):
+        for time in range(4):
+            rows.append({"subject": f"S{subject}", "time": float(time),
+                         "score": subject * 0.35 + 1.8 * time + ((subject + time) % 3) * 0.08})
+    result = run_linear_mixed_effects_model(pd.DataFrame(rows), "score", "subject", ["time"])
+    assert result.status == "success"
+    assert result.metadata["converged"] is True
+    assert result.metadata["n_groups"] == 12
+    assert result.tables["fixed_effects"].loc[1, "Coefficient"] == pytest.approx(1.8, abs=0.15)
+    assert result.metadata["random_intercept_variance"] >= 0
+    assert "model_summary" in result.tables
+
+
+def test_linear_mixed_effects_model_handles_categorical_predictor_and_missing_rows():
+    from timan_intelligence.core.statistical_engine import run_linear_mixed_effects_model
+    rows = []
+    for subject in range(1, 9):
+        for visit, arm in enumerate(["control", "treatment", "treatment"]):
+            rows.append({"subject": subject, "visit": float(visit), "arm": arm,
+                         "score": subject * 0.2 + visit + (arm == "treatment") * 2.0})
+    frame = pd.DataFrame(rows)
+    frame.loc[0, "score"] = None
+    result = run_linear_mixed_effects_model(frame, "score", "subject", ["visit", "arm"])
+    assert result.metadata["missing_rows_excluded"] == 1
+    assert result.metadata["n_observations"] == len(frame) - 1
+    assert len(result.tables["fixed_effects"]) == 3
+
+
+def test_linear_mixed_effects_model_rejects_constant_predictor():
+    from timan_intelligence.core.statistical_engine import run_linear_mixed_effects_model
+    frame = pd.DataFrame({"subject": [1,1,2,2,3,3], "score": [1,2,2,3,3,4], "constant": [1]*6})
+    with pytest.raises(ValueError, match="two observed values"):
+        run_linear_mixed_effects_model(frame, "score", "subject", ["constant"])

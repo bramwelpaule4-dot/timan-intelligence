@@ -598,3 +598,29 @@ def test_executor_runs_repeated_measures_anova_and_blocks_complex_sampling():
     rec["design_context"] = {"sampling_design":"cluster"}
     with pytest.raises(AnalysisExecutionError,match="not validated"):
         execute_recommendation(frame,rec,approved=True)
+
+
+def test_execution_runs_approved_linear_mixed_effects_model():
+    rows = []
+    for subject in range(1, 9):
+        for visit in range(3):
+            rows.append({"subject": subject, "visit": float(visit),
+                         "score": subject * 0.4 + visit * 1.5 + ((subject + visit) % 2) * 0.1})
+    frame = pd.DataFrame(rows)
+    recommendation = {"method": "Linear mixed-effects model (random intercept)",
+        "method_id": "method.inference.regression.linear_mixed_effects",
+        "variables": ["score", "subject", "visit"], "status": "review_required",
+        "design_context": {"study_design": "longitudinal"}}
+    result = execute_recommendation(frame, recommendation, approved=True)
+    assert result.status == "success"
+    assert result.metadata["random_effect_structure"] == "random_intercept"
+    assert result.metadata["user_approved"] is True
+
+
+def test_execution_blocks_linear_mixed_model_for_complex_survey_sampling():
+    frame = pd.DataFrame({"score": range(12), "subject": [1,1,2,2,3,3,4,4,5,5,6,6], "time": [0,1]*6})
+    recommendation = {"method": "Linear mixed-effects model (random intercept)",
+        "variables": ["score", "subject", "time"], "status": "review_required",
+        "design_context": {"study_design": "longitudinal", "sampling_design": "cluster"}}
+    with pytest.raises(AnalysisExecutionError, match="not validated"):
+        execute_recommendation(frame, recommendation, approved=True)
