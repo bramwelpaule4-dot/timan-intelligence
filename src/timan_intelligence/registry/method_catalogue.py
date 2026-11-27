@@ -432,7 +432,7 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
         _method(
             entity_id="method.inference.regression.linear_mixed_effects",
             name="Linear mixed-effects model (random intercept)",
-            description="Models a continuous outcome with fixed effects and group-specific random intercepts, with an optional numeric random slope."
+            description="Models a continuous outcome with fixed effects and group-specific random intercepts, with an optional numeric random slope.",
             family="regression", purpose="inference", priority="P1", outcome_types=["numeric"],
             required_roles=["numeric_outcome", "group_identifier", "fixed_effect_predictors"],
             study_designs=["repeated_measure", "repeated_measures", "longitudinal", "clustered_observations"],
