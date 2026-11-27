@@ -442,6 +442,7 @@ def execute_recommendation(
             seasonal_order=options.get("seasonal_order", (1, 0, 0, 12)),
             forecast_steps=options.get("forecast_steps", 12),
             confidence_level=options.get("confidence_level", 0.95),
+            validation_steps=options.get("validation_steps", 0),
         )
     elif executor == "bootstrap_ci":
         if len(variables) != 1:

@@ -218,3 +218,32 @@ def test_sarima_executor_requires_approval_and_accepts_time_series_design():
     result = execute_recommendation(frame, recommendation, approved=True)
     assert result.status == "success"
     assert result.metadata["method_id"] == "method.forecasting.time_series.sarima"
+
+
+
+def test_sarima_reports_terminal_holdout_validation_metrics():
+    from timan_intelligence.core.time_series import run_sarima_time_series_model
+
+    result = run_sarima_time_series_model(
+        _seasonal_series(), "month", "value",
+        order=(1, 0, 0), seasonal_order=(1, 0, 0, 12),
+        forecast_steps=3, validation_steps=8,
+    )
+    validation = result.tables["holdout_validation"].iloc[0]
+    assert validation["holdout_observations"] == 8
+    assert validation["training_observations"] == 76
+    assert validation["mean_absolute_error"] >= 0
+    assert validation["root_mean_squared_error"] >= validation["mean_absolute_error"] - 1e-10
+    assert result.metadata["validation_steps"] == 8
+    assert len(result.tables["forecasts"]) == 3
+
+
+def test_sarima_validation_requires_enough_training_observations():
+    from timan_intelligence.core.time_series import run_sarima_time_series_model
+
+    with pytest.raises(ValueError, match="at least 30 training observations"):
+        run_sarima_time_series_model(
+            _seasonal_series().head(35), "month", "value",
+            order=(1, 0, 0), seasonal_order=(1, 0, 0, 12),
+            validation_steps=10,
+        )

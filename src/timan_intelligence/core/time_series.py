@@ -39,6 +39,10 @@ def run_arima_time_series_model(
     p, d, q = (int(value) for value in order)
     if not (0 <= p <= 3 and 0 <= d <= 2 and 0 <= q <= 3) or p + q > 5:
         raise ValueError("ARIMA order is outside the supported range: p and q 0-3, d 0-2, and p+q no greater than 5.")
+    if isinstance(validation_steps, bool) or not isinstance(validation_steps, (int, np.integer)):
+        raise TypeError("validation_steps must be an integer.")
+    if not 0 <= int(validation_steps) <= 100:
+        raise ValueError("validation_steps must be between zero and 100.")
     if isinstance(forecast_steps, bool) or not isinstance(forecast_steps, (int, np.integer)):
         raise TypeError("forecast_steps must be an integer.")
     if not 1 <= int(forecast_steps) <= 100:
@@ -226,6 +230,7 @@ def run_sarima_time_series_model(
     seasonal_order: tuple[int, int, int, int] | list[int] = (1, 0, 0, 12),
     forecast_steps: int = 12,
     confidence_level: float = 0.95,
+    validation_steps: int = 0,
 ) -> AnalysisResult:
     """Fit seasonal ARIMA (P,D,Q,s) plus non-seasonal ARIMA (p,d,q)."""
     from statsmodels.tsa.statespace.sarimax import SARIMAX
@@ -284,6 +289,52 @@ def run_sarima_time_series_model(
     frequency = getattr(inferred_frequency, "freqstr", str(inferred_frequency))
     regular_index = pd.DatetimeIndex(dates, freq=frequency)
     series = pd.Series(values, index=regular_index, name=outcome_variable)
+    validation_steps = int(validation_steps)
+    validation_summary = pd.DataFrame()
+    if validation_steps:
+        if len(values) - validation_steps < minimum_n:
+            raise ValueError(
+                f"Rolling-origin validation requires at least {minimum_n} training observations "
+                "before the holdout period."
+            )
+        training_series = pd.Series(
+            values[:-validation_steps],
+            index=pd.DatetimeIndex(dates[:-validation_steps], freq=frequency),
+            name=outcome_variable,
+        )
+        validation_model = SARIMAX(
+            training_series,
+            order=(p, d, q),
+            seasonal_order=(seasonal_p, seasonal_d, seasonal_q, seasonal_period),
+            enforce_stationarity=True,
+            enforce_invertibility=True,
+            simple_differencing=False,
+        ).fit(disp=False)
+        validation_convergence = getattr(validation_model, "mle_retvals", {}) or {}
+        if not bool(validation_convergence.get("converged", True)):
+            raise ValueError("The SARIMA validation model did not converge; reconsider the selected orders or holdout size.")
+        validation_forecast = validation_model.get_forecast(steps=validation_steps)
+        predicted = np.asarray(validation_forecast.predicted_mean, dtype=float)
+        observed = np.asarray(values[-validation_steps:], dtype=float)
+        errors = observed - predicted
+        mae = float(np.mean(np.abs(errors)))
+        rmse = float(np.sqrt(np.mean(errors ** 2)))
+        nonzero_observed = np.abs(observed) > np.finfo(float).eps
+        mape = (
+            float(np.mean(np.abs(errors[nonzero_observed] / observed[nonzero_observed])) * 100.0)
+            if nonzero_observed.any() else np.nan
+        )
+        validation_dates = dates[-validation_steps:]
+        validation_summary = pd.DataFrame([{
+            "holdout_observations": validation_steps,
+            "training_observations": int(len(training_series)),
+            "validation_start": validation_dates[0],
+            "validation_end": validation_dates[-1],
+            "mean_absolute_error": mae,
+            "root_mean_squared_error": rmse,
+            "mean_absolute_percentage_error": mape,
+            "mape_denominator_excluded": int((~nonzero_observed).sum()),
+        }])
 
     model = SARIMAX(
         series,
@@ -340,11 +391,16 @@ def run_sarima_time_series_model(
         title=f"SARIMA({p},{d},{q})({seasonal_p},{seasonal_d},{seasonal_q},{seasonal_period}) model: {outcome_variable}",
         method="Seasonal ARIMA (SARIMA)",
         status="success",
-        tables={"parameter_estimates": params, "forecasts": forecast_frame, "residual_diagnostics": diagnostics},
+        tables={
+            "parameter_estimates": params, "forecasts": forecast_frame,
+            "residual_diagnostics": diagnostics,
+            **({"holdout_validation": validation_summary} if validation_steps else {}),
+        },
         findings=[
             f"Fitted SARIMA({p},{d},{q})({seasonal_p},{seasonal_d},{seasonal_q},{seasonal_period}) to {len(values):,} regularly spaced observations ({frequency}).",
             f"Model information criteria: AIC={aic:.4g}; BIC={bic:.4g}.",
             f"Forecasted {int(forecast_steps)} future time point(s) with {level:.1%} model-based prediction intervals.",
+            *([f"Rolling-origin holdout validation ({validation_steps} observations): MAE={mae:.4g}, RMSE={rmse:.4g}."] if validation_steps else []),
             f"Ljung-Box residual autocorrelation test p-value: {lb_p:.4g}.",
         ],
         assumptions=[
@@ -356,6 +412,7 @@ def run_sarima_time_series_model(
         limitations=[
             "Univariate seasonal ARIMA only; no exogenous regressors, automatic order selection, intervention terms or multiple seasonal periods.",
             "At least two seasonal cycles and complete finite outcome values are required; no missing-time or missing-outcome imputation is performed.",
+            "Holdout validation, when requested, is a single terminal holdout rather than rolling-origin cross-validation; MAE and RMSE are scale-dependent and MAPE is omitted when all holdout actuals are zero.",
             "Prediction intervals are conditional on the selected model and do not account for model-selection uncertainty.",
             "Ljung-Box and Jarque-Bera tests are diagnostics, not automatic model-acceptance rules.",
             "Not adjusted for complex survey weights, clustering, stratification or multistage sampling.",
@@ -365,6 +422,7 @@ def run_sarima_time_series_model(
             "order": (p, d, q), "seasonal_order": (seasonal_p, seasonal_d, seasonal_q, seasonal_period),
             "frequency": frequency, "start": dates[0].isoformat(), "end": dates[-1].isoformat(),
             "n_observations": int(len(values)), "forecast_steps": int(forecast_steps),
+            "validation_steps": validation_steps,
             "confidence_level": level, "aic": aic, "bic": bic,
             "log_likelihood": float(fitted.llf), "converged": converged,
             "ljung_box_p_value": lb_p, "sampling_design_aware": False,
