@@ -2350,3 +2350,8 @@ The Welch independent-samples t-test now reports a two-sided confidence interval
 ## Binary-outcome effect measures for two independent groups
 
 The two-independent-proportions procedure additionally reports the risk ratio and odds ratio, each oriented as Group 1 relative to Group 2. When all four cells in the 2×2 table are non-zero, log-Wald confidence intervals are reported using the selected confidence level. If any cell is zero, the raw ratio may be zero, infinite or undefined and the corresponding interval is withheld. No continuity correction is applied implicitly; sparse-cell results require cautious interpretation.
+
+
+## Weighted survey proportion execution
+
+The weighted survey proportion method is executable through the controlled, approval-gated analysis executor. It supports weighted descriptive category proportions, stratified SRS proportions with constant expansion weights within strata, and with-replacement ultimate-PSU Taylor variance estimation. Design-based standard errors and confidence intervals are reported only for the supported probability-sample designs. General multistage variance estimation and finite-population corrections remain outside the current implementation. A declared complex sample cannot fall back silently to weighted-descriptive output.
