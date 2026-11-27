@@ -533,8 +533,6 @@ def run_kruskal_wallis_test(df: pd.DataFrame, outcome_variable: str, group_varia
     from scipy.stats import kruskal, rankdata
     if not isinstance(df, pd.DataFrame):
         raise TypeError("Expected a pandas DataFrame.")
-    if not 0.5 < float(confidence_level) < 1.0:
-        raise ValueError("Confidence level must be greater than 0.50 and less than 1.00.")
     if outcome_variable not in df.columns or group_variable not in df.columns:
         raise ValueError("Both outcome and grouping variables must exist.")
     if outcome_variable == group_variable:
