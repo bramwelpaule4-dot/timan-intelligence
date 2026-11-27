@@ -234,7 +234,7 @@ def test_execution_registry_exposes_only_implemented_methods():
     assert "Frequencies and proportions" in methods
     assert "Frequency distribution" in methods
 
-def test_execution_blocks_catalogued_but_unimplemented_method():
+def test_execution_rejects_complex_survey_without_declared_design():
     df = pd.DataFrame({
         "score": [1, 2, 3, 4, 5, 6],
         "group": ["A", "A", "A", "B", "B", "B"],
@@ -245,7 +245,7 @@ def test_execution_blocks_catalogued_but_unimplemented_method():
         "status": "review_required",
     }
 
-    with pytest.raises(AnalysisExecutionError, match="does not yet"):
+    with pytest.raises(AnalysisExecutionError, match="Select a supported survey design"):
         execute_recommendation(df, recommendation, approved=True)
 
 

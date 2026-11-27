@@ -59,7 +59,14 @@ def test_exact_binomial_is_registered_as_conditionally_executable():
 def test_planned_methods_are_not_marked_executable():
     planned = get_statistical_methods(implementation_status="planned")
 
-    assert not planned
+    assert all(
+        method.execution_eligibility == "not_assessed"
+        for method in planned
+    )
+    assert all(
+        method.verification_status == "not_tested"
+        for method in planned
+    )
 
 
 def test_method_lookup_returns_expected_record():
