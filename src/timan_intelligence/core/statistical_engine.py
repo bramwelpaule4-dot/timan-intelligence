@@ -2017,8 +2017,8 @@ def run_welch_mean_difference_confidence_interval(
     )
 
 
-def run_linear_mixed_effects_model(df: pd.DataFrame, outcome_variable: str, group_variable: str, fixed_effect_variables: list[str], confidence_level: float = 0.95) -> AnalysisResult:
-    """Fit a Gaussian random-intercept model to long-format repeated observations."""
+def run_linear_mixed_effects_model(df: pd.DataFrame, outcome_variable: str, group_variable: str, fixed_effect_variables: list[str], confidence_level: float = 0.95, random_slope_variable: str | None = None) -> AnalysisResult:
+    """Fit a Gaussian random-intercept model with an optional numeric random slope."""
     import warnings
     from statsmodels.regression.mixed_linear_model import MixedLM
     from statsmodels.tools.sm_exceptions import ConvergenceWarning
@@ -2042,6 +2042,11 @@ def run_linear_mixed_effects_model(df: pd.DataFrame, outcome_variable: str, grou
         raise ValueError("Subject/group identifiers cannot be missing.")
     if df[group_variable].nunique() < 3:
         raise ValueError("A random-intercept model requires at least three independent groups.")
+    if random_slope_variable is not None:
+        if random_slope_variable not in fixed_effect_variables:
+            raise ValueError("The random-slope predictor must also be included as a fixed-effect predictor.")
+        if random_slope_variable not in df.columns or not pd.api.types.is_numeric_dtype(df[random_slope_variable]):
+            raise TypeError("The random-slope predictor must be numeric.")
     selected = df[[outcome_variable, group_variable, *fixed_effect_variables]].copy()
     selected[outcome_variable] = pd.to_numeric(selected[outcome_variable], errors="coerce")
     selected = selected.replace([np.inf, -np.inf], np.nan)
@@ -2077,7 +2082,17 @@ def run_linear_mixed_effects_model(df: pd.DataFrame, outcome_variable: str, grou
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         try:
-            fitted = MixedLM(endog, exog, groups=groups, exog_re=np.ones((len(complete), 1))).fit(reml=True, method="lbfgs", maxiter=500, disp=False)
+            if random_slope_variable is None:
+                random_design = np.ones((len(complete), 1), dtype=float)
+            else:
+                slope_values = complete[random_slope_variable].astype(float).to_numpy()
+                slope_values = slope_values - float(np.mean(slope_values))
+                random_design = np.column_stack([np.ones(len(complete), dtype=float), slope_values])
+                grouped_positions = complete.groupby(group_variable, sort=False).indices
+                for positions in grouped_positions.values():
+                    if len(positions) < 3 or complete.iloc[positions][random_slope_variable].nunique() < 2:
+                        raise ValueError("A random slope requires at least three observations and within-group predictor variation in every group.")
+            fitted = MixedLM(endog, exog, groups=groups, exog_re=random_design).fit(reml=True, method="lbfgs", maxiter=1000, disp=False)
         except Exception as exc:
             raise ValueError(f"The linear mixed-effects model could not be fitted: {exc}") from exc
     if not fitted.converged:
@@ -2087,7 +2102,14 @@ def run_linear_mixed_effects_model(df: pd.DataFrame, outcome_variable: str, grou
     for name in exog.columns:
         lo, hi = map(float, ci.loc[name].tolist())
         rows.append({"Term": name, "Coefficient": float(fitted.fe_params[name]), "Standard error": float(fitted.bse_fe[name]), "z statistic": float(fitted.tvalues[name]), "p-value": float(fitted.pvalues[name]), f"{confidence_level:.0%} CI lower": lo, f"{confidence_level:.0%} CI upper": hi})
-    random_var = float(np.asarray(fitted.cov_re)[0, 0])
+    random_covariance = np.asarray(fitted.cov_re, dtype=float)
+    random_var = float(random_covariance[0, 0])
+    slope_var = float(random_covariance[1, 1]) if random_slope_variable is not None else None
+    intercept_slope_covariance = float(random_covariance[0, 1]) if random_slope_variable is not None else None
+    intercept_slope_correlation = (
+        float(intercept_slope_covariance / np.sqrt(random_var * slope_var))
+        if random_slope_variable is not None and random_var > 0 and slope_var > 0 else None
+    )
     residual_var = float(fitted.scale)
     # Post-fit diagnostics are descriptive checks, not automatic pass/fail rules.
     from scipy.stats import kurtosis, norm, shapiro, skew, spearmanr
@@ -2111,7 +2133,10 @@ def run_linear_mixed_effects_model(df: pd.DataFrame, outcome_variable: str, grou
     for group_name, effect in fitted.random_effects.items():
         effect_values = np.asarray(effect, dtype=float).reshape(-1)
         if effect_values.size:
-            random_intercepts.append({"Group": str(group_name), "Random intercept": float(effect_values[0])})
+            random_row = {"Group": str(group_name), "Random intercept": float(effect_values[0])}
+            if random_slope_variable is not None and effect_values.size > 1:
+                random_row["Random slope"] = float(effect_values[1])
+            random_intercepts.append(random_row)
     random_intercept_values = np.asarray([row["Random intercept"] for row in random_intercepts], dtype=float)
     random_normality = shapiro(random_intercept_values) if len(random_intercept_values) >= 3 else None
     diagnostic_rows = [
@@ -2131,10 +2156,14 @@ def run_linear_mixed_effects_model(df: pd.DataFrame, outcome_variable: str, grou
     if len(qq_frame) > 500:
         qq_frame = qq_frame.iloc[np.linspace(0, len(qq_frame) - 1, 500, dtype=int)].reset_index(drop=True)
     icc = random_var / (random_var + residual_var) if random_var + residual_var > 0 else None
-    summary = pd.DataFrame([{"Observations": len(complete), "Groups": groups.nunique(), "Minimum observations per group": int(counts.min()), "Maximum observations per group": int(counts.max()), "Random-intercept variance": random_var, "Residual variance": residual_var, "Intraclass correlation (ICC)": icc, "Log-likelihood": float(fitted.llf), "AIC": float(fitted.aic) if np.isfinite(fitted.aic) else None, "BIC": float(fitted.bic) if np.isfinite(fitted.bic) else None, "Converged": bool(fitted.converged), "Rows excluded": excluded}])
-    limits = ["Random-intercept structure only; random slopes and non-Gaussian outcomes are not implemented.", "REML is used for variance estimation; do not compare REML likelihoods across models with different fixed effects.", "Not adjusted for complex survey weights, stratification, sampling clusters or finite-population corrections.", "Wald z p-values use large-sample approximations; small-sample degrees-of-freedom corrections are not provided."]
+    summary = pd.DataFrame([{"Observations": len(complete), "Groups": groups.nunique(), "Minimum observations per group": int(counts.min()), "Maximum observations per group": int(counts.max()), "Random-intercept variance": random_var, "Random-slope predictor": random_slope_variable, "Random-slope variance": slope_var, "Intercept-slope covariance": intercept_slope_covariance, "Intercept-slope correlation": intercept_slope_correlation, "Residual variance": residual_var, "Intraclass correlation (ICC)": icc, "Log-likelihood": float(fitted.llf), "AIC": float(fitted.aic) if np.isfinite(fitted.aic) else None, "BIC": float(fitted.bic) if np.isfinite(fitted.bic) else None, "Converged": bool(fitted.converged), "Rows excluded": excluded}])
+    limits = ["Gaussian conditional outcome model; non-Gaussian outcomes are not implemented.", "REML is used for variance estimation; do not compare REML likelihoods across models with different fixed effects.", "Not adjusted for complex survey weights, stratification, sampling clusters or finite-population corrections.", "Wald z p-values use large-sample approximations; small-sample degrees-of-freedom corrections are not provided."]
     if excluded: limits.append(f"{excluded} incomplete or non-finite rows were excluded.")
     if random_var <= 1e-8: limits.append("The random-intercept variance is near zero; assess whether a mixed model is warranted.")
+    if random_slope_variable is not None and (slope_var is None or slope_var <= 1e-8):
+        limits.append("The random-slope variance is near zero; the data may not support group-specific slope variation.")
+    if random_slope_variable is not None and np.linalg.eigvalsh(random_covariance).min() <= 1e-8:
+        limits.append("The random-effects covariance matrix is singular or near-singular; review the random-effects structure.")
     warning_text = [str(w.message) for w in caught if issubclass(w.category, (ConvergenceWarning, RuntimeWarning))]
     if warning_text: limits.append("Model fitting warnings: " + " | ".join(warning_text[:3]))
-    return AnalysisResult(title=f"Linear mixed-effects model: {outcome_variable}", method="Linear mixed-effects model (random intercept)", status="success", tables={"fixed_effects": pd.DataFrame(rows), "model_summary": summary, "diagnostic_summary": pd.DataFrame(diagnostic_rows), "residual_diagnostics": residual_frame, "normal_qq": qq_frame, "random_intercepts": pd.DataFrame(random_intercepts)}, findings=[f"Model fitted {len(complete):,} observations across {groups.nunique():,} groups.", f"Estimated random-intercept variance: {random_var:.4g}; residual variance: {residual_var:.4g}.", f"Residual diagnostic checks were calculated for {n_diag:,} fitted observations; review the diagnostic summary and plots before drawing conclusions."] + ([f"Estimated intraclass correlation: {icc:.3f}."] if icc is not None else []), assumptions=["The outcome is continuous and the conditional mean is adequately represented by the fixed effects.", "Random intercepts are approximately normally distributed and independent across groups.", "Conditional residuals are approximately normal with constant variance.", "Observations are conditionally independent given random effects and fixed effects."], limitations=limits, metadata={"outcome_variable": outcome_variable, "group_variable": group_variable, "fixed_effect_variables": list(fixed_effect_variables), "n_observations": len(complete), "n_groups": int(groups.nunique()), "missing_rows_excluded": excluded, "random_intercept_variance": random_var, "residual_variance": residual_var, "intraclass_correlation": icc, "converged": bool(fitted.converged), "estimation": "REML", "confidence_level": float(confidence_level), "random_effect_structure": "random_intercept", "sampling_design_aware": False, "study_design": "longitudinal"})
+    return AnalysisResult(title=f"Linear mixed-effects model: {outcome_variable}", method="Linear mixed-effects model (random intercept and slope)" if random_slope_variable is not None else "Linear mixed-effects model (random intercept)", status="success", tables={"fixed_effects": pd.DataFrame(rows), "model_summary": summary, "diagnostic_summary": pd.DataFrame(diagnostic_rows), "residual_diagnostics": residual_frame, "normal_qq": qq_frame, "random_intercepts": pd.DataFrame(random_intercepts)}, findings=[f"Model fitted {len(complete):,} observations across {groups.nunique():,} groups.", f"Estimated random-intercept variance: {random_var:.4g}; residual variance: {residual_var:.4g}.", f"Residual diagnostic checks were calculated for {n_diag:,} fitted observations; review the diagnostic summary and plots before drawing conclusions."] + ([f"Estimated intraclass correlation: {icc:.3f}."] if icc is not None else []), assumptions=["The outcome is continuous and the conditional mean is adequately represented by the fixed effects.", "Random intercepts are approximately normally distributed and independent across groups.", "Conditional residuals are approximately normal with constant variance.", "Observations are conditionally independent given random effects and fixed effects."], limitations=limits, metadata={"outcome_variable": outcome_variable, "group_variable": group_variable, "fixed_effect_variables": list(fixed_effect_variables), "n_observations": len(complete), "n_groups": int(groups.nunique()), "missing_rows_excluded": excluded, "random_intercept_variance": random_var, "residual_variance": residual_var, "intraclass_correlation": icc, "converged": bool(fitted.converged), "estimation": "REML", "confidence_level": float(confidence_level), "random_effect_structure": "random_intercept_and_slope" if random_slope_variable is not None else "random_intercept", "random_slope_variable": random_slope_variable, "random_slope_variance": slope_var, "intercept_slope_covariance": intercept_slope_covariance, "intercept_slope_correlation": intercept_slope_correlation, "sampling_design_aware": False, "study_design": "longitudinal"})

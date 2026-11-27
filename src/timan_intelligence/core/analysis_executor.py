@@ -347,7 +347,7 @@ def execute_recommendation(
     elif executor == "linear_mixed_effects":
         if len(variables) < 3:
             raise AnalysisExecutionError("A linear mixed-effects model requires an outcome, group identifier and at least one fixed-effect predictor.")
-        result = run_linear_mixed_effects_model(df, variables[0], variables[1], variables[2:], options.get("confidence_level", 0.95))
+        result = run_linear_mixed_effects_model(df, variables[0], variables[1], variables[2:], options.get("confidence_level", 0.95), options.get("random_slope_variable"))
     elif executor == "repeated_measures_anova":
         if len(variables) < 3:
             raise AnalysisExecutionError("Repeated-measures ANOVA requires at least three repeated-measurement variables.")

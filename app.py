@@ -7387,8 +7387,16 @@ elif page == "Statistical Inference":
             group_variable = st.selectbox("Subject / group identifier", group_options, key="inference_lmm_group") if group_options else None
             predictor_options = [c for c in inference_df.columns if c not in {outcome_variable, group_variable}]
             fixed_effect_variables = st.multiselect("Fixed-effect predictors", predictor_options, default=[], key="inference_lmm_predictors")
+            random_slope_options = [c for c in fixed_effect_variables if c in numeric_cols]
+            random_slope_variable = st.selectbox(
+                "Optional random-slope predictor",
+                ["None"] + random_slope_options,
+                key="inference_lmm_random_slope",
+                help="Choose a numeric fixed-effect predictor whose effect may vary across subjects/groups.",
+            )
+            random_slope_variable = None if random_slope_variable == "None" else random_slope_variable
             measurement_variables = []
-            st.caption("Use long-format data: one row per observation, a repeated subject/group ID, a continuous outcome and one or more fixed-effect predictors. Fits a random intercept using REML. Random slopes and complex-survey adjustments are not included.")
+            st.caption("Use long-format data: one row per observation, a repeated subject/group ID, a continuous outcome and one or more fixed-effect predictors. Fits by REML. The optional random slope models group-specific variation in one numeric predictor. Complex-survey adjustments are not included.")
         elif inference_method == "One-way repeated-measures ANOVA":
             measurement_variables = st.multiselect(
                 "Repeated measurement columns (select at least three, in time/condition order)",
@@ -7500,7 +7508,7 @@ elif page == "Statistical Inference":
                 elif inference_method == "Kruskal–Wallis test":
                     inference_result = run_kruskal_wallis_test_service(inference_df, outcome_variable, group_variable)
                 elif inference_method == "Linear mixed-effects model (random intercept)":
-                    inference_result = run_linear_mixed_effects_model_service(inference_df, outcome_variable, group_variable, fixed_effect_variables, confidence_level)
+                    inference_result = run_linear_mixed_effects_model_service(inference_df, outcome_variable, group_variable, fixed_effect_variables, confidence_level, random_slope_variable)
                 elif inference_method == "One-way repeated-measures ANOVA":
                     inference_result = run_repeated_measures_anova_service(inference_df, measurement_variables, confidence_level)
                 elif inference_method == "Pairwise Wilcoxon post-hoc test with Holm adjustment":

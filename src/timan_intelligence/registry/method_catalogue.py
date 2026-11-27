@@ -432,17 +432,17 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
         _method(
             entity_id="method.inference.regression.linear_mixed_effects",
             name="Linear mixed-effects model (random intercept)",
-            description="Models a continuous outcome with fixed effects and a group-specific random intercept for repeated or hierarchically grouped observations.",
+            description="Models a continuous outcome with fixed effects and group-specific random intercepts, with an optional numeric random slope."
             family="regression", purpose="inference", priority="P1", outcome_types=["numeric"],
             required_roles=["numeric_outcome", "group_identifier", "fixed_effect_predictors"],
             study_designs=["repeated_measure", "repeated_measures", "longitudinal", "clustered_observations"],
             data_requirements=["Long-format data with one observation per row.", "A continuous numeric outcome.", "At least three groups with two or more observations each.", "At least one numeric or categorical fixed-effect predictor."],
             assumptions=["Random intercepts are approximately normal and independent across groups.", "Conditional residuals are approximately normal with constant variance.", "Observations are conditionally independent given model effects."],
-            outputs=["Fixed-effect coefficients and confidence intervals", "Wald z statistics and p-values", "Random-intercept and residual variance", "Intraclass correlation", "AIC, BIC, log-likelihood and convergence"],
+            outputs=["Fixed-effect coefficients and confidence intervals", "Wald z statistics and p-values", "Random-effects covariance components and residual variance", "Intraclass correlation", "AIC, BIC, log-likelihood and convergence"],
             use_cases=["Longitudinal programme outcomes", "Repeated observations with subject-level heterogeneity", "Observations nested within sites or facilities"],
             aliases=["Linear mixed model", "Mixed-effects linear regression", "Multilevel linear model", "Random-intercept model"],
             implementation_status="implemented", verification_status="unit_tested", execution_eligibility="conditional",
-            limitations=["Random-intercept structure only; random slopes are not implemented.", "REML likelihoods must not be compared across different fixed-effect structures.", "Not adjusted for complex survey sampling.", "Wald z inference may be unreliable with few groups."]),
+            limitations=["The optional random slope is limited to one numeric predictor and requires within-group variation.", "REML likelihoods must not be compared across different fixed-effect structures.", "Not adjusted for complex survey sampling.", "Wald z inference may be unreliable with few groups."]),
         _method(
             entity_id="method.inference.comparison.friedman",
             name="Friedman test",

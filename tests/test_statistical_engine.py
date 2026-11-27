@@ -241,3 +241,28 @@ def test_linear_mixed_effects_model_diagnostics_reports_extreme_residual_count()
     diag = result.tables["diagnostic_summary"]
     row = diag.loc[diag["Diagnostic"] == "Standardized residuals with absolute value > 3"].iloc[0]
     assert int(row["Statistic"]) >= 0
+
+
+def test_linear_mixed_effects_model_fits_optional_numeric_random_slope():
+    from timan_intelligence.core.statistical_engine import run_linear_mixed_effects_model
+    rows = []
+    for subject in range(1, 19):
+        slope = 0.7 + subject * 0.035
+        intercept = subject * 0.25
+        for time in range(5):
+            noise = ((subject * 3 + time * 5) % 7 - 3) * 0.035
+            rows.append({"subject": f"S{subject}", "time": float(time),
+                         "score": intercept + slope * time + noise})
+    result = run_linear_mixed_effects_model(pd.DataFrame(rows), "score", "subject", ["time"], random_slope_variable="time")
+    assert result.status == "success"
+    assert result.metadata["random_effect_structure"] == "random_intercept_and_slope"
+    assert result.metadata["random_slope_variable"] == "time"
+    assert result.metadata["random_slope_variance"] >= 0
+    assert {"Group", "Random intercept", "Random slope"}.issubset(result.tables["random_intercepts"].columns)
+
+
+def test_linear_mixed_effects_model_rejects_categorical_random_slope():
+    from timan_intelligence.core.statistical_engine import run_linear_mixed_effects_model
+    frame = pd.DataFrame({"subject":[1,1,1,2,2,2,3,3,3],"score":[1,2,3,2,3,4,3,4,5],"visit":[0,1,2,0,1,2,0,1,2],"arm":["A","B","C"]*3})
+    with pytest.raises(TypeError, match="numeric"):
+        run_linear_mixed_effects_model(frame, "score", "subject", ["visit", "arm"], random_slope_variable="arm")
