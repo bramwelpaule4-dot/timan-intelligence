@@ -49,6 +49,13 @@ IMPLEMENTED_METHODS = frozenset(
         "method.inference.regression.linear_mixed_effects",
         "method.inference.regression.linear.multiple",
         "method.inference.regression.logistic.binary",
+        "method.inference.regression.linear.simple",
+        "method.inference.regression.logistic.ordinal",
+        "method.inference.regression.logistic.multinomial",
+        "method.inference.regression.count.poisson",
+        "method.inference.regression.count.negative_binomial",
+        "method.inference.survival.kaplan_meier",
+        "method.inference.survival.cox",
     }
 )
 
@@ -821,7 +828,7 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
         ),
         _method(
             entity_id="method.inference.survival.kaplan_meier",
-            name="Kaplan–Meier survival analysis",
+            name="Kaplan-Meier survival analysis",
             description="Estimates a time-to-event survival function while accounting for right-censoring under stated assumptions.",
             family="survival_analysis",
             purpose="description",
@@ -832,7 +839,7 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             assumptions=["Censoring is appropriately represented.", "The event-time origin and event definition are clear."],
             outputs=["Survival estimates", "Confidence intervals", "Median survival where estimable", "At-risk counts"],
             use_cases=["Describe time to an event", "Analyse programme retention or time-to-event outcomes"],
-            aliases=["Kaplan Meier estimator"],
+            aliases=["Kaplan Meier estimator", "Kaplan–Meier survival analysis"],
             limitations=["Requires independent observational units and non-informative censoring conditional on the analysis."],
             implementation_status="implemented", verification_status="unit_tested", execution_eligibility="conditional",
         ),
