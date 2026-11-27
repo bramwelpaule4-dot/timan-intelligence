@@ -219,7 +219,16 @@ def execute_recommendation(
 
     options = recommendation.get("options") or {}
 
-    if executor == "categorical_frequency":
+    if executor == "cross_tabulation":
+        if len(variables) != 2:
+            raise AnalysisExecutionError(
+                "Cross-tabulation requires exactly two categorical variables."
+            )
+        result = run_categorical_cross_tabulation(df, variables[0], variables[1])
+        result.limitations.append(
+            "The displayed cross-tabulation is unweighted even if the dataset has a complex sampling design; use a design-adjusted procedure for population inference."
+        )
+    elif executor == "categorical_frequency":
         if len(variables) != 1:
             raise AnalysisExecutionError("A frequency distribution requires exactly one categorical variable.")
         result = run_categorical_frequency_distribution(df, variables[0])
