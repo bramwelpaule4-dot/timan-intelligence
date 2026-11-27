@@ -15,7 +15,8 @@ from timan_intelligence.registry.method_catalogue import get_statistical_methods
 from timan_intelligence.core.contracts import AnalysisResult
 from timan_intelligence.core.statistical_engine import (
     run_descriptive_statistics,
-    run_categorical_frequency_distribution,\n    run_categorical_cross_tabulation,
+    run_categorical_frequency_distribution,
+    run_categorical_cross_tabulation,
     run_independent_samples_t_test,
     run_mean_confidence_interval,
     run_one_sample_t_test,
@@ -47,7 +48,8 @@ class AnalysisExecutionError(ValueError):
 
 _EXECUTOR_BY_METHOD_ID = {
     "method.descriptive.numeric.summary": "descriptive",
-    "method.descriptive.categorical.frequency": "categorical_frequency",\n    "method.descriptive.categorical.cross_tabulation": "cross_tabulation",
+    "method.descriptive.categorical.frequency": "categorical_frequency",
+    "method.descriptive.categorical.cross_tabulation": "cross_tabulation",
     "method.inference.confidence_interval.mean": "mean_ci",
     "method.inference.comparison.t_test.one_sample": "one_sample_t",
     "method.inference.comparison.binomial.one_sample": "one_sample_binomial",
