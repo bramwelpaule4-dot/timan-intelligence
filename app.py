@@ -6,6 +6,12 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from timan_intelligence.core.time_series import (
+    run_arima_time_series_model,
+    run_sarima_time_series_model,
+    run_stl_time_series_decomposition,
+)
+
 from timan_intelligence.config import (
     APP_DESCRIPTION,
     APP_NAME,
@@ -896,8 +902,8 @@ MODULES = {
         "Business KPIs, sales, costs, profitability and operational performance.",
     ),
     "Forecasting & Prediction": (
-        "Under development",
-        "Time-series forecasting and predictive modelling.",
+        "Available — time-series analysis",
+        "Decompose trends and seasonal patterns; fit ARIMA and seasonal ARIMA forecasts with diagnostics, prediction intervals and optional holdout validation.",
     ),
     "Optimisation & Scenarios": (
         "Under development",
@@ -8015,6 +8021,255 @@ elif page == "Descriptive Statistics":
             key="descriptive_upload_dataset",
             on_click=go_to_data_management,
         )
+# ============================================================
+# FORECASTING & PREDICTION
+# ============================================================
+
+elif page == "Forecasting & Prediction":
+    st.markdown(
+        """
+        <section class="analysis-page-header">
+            <div class="analysis-page-eyebrow">TIME-SERIES INTELLIGENCE · WORKSPACE 05</div>
+            <div class="analysis-page-title">Forecasting &amp; Prediction</div>
+            <div class="analysis-page-description">
+                Explore trend and seasonal structure, fit ARIMA or seasonal ARIMA
+                models, review diagnostics and assess forecasts on a terminal
+                holdout period before projecting future observations.
+            </div>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.caption(status_text(MODULES[page][0]))
+    st.info(
+        "These methods require a single regularly spaced numeric time series. "
+        "The analyst must verify the time frequency, seasonal cycle and model "
+        "orders. Forecast intervals are conditional on the selected model."
+    )
+
+    df = get_dataset()
+    if df is None:
+        st.info("Upload a dataset in Data Management to begin time-series analysis.")
+        st.button(
+            "Go to Data Management",
+            type="primary",
+            key="forecasting_upload_dataset",
+            on_click=go_to_data_management,
+        )
+    else:
+        numeric_cols = list(df.select_dtypes(include="number").columns)
+        if not numeric_cols:
+            st.warning("The loaded dataset has no numeric outcome variable for time-series analysis.")
+        else:
+            st.markdown("#### 1. Select the time series")
+            selected_time = st.selectbox(
+                "Time-index variable",
+                list(df.columns),
+                key="forecasting_time_variable",
+                help="Choose a date/time column with unique, regularly spaced observations.",
+            )
+            selected_outcome = st.selectbox(
+                "Numeric outcome variable",
+                numeric_cols,
+                key="forecasting_outcome_variable",
+            )
+            method_choice = st.selectbox(
+                "Analysis method",
+                [
+                    "STL time-series decomposition",
+                    "ARIMA forecast",
+                    "Seasonal ARIMA (SARIMA) forecast",
+                ],
+                key="forecasting_method",
+            )
+
+            seasonal_period = 12
+            robust_stl = True
+            order = (1, 1, 1)
+            seasonal_order = (1, 0, 0, 12)
+            forecast_steps = 12
+            confidence_level = 0.95
+            validation_steps = 0
+
+            st.markdown("#### 2. Configure the analysis")
+            if method_choice == "STL time-series decomposition":
+                seasonal_period = int(st.number_input(
+                    "Seasonal period (observations per cycle)",
+                    min_value=2,
+                    max_value=52,
+                    value=12,
+                    step=1,
+                    key="forecasting_stl_period",
+                    help="For example, 12 for monthly data with annual seasonality or 4 for quarterly data.",
+                ))
+                robust_stl = st.checkbox(
+                    "Use robust decomposition",
+                    value=True,
+                    key="forecasting_stl_robust",
+                    help="Reduces the influence of outliers on the estimated trend and seasonal components.",
+                )
+            else:
+                order_cols = st.columns(3)
+                with order_cols[0]:
+                    p_order = int(st.number_input("AR order (p)", min_value=0, max_value=3, value=1, step=1, key="forecasting_p"))
+                with order_cols[1]:
+                    d_order = int(st.number_input("Differencing (d)", min_value=0, max_value=2, value=1 if method_choice == "ARIMA forecast" else 0, step=1, key="forecasting_d"))
+                with order_cols[2]:
+                    q_order = int(st.number_input("MA order (q)", min_value=0, max_value=3, value=1 if method_choice == "ARIMA forecast" else 0, step=1, key="forecasting_q"))
+                order = (p_order, d_order, q_order)
+
+                if method_choice == "Seasonal ARIMA (SARIMA) forecast":
+                    st.markdown("**Seasonal order (P, D, Q, s)**")
+                    seasonal_cols = st.columns(4)
+                    with seasonal_cols[0]:
+                        seasonal_p = int(st.number_input("Seasonal AR (P)", min_value=0, max_value=2, value=1, step=1, key="forecasting_seasonal_p"))
+                    with seasonal_cols[1]:
+                        seasonal_d = int(st.number_input("Seasonal differencing (D)", min_value=0, max_value=1, value=0, step=1, key="forecasting_seasonal_d"))
+                    with seasonal_cols[2]:
+                        seasonal_q = int(st.number_input("Seasonal MA (Q)", min_value=0, max_value=2, value=0, step=1, key="forecasting_seasonal_q"))
+                    with seasonal_cols[3]:
+                        seasonal_period = int(st.number_input("Seasonal period (s)", min_value=2, max_value=52, value=12, step=1, key="forecasting_seasonal_period"))
+                    seasonal_order = (seasonal_p, seasonal_d, seasonal_q, seasonal_period)
+
+                forecast_steps = int(st.number_input(
+                    "Forecast horizon (future observations)",
+                    min_value=1,
+                    max_value=100,
+                    value=12,
+                    step=1,
+                    key="forecasting_horizon",
+                ))
+                confidence_level = st.select_slider(
+                    "Prediction interval confidence level",
+                    options=[0.90, 0.95, 0.99],
+                    value=0.95,
+                    format_func=lambda value: f"{value:.0%}",
+                    key="forecasting_confidence",
+                )
+                minimum_training_n = (
+                    max(30, 2 * seasonal_period)
+                    if method_choice == "Seasonal ARIMA (SARIMA) forecast"
+                    else 30
+                )
+                max_validation = max(0, min(100, len(df) - minimum_training_n))
+                validation_steps = int(st.number_input(
+                    "Terminal holdout observations for forecast validation (0 = skip)",
+                    min_value=0,
+                    max_value=max_validation,
+                    value=0,
+                    step=1,
+                    key="forecasting_validation_steps",
+                    help="The holdout period is excluded when fitting the validation model. The final forecast model is then fitted to the full series.",
+                ))
+
+            st.markdown("#### 3. Run and review")
+            if st.button(
+                "Run time-series analysis",
+                type="primary",
+                key="run_time_series_analysis",
+            ):
+                try:
+                    if method_choice == "STL time-series decomposition":
+                        result = run_stl_time_series_decomposition(
+                            df,
+                            time_variable=selected_time,
+                            outcome_variable=selected_outcome,
+                            seasonal_period=seasonal_period,
+                            robust=robust_stl,
+                        )
+                    elif method_choice == "ARIMA forecast":
+                        result = run_arima_time_series_model(
+                            df,
+                            time_variable=selected_time,
+                            outcome_variable=selected_outcome,
+                            order=order,
+                            forecast_steps=forecast_steps,
+                            confidence_level=confidence_level,
+                            validation_steps=validation_steps,
+                        )
+                    else:
+                        result = run_sarima_time_series_model(
+                            df,
+                            time_variable=selected_time,
+                            outcome_variable=selected_outcome,
+                            order=order,
+                            seasonal_order=seasonal_order,
+                            forecast_steps=forecast_steps,
+                            confidence_level=confidence_level,
+                            validation_steps=validation_steps,
+                        )
+
+                    st.success("Time-series analysis completed.")
+                    st.markdown(f"**{result.title}**")
+                    for finding in result.findings:
+                        st.write(f"• {finding}")
+
+                    if "decomposition" in result.tables:
+                        decomposition = result.tables["decomposition"]
+                        st.markdown("#### Decomposition components")
+                        st.line_chart(
+                            decomposition.set_index(selected_time)[
+                                ["observed", "trend", "seasonal", "remainder"]
+                            ],
+                            use_container_width=True,
+                        )
+                        st.dataframe(result.tables["summary"], hide_index=True, use_container_width=True)
+                        quota_download_button(
+                            "Download STL decomposition",
+                            data=decomposition.to_csv(index=False).encode("utf-8-sig"),
+                            file_name="timan_stl_decomposition.csv",
+                            mime="text/csv",
+                            key="download_stl_decomposition",
+                        )
+                    else:
+                        st.markdown("#### Forecast and prediction intervals")
+                        historical = df[[selected_time, selected_outcome]].copy()
+                        historical[selected_time] = pd.to_datetime(historical[selected_time], errors="coerce")
+                        historical[selected_outcome] = pd.to_numeric(historical[selected_outcome], errors="coerce")
+                        historical = historical.dropna().sort_values(selected_time)
+                        historical = historical.rename(columns={selected_outcome: "Observed"})
+                        historical_plot = historical.set_index(selected_time)[["Observed"]]
+                        forecast_table = result.tables["forecasts"].copy()
+                        forecast_table[selected_time] = pd.to_datetime(forecast_table[selected_time], errors="coerce")
+                        forecast_plot = forecast_table.set_index(selected_time)[
+                            ["forecast", "prediction_interval_lower", "prediction_interval_upper"]
+                        ].rename(columns={
+                            "forecast": "Forecast",
+                            "prediction_interval_lower": "Lower prediction limit",
+                            "prediction_interval_upper": "Upper prediction limit",
+                        })
+                        st.line_chart(
+                            historical_plot.join(forecast_plot, how="outer"),
+                            use_container_width=True,
+                        )
+                        st.dataframe(forecast_table, hide_index=True, use_container_width=True)
+                        st.markdown("#### Model parameters")
+                        st.dataframe(result.tables["parameter_estimates"], hide_index=True, use_container_width=True)
+                        st.markdown("#### Residual diagnostics")
+                        st.dataframe(result.tables["residual_diagnostics"], hide_index=True, use_container_width=True)
+                        if "holdout_validation" in result.tables:
+                            st.markdown("#### Terminal holdout validation")
+                            st.dataframe(result.tables["holdout_validation"], hide_index=True, use_container_width=True)
+                        quota_download_button(
+                            "Download forecasts",
+                            data=forecast_table.to_csv(index=False).encode("utf-8-sig"),
+                            file_name="timan_time_series_forecasts.csv",
+                            mime="text/csv",
+                            key="download_time_series_forecasts",
+                        )
+
+                    with st.expander("Assumptions and limitations"):
+                        st.markdown("**Assumptions**")
+                        for assumption in result.assumptions:
+                            st.write(f"• {assumption}")
+                        st.markdown("**Limitations**")
+                        for limitation in result.limitations:
+                            st.write(f"• {limitation}")
+
+                except Exception as exc:
+                    st.error(f"The time-series analysis could not be completed: {exc}")
+
+
 # VISUALISATIONS
 # ============================================================
 
