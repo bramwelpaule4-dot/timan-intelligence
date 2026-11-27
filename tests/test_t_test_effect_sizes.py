@@ -12,19 +12,19 @@ def _hedges_correction(df):
 def test_welch_t_test_reports_directional_cohen_d_and_hedges_g():
     frame = pd.DataFrame({"group": ["A"] * 3 + ["B"] * 3, "score": [1., 2., 3., 4., 5., 6.]})
     result = run_independent_samples_t_test(frame, "score", "group")
-    row = result.tables["summary"].iloc[0]
-    assert row["cohen_d"] == pytest.approx(-3.0)
-    assert row["hedges_g"] == pytest.approx(-3.0 * _hedges_correction(4))
-    assert row["mean_difference_group_1_minus_group_2"] == pytest.approx(-3.0)
+    summary = result.tables["summary"]
+    assert summary["cohen_d"] == pytest.approx(-3.0)
+    assert summary["hedges_g"] == pytest.approx(-3.0 * _hedges_correction(4))
+    assert summary["mean_difference_group_1_minus_group_2"] == pytest.approx(-3.0)
     assert result.metadata["cohen_d"] == pytest.approx(-3.0)
 
 
 def test_welch_t_test_handles_zero_pooled_variance_without_infinite_effect_size():
     frame = pd.DataFrame({"group": ["A"] * 3 + ["B"] * 3, "score": [2.] * 6})
     result = run_independent_samples_t_test(frame, "score", "group")
-    row = result.tables["summary"].iloc[0]
-    assert row["cohen_d"] is None
-    assert row["hedges_g"] is None
+    summary = result.tables["summary"]
+    assert summary["cohen_d"] is None
+    assert summary["hedges_g"] is None
 
 
 def test_paired_t_test_reports_dz_and_small_sample_corrected_gz():
