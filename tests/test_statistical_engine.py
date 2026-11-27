@@ -231,6 +231,7 @@ def test_linear_mixed_effects_model_returns_residual_and_random_effect_diagnosti
 
 
 def test_linear_mixed_effects_model_diagnostics_flag_large_standardized_residuals():
+    import numpy as np
     from timan_intelligence.core.statistical_engine import run_linear_mixed_effects_model
     rng = np.random.default_rng(2026)
     rows = []
