@@ -34,7 +34,8 @@ from timan_intelligence.core.statistical_engine import (
     run_wilcoxon_signed_rank_test,
     run_friedman_test,
     run_friedman_pairwise_posthoc,
-    run_repeated_measures_anova,\n    run_linear_mixed_effects_model,
+    run_repeated_measures_anova,
+    run_linear_mixed_effects_model,
 )
 
 
@@ -63,7 +64,8 @@ _EXECUTOR_BY_METHOD_ID = {
     "method.inference.comparison.wilcoxon_signed_rank": "wilcoxon_signed_rank",
     "method.inference.comparison.friedman": "friedman",
     "method.inference.comparison.posthoc.friedman_wilcoxon_holm": "friedman_wilcoxon_holm",
-    "method.inference.comparison.anova.repeated_measures": "repeated_measures_anova",\n    "method.inference.regression.linear_mixed_effects": "linear_mixed_effects",
+    "method.inference.comparison.anova.repeated_measures": "repeated_measures_anova",
+    "method.inference.regression.linear_mixed_effects": "linear_mixed_effects",
 }
 
 
@@ -342,7 +344,11 @@ def execute_recommendation(
         if len(variables) != 2:
             raise AnalysisExecutionError("Wilcoxon signed-rank testing requires before and after measurement variables.")
         result = run_wilcoxon_signed_rank_test(df, variables[0], variables[1], options.get("alternative", "two-sided"))
-    elif executor == "linear_mixed_effects":\n        if len(variables) < 3:\n            raise AnalysisExecutionError("A linear mixed-effects model requires an outcome, group identifier and at least one fixed-effect predictor.")\n        result = run_linear_mixed_effects_model(df, variables[0], variables[1], variables[2:])\n    elif executor == "repeated_measures_anova":
+    elif executor == "linear_mixed_effects":
+        if len(variables) < 3:
+            raise AnalysisExecutionError("A linear mixed-effects model requires an outcome, group identifier and at least one fixed-effect predictor.")
+        result = run_linear_mixed_effects_model(df, variables[0], variables[1], variables[2:])
+    elif executor == "repeated_measures_anova":
         if len(variables) < 3:
             raise AnalysisExecutionError("Repeated-measures ANOVA requires at least three repeated-measurement variables.")
         result = run_repeated_measures_anova(df, variables, options.get("confidence_level", 0.95))

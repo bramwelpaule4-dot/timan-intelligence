@@ -79,7 +79,8 @@ from timan_intelligence.services.analysis_service import (
     run_wilcoxon_signed_rank_test_service,
     run_friedman_test_service,
     run_friedman_pairwise_posthoc_service,
-    run_repeated_measures_anova_service,\n    run_linear_mixed_effects_model_service,
+    run_repeated_measures_anova_service,
+    run_linear_mixed_effects_model_service,
     run_ppswor_total_service,
     run_ppswor_ratio_service,
     run_ppswor_domain_ratio_service,
@@ -2887,7 +2888,9 @@ current_role = st.session_state.get("role") if not PUBLIC_ACCESS_MODE else None
 
 if PUBLIC_ACCESS_MODE:
     st.sidebar.info(
-        "PUBLIC PREVIEW\n\n"
+        "PUBLIC PREVIEW
+
+"
         "No account is required. Datasets remain in this browser session. "
         "Do not upload confidential or personally identifiable data."
     )
@@ -4970,9 +4973,12 @@ elif page == "Survey Analysis":
                 two_pps_joint_text = st.text_area(
                     "Second-order PSU joint inclusion probability matrix (CSV)",
                     placeholder=(
-                        ",P1,P2,P3\\n"
-                        "P1,0.50,0.20,0.30\\n"
-                        "P2,0.20,0.70,0.50\\n"
+                        ",P1,P2,P3\
+"
+                        "P1,0.50,0.20,0.30\
+"
+                        "P2,0.20,0.70,0.50\
+"
                         "P3,0.30,0.50,0.80"
                     ),
                     height=150,
@@ -7166,7 +7172,8 @@ elif page == "Statistical Inference":
                 "Wilcoxon signed-rank test",
                 "Friedman test",
                 "Pairwise Wilcoxon post-hoc test with Holm adjustment",
-                "One-way repeated-measures ANOVA",\n                "Linear mixed-effects model (random intercept)",
+                "One-way repeated-measures ANOVA",
+                "Linear mixed-effects model (random intercept)",
             ],
             key="inference_method_choice",
         )
@@ -7431,7 +7438,9 @@ elif page == "Statistical Inference":
                 st.caption("Tests whether at least one group mean differs across two or more independent groups.")
 
         design_confirmation_label = (
-            "I confirm that each row is one correctly matched unit across all selected repeated measurements, and different units are independent; this is not a complex survey."
+            "I confirm that rows are repeated observations nested within the selected subject/group, the group ID is correct, and this is not a complex survey."
+            if inference_method == "Linear mixed-effects model (random intercept)"
+            else "I confirm that each row is one correctly matched unit across all selected repeated measurements, and different units are independent; this is not a complex survey."
             if inference_method in {"Friedman test", "Pairwise Wilcoxon post-hoc test with Holm adjustment", "One-way repeated-measures ANOVA"}
             else "I confirm that each row is one correctly matched pair and that pair-level differences are independent; this is not a complex survey."
             if inference_method in {"Paired mean-change confidence interval", "Paired-samples Student's t-test", "Wilcoxon signed-rank test"}
@@ -7442,7 +7451,9 @@ elif page == "Statistical Inference":
             key="inference_independence_confirmed",
         )
         has_required_variables = (
-            len(measurement_variables) >= 3
+            len(fixed_effect_variables) >= 1 and outcome_variable is not None and group_variable is not None
+            if inference_method == "Linear mixed-effects model (random intercept)"
+            else len(measurement_variables) >= 3
             if inference_method in {"Friedman test", "Pairwise Wilcoxon post-hoc test with Holm adjustment"}
             else outcome_variable is not None
             and (
@@ -7492,7 +7503,9 @@ elif page == "Statistical Inference":
                     )
                 elif inference_method == "Kruskal–Wallis test":
                     inference_result = run_kruskal_wallis_test_service(inference_df, outcome_variable, group_variable)
-                elif inference_method == "Linear mixed-effects model (random intercept)":\n                    inference_result = run_linear_mixed_effects_model_service(inference_df, outcome_variable, group_variable, fixed_effect_variables)\n                elif inference_method == "One-way repeated-measures ANOVA":
+                elif inference_method == "Linear mixed-effects model (random intercept)":
+                    inference_result = run_linear_mixed_effects_model_service(inference_df, outcome_variable, group_variable, fixed_effect_variables)
+                elif inference_method == "One-way repeated-measures ANOVA":
                     inference_result = run_repeated_measures_anova_service(inference_df, measurement_variables, confidence_level)
                 elif inference_method == "Pairwise Wilcoxon post-hoc test with Holm adjustment":
                     inference_result = run_friedman_pairwise_posthoc_service(inference_df, measurement_variables)

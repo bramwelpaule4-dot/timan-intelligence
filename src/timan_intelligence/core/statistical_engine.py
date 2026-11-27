@@ -2053,6 +2053,8 @@ def run_linear_mixed_effects_model(df: pd.DataFrame, outcome_variable: str, grou
     parts = []
     for i, variable in enumerate(fixed_effect_variables):
         series = complete[variable]
+        if series.nunique(dropna=True) < 2:
+            raise ValueError(f"Fixed-effect predictor '{variable}' must contain at least two observed values.")
         name = f"x{i + 1}"
         if pd.api.types.is_numeric_dtype(series):
             part = pd.DataFrame({name: series.astype(float)}, index=complete.index)
