@@ -259,6 +259,10 @@ def test_linear_mixed_effects_model_fits_optional_numeric_random_slope():
     assert result.metadata["random_slope_variable"] == "time"
     assert result.metadata["random_slope_variance"] >= 0
     assert {"Group", "Random intercept", "Random slope"}.issubset(result.tables["random_intercepts"].columns)
+    diagnostic_names = result.tables["diagnostic_summary"]["Diagnostic"].tolist()
+    assert "Random-slope BLUP normality (Shapiro-Wilk)" in diagnostic_names
+    assert "Random-slope BLUPs beyond 3 SD" in diagnostic_names
+    assert "Correlation of random-intercept and random-slope BLUPs" in diagnostic_names
 
 
 def test_linear_mixed_effects_model_rejects_categorical_random_slope():

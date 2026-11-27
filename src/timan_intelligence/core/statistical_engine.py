@@ -2139,6 +2139,21 @@ def run_linear_mixed_effects_model(df: pd.DataFrame, outcome_variable: str, grou
             random_intercepts.append(random_row)
     random_intercept_values = np.asarray([row["Random intercept"] for row in random_intercepts], dtype=float)
     random_normality = shapiro(random_intercept_values) if len(random_intercept_values) >= 3 else None
+    random_slope_values = (
+        np.asarray([row["Random slope"] for row in random_intercepts], dtype=float)
+        if random_slope_variable is not None else np.asarray([], dtype=float)
+    )
+    slope_normality = shapiro(random_slope_values) if len(random_slope_values) >= 3 else None
+    slope_sd = float(np.std(random_slope_values, ddof=1)) if len(random_slope_values) >= 2 else 0.0
+    slope_outlier_count = (
+        int(np.sum(np.abs(random_slope_values - np.mean(random_slope_values)) > 3 * slope_sd))
+        if slope_sd > 0 else 0
+    )
+    intercept_slope_blup_correlation = (
+        float(np.corrcoef(random_intercept_values, random_slope_values)[0, 1])
+        if random_slope_variable is not None and len(random_slope_values) >= 3
+        and np.std(random_intercept_values) > 0 and slope_sd > 0 else None
+    )
     diagnostic_rows = [
         {"Diagnostic": "Residual normality (Shapiro-Wilk)", "Statistic": float(residual_normality.statistic) if residual_normality else None, "p-value": float(residual_normality.pvalue) if residual_normality else None, "Interpretation": f"Based on {shapiro_n:,} residuals; inspect the Q-Q plot as well." if residual_normality else "Not available."},
         {"Diagnostic": "Residual skewness", "Statistic": residual_skewness, "p-value": None, "Interpretation": "Values near zero indicate approximate symmetry; interpret alongside the Q-Q plot."},
@@ -2147,6 +2162,12 @@ def run_linear_mixed_effects_model(df: pd.DataFrame, outcome_variable: str, grou
         {"Diagnostic": "Standardized residuals with absolute value > 3", "Statistic": int(np.sum(np.abs(standardized) > 3)), "p-value": None, "Interpretation": "Review these observations for data errors or unusual cases; do not remove automatically."},
         {"Diagnostic": "Random-intercept normality (Shapiro-Wilk)", "Statistic": float(random_normality.statistic) if random_normality else None, "p-value": float(random_normality.pvalue) if random_normality else None, "Interpretation": "Approximate check across groups; low group counts make this test weak." if random_normality else "Not available."},
     ]
+    if random_slope_variable is not None:
+        diagnostic_rows.extend([
+            {"Diagnostic": "Random-slope BLUP normality (Shapiro-Wilk)", "Statistic": float(slope_normality.statistic) if slope_normality else None, "p-value": float(slope_normality.pvalue) if slope_normality else None, "Interpretation": "Exploratory check of estimated group-specific slopes; BLUPs are shrunken estimates and group counts may be small." if slope_normality else "Not available; at least three group-level slope estimates are required."},
+            {"Diagnostic": "Random-slope BLUPs beyond 3 SD", "Statistic": slope_outlier_count, "p-value": None, "Interpretation": "Flags unusually distant estimated group slopes for review; do not remove groups automatically."},
+            {"Diagnostic": "Correlation of random-intercept and random-slope BLUPs", "Statistic": intercept_slope_blup_correlation, "p-value": None, "Interpretation": "Descriptive association between estimated group effects; it is not the model-estimated covariance or correlation."},
+        ])
     residual_frame = pd.DataFrame({"Fitted value": fitted_values, "Residual": residual_values, "Standardized residual": standardized, "Group": diagnostic_groups})
     if len(residual_frame) > 500:
         residual_frame = residual_frame.iloc[np.linspace(0, len(residual_frame) - 1, 500, dtype=int)].reset_index(drop=True)
