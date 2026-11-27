@@ -458,6 +458,8 @@ def run_mann_whitney_u_test(
 
     if not isinstance(df, pd.DataFrame):
         raise TypeError("Expected a pandas DataFrame.")
+    if not 0.5 < float(confidence_level) < 1.0:
+        raise ValueError("Confidence level must be greater than 0.50 and less than 1.00.")
     if outcome_variable not in df.columns or group_variable not in df.columns:
         raise ValueError("Both outcome and grouping variables must exist.")
     if outcome_variable == group_variable:
@@ -2017,7 +2019,7 @@ def run_welch_mean_difference_confidence_interval(
     )
 
 
-def run_linear_mixed_effects_model(df: pd.DataFrame, outcome_variable: str, group_variable: str, fixed_effect_variables: list[str]) -> AnalysisResult:
+def run_linear_mixed_effects_model(df: pd.DataFrame, outcome_variable: str, group_variable: str, fixed_effect_variables: list[str], confidence_level: float = 0.95) -> AnalysisResult:
     """Fit a Gaussian random-intercept model to long-format repeated observations."""
     import warnings
     from statsmodels.regression.mixed_linear_model import MixedLM
@@ -2080,11 +2082,11 @@ def run_linear_mixed_effects_model(df: pd.DataFrame, outcome_variable: str, grou
             raise ValueError(f"The linear mixed-effects model could not be fitted: {exc}") from exc
     if not fitted.converged:
         raise ValueError("The linear mixed-effects model did not converge. Review the data and model specification.")
-    ci = fitted.conf_int()
+    ci = fitted.conf_int(alpha=1.0 - float(confidence_level))
     rows = []
     for name in exog.columns:
         lo, hi = map(float, ci.loc[name].tolist())
-        rows.append({"Term": name, "Coefficient": float(fitted.fe_params[name]), "Standard error": float(fitted.bse_fe[name]), "z statistic": float(fitted.tvalues[name]), "p-value": float(fitted.pvalues[name]), "95% CI lower": lo, "95% CI upper": hi})
+        rows.append({"Term": name, "Coefficient": float(fitted.fe_params[name]), "Standard error": float(fitted.bse_fe[name]), "z statistic": float(fitted.tvalues[name]), "p-value": float(fitted.pvalues[name]), f"{confidence_level:.0%} CI lower": lo, f"{confidence_level:.0%} CI upper": hi})
     random_var = float(np.asarray(fitted.cov_re)[0, 0])
     residual_var = float(fitted.scale)
     icc = random_var / (random_var + residual_var) if random_var + residual_var > 0 else None
@@ -2094,4 +2096,4 @@ def run_linear_mixed_effects_model(df: pd.DataFrame, outcome_variable: str, grou
     if random_var <= 1e-8: limits.append("The random-intercept variance is near zero; assess whether a mixed model is warranted.")
     warning_text = [str(w.message) for w in caught if issubclass(w.category, (ConvergenceWarning, RuntimeWarning))]
     if warning_text: limits.append("Model fitting warnings: " + " | ".join(warning_text[:3]))
-    return AnalysisResult(title=f"Linear mixed-effects model: {outcome_variable}", method="Linear mixed-effects model (random intercept)", status="success", tables={"fixed_effects": pd.DataFrame(rows), "model_summary": summary}, findings=[f"Model fitted {len(complete):,} observations across {groups.nunique():,} groups.", f"Estimated random-intercept variance: {random_var:.4g}; residual variance: {residual_var:.4g}."] + ([f"Estimated intraclass correlation: {icc:.3f}."] if icc is not None else []), assumptions=["The outcome is continuous and the conditional mean is adequately represented by the fixed effects.", "Random intercepts are approximately normally distributed and independent across groups.", "Conditional residuals are approximately normal with constant variance.", "Observations are conditionally independent given random effects and fixed effects."], limitations=limits, metadata={"outcome_variable": outcome_variable, "group_variable": group_variable, "fixed_effect_variables": list(fixed_effect_variables), "n_observations": len(complete), "n_groups": int(groups.nunique()), "missing_rows_excluded": excluded, "random_intercept_variance": random_var, "residual_variance": residual_var, "intraclass_correlation": icc, "converged": bool(fitted.converged), "estimation": "REML", "random_effect_structure": "random_intercept", "sampling_design_aware": False, "study_design": "longitudinal"})
+    return AnalysisResult(title=f"Linear mixed-effects model: {outcome_variable}", method="Linear mixed-effects model (random intercept)", status="success", tables={"fixed_effects": pd.DataFrame(rows), "model_summary": summary}, findings=[f"Model fitted {len(complete):,} observations across {groups.nunique():,} groups.", f"Estimated random-intercept variance: {random_var:.4g}; residual variance: {residual_var:.4g}."] + ([f"Estimated intraclass correlation: {icc:.3f}."] if icc is not None else []), assumptions=["The outcome is continuous and the conditional mean is adequately represented by the fixed effects.", "Random intercepts are approximately normally distributed and independent across groups.", "Conditional residuals are approximately normal with constant variance.", "Observations are conditionally independent given random effects and fixed effects."], limitations=limits, metadata={"outcome_variable": outcome_variable, "group_variable": group_variable, "fixed_effect_variables": list(fixed_effect_variables), "n_observations": len(complete), "n_groups": int(groups.nunique()), "missing_rows_excluded": excluded, "random_intercept_variance": random_var, "residual_variance": residual_var, "intraclass_correlation": icc, "converged": bool(fitted.converged), "estimation": "REML", "confidence_level": float(confidence_level), "random_effect_structure": "random_intercept", "sampling_design_aware": False, "study_design": "longitudinal"})

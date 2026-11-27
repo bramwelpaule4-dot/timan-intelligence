@@ -2033,7 +2033,7 @@ def run_one_sample_binomial_test_service(df: pd.DataFrame, variable: str, refere
     return run_one_sample_binomial_test(df, variable, reference_proportion, alternative, confidence_level)
 
 
-def run_linear_mixed_effects_model_service(df: pd.DataFrame, outcome_variable: str, group_variable: str, fixed_effect_variables: list[str]) -> AnalysisResult:
+def run_linear_mixed_effects_model_service(df: pd.DataFrame, outcome_variable: str, group_variable: str, fixed_effect_variables: list[str], confidence_level: float = 0.95) -> AnalysisResult:
     """Run a validated random-intercept linear mixed-effects model."""
     from timan_intelligence.core.statistical_engine import run_linear_mixed_effects_model
-    return run_linear_mixed_effects_model(df, outcome_variable, group_variable, fixed_effect_variables)
+    return run_linear_mixed_effects_model(df, outcome_variable, group_variable, fixed_effect_variables, confidence_level)

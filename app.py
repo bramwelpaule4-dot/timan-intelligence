@@ -7139,11 +7139,12 @@ elif page == "Statistical Inference":
         readiness[3].metric("Completeness", f"{completeness:.1f}%")
 
         st.warning(
-            "These initial inferential procedures assume independent observations "
-            "and do not adjust for survey weights, clustering, stratification, "
-            "repeated measures or finite-population corrections. For probability "
-            "samples or complex survey designs, use the design-aware procedures "
-            "in Survey Analysis instead."
+            "Most procedures below assume independent observations. Paired, repeated-measures "
+            "and mixed-effects methods have their own study-design requirements, "
+            "but none of these general procedures automatically adjusts for complex "
+            "survey weights, stratification, sampling clusters or finite-population "
+            "corrections. For probability samples, use design-aware procedures in "
+            "Survey Analysis instead."
         )
         inference_method = st.selectbox(
             "Inferential procedure",
@@ -7499,7 +7500,7 @@ elif page == "Statistical Inference":
                 elif inference_method == "Kruskal–Wallis test":
                     inference_result = run_kruskal_wallis_test_service(inference_df, outcome_variable, group_variable)
                 elif inference_method == "Linear mixed-effects model (random intercept)":
-                    inference_result = run_linear_mixed_effects_model_service(inference_df, outcome_variable, group_variable, fixed_effect_variables)
+                    inference_result = run_linear_mixed_effects_model_service(inference_df, outcome_variable, group_variable, fixed_effect_variables, confidence_level)
                 elif inference_method == "One-way repeated-measures ANOVA":
                     inference_result = run_repeated_measures_anova_service(inference_df, measurement_variables, confidence_level)
                 elif inference_method == "Pairwise Wilcoxon post-hoc test with Holm adjustment":

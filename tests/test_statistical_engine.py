@@ -189,3 +189,16 @@ def test_linear_mixed_effects_model_rejects_constant_predictor():
     frame = pd.DataFrame({"subject": [1,1,2,2,3,3], "score": [1,2,2,3,3,4], "constant": [1]*6})
     with pytest.raises(ValueError, match="two observed values"):
         run_linear_mixed_effects_model(frame, "score", "subject", ["constant"])
+
+
+def test_linear_mixed_effects_model_uses_requested_confidence_level():
+    from timan_intelligence.core.statistical_engine import run_linear_mixed_effects_model
+    rows = []
+    for subject in range(1, 9):
+        for time in range(3):
+            rows.append({"subject": subject, "time": float(time),
+                         "score": subject * 0.3 + time * 1.2 + ((subject + time) % 3) * 0.15})
+    result = run_linear_mixed_effects_model(pd.DataFrame(rows), "score", "subject", ["time"], 0.90)
+    assert result.metadata["confidence_level"] == pytest.approx(0.90)
+    assert "90% CI lower" in result.tables["fixed_effects"].columns
+    assert "90% CI upper" in result.tables["fixed_effects"].columns
