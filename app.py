@@ -7574,6 +7574,21 @@ elif page == "Statistical Inference":
                         hide_index=True,
                         use_container_width=True,
                     )
+            if inference_result.method == "Linear mixed-effects model (random intercept)":
+                residual_plot = inference_result.tables.get("residual_diagnostics")
+                qq_plot = inference_result.tables.get("normal_qq")
+                with st.expander("Model diagnostic plots", expanded=True):
+                    st.caption("Residual patterns and Q-Q plots are diagnostic aids. They do not automatically determine whether a model is valid.")
+                    if isinstance(residual_plot, pd.DataFrame) and not residual_plot.empty:
+                        st.markdown("**Standardized residuals versus fitted values**")
+                        st.scatter_chart(residual_plot, x="Fitted value", y="Standardized residual", use_container_width=True)
+                    if isinstance(qq_plot, pd.DataFrame) and not qq_plot.empty:
+                        st.markdown("**Normal Q-Q plot of standardized residuals**")
+                        st.scatter_chart(qq_plot, x="Theoretical normal quantile", y="Ordered standardized residual", use_container_width=True)
+                    random_effects_plot = inference_result.tables.get("random_intercepts")
+                    if isinstance(random_effects_plot, pd.DataFrame) and not random_effects_plot.empty:
+                        st.markdown("**Estimated group random intercepts**")
+                        st.bar_chart(random_effects_plot.set_index("Group")["Random intercept"], use_container_width=True)
             with st.expander("Assumptions and interpretation guidance"):
                 for assumption in inference_result.assumptions:
                     st.write(f"• {assumption}")

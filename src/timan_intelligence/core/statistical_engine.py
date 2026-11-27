@@ -2089,6 +2089,47 @@ def run_linear_mixed_effects_model(df: pd.DataFrame, outcome_variable: str, grou
         rows.append({"Term": name, "Coefficient": float(fitted.fe_params[name]), "Standard error": float(fitted.bse_fe[name]), "z statistic": float(fitted.tvalues[name]), "p-value": float(fitted.pvalues[name]), f"{confidence_level:.0%} CI lower": lo, f"{confidence_level:.0%} CI upper": hi})
     random_var = float(np.asarray(fitted.cov_re)[0, 0])
     residual_var = float(fitted.scale)
+    # Post-fit diagnostics are descriptive checks, not automatic pass/fail rules.
+    from scipy.stats import kurtosis, norm, shapiro, skew, spearmanr
+    fitted_values = np.asarray(fitted.fittedvalues, dtype=float)
+    residual_values = np.asarray(fitted.resid, dtype=float)
+    residual_sd = float(np.sqrt(residual_var)) if residual_var > 0 else np.nan
+    standardized = residual_values / residual_sd if np.isfinite(residual_sd) and residual_sd > 0 else np.full(len(residual_values), np.nan)
+    finite_mask = np.isfinite(fitted_values) & np.isfinite(residual_values) & np.isfinite(standardized)
+    fitted_values = fitted_values[finite_mask]
+    residual_values = residual_values[finite_mask]
+    standardized = standardized[finite_mask]
+    diagnostic_groups = groups.iloc[np.flatnonzero(finite_mask)].astype(str).to_numpy()
+    n_diag = int(len(standardized))
+    shapiro_n = min(n_diag, 5000)
+    shapiro_sample = standardized if n_diag <= shapiro_n else standardized[np.linspace(0, n_diag - 1, shapiro_n, dtype=int)]
+    residual_normality = shapiro(shapiro_sample) if shapiro_n >= 3 else None
+    residual_skewness = float(skew(standardized, bias=False)) if n_diag >= 3 else None
+    residual_excess_kurtosis = float(kurtosis(standardized, fisher=True, bias=False)) if n_diag >= 4 else None
+    residual_fit_correlation = spearmanr(fitted_values, np.abs(standardized)) if n_diag >= 3 else None
+    random_intercepts = []
+    for group_name, effect in fitted.random_effects.items():
+        effect_values = np.asarray(effect, dtype=float).reshape(-1)
+        if effect_values.size:
+            random_intercepts.append({"Group": str(group_name), "Random intercept": float(effect_values[0])})
+    random_intercept_values = np.asarray([row["Random intercept"] for row in random_intercepts], dtype=float)
+    random_normality = shapiro(random_intercept_values) if len(random_intercept_values) >= 3 else None
+    diagnostic_rows = [
+        {"Diagnostic": "Residual normality (Shapiro-Wilk)", "Statistic": float(residual_normality.statistic) if residual_normality else None, "p-value": float(residual_normality.pvalue) if residual_normality else None, "Interpretation": f"Based on {shapiro_n:,} residuals; inspect the Q-Q plot as well." if residual_normality else "Not available."},
+        {"Diagnostic": "Residual skewness", "Statistic": residual_skewness, "p-value": None, "Interpretation": "Values near zero indicate approximate symmetry; interpret alongside the Q-Q plot."},
+        {"Diagnostic": "Residual excess kurtosis", "Statistic": residual_excess_kurtosis, "p-value": None, "Interpretation": "Values near zero indicate tail weight similar to a normal distribution."},
+        {"Diagnostic": "Spearman association: fitted value vs absolute standardized residual", "Statistic": float(residual_fit_correlation.statistic) if residual_fit_correlation else None, "p-value": float(residual_fit_correlation.pvalue) if residual_fit_correlation else None, "Interpretation": "A pronounced pattern may indicate non-constant residual spread; inspect residuals against fitted values."},
+        {"Diagnostic": "Standardized residuals with absolute value > 3", "Statistic": int(np.sum(np.abs(standardized) > 3)), "p-value": None, "Interpretation": "Review these observations for data errors or unusual cases; do not remove automatically."},
+        {"Diagnostic": "Random-intercept normality (Shapiro-Wilk)", "Statistic": float(random_normality.statistic) if random_normality else None, "p-value": float(random_normality.pvalue) if random_normality else None, "Interpretation": "Approximate check across groups; low group counts make this test weak." if random_normality else "Not available."},
+    ]
+    residual_frame = pd.DataFrame({"Fitted value": fitted_values, "Residual": residual_values, "Standardized residual": standardized, "Group": diagnostic_groups})
+    if len(residual_frame) > 500:
+        residual_frame = residual_frame.iloc[np.linspace(0, len(residual_frame) - 1, 500, dtype=int)].reset_index(drop=True)
+    qq_ordered = np.sort(standardized)
+    qq_probabilities = (np.arange(1, n_diag + 1) - 0.5) / n_diag
+    qq_frame = pd.DataFrame({"Theoretical normal quantile": norm.ppf(qq_probabilities), "Ordered standardized residual": qq_ordered})
+    if len(qq_frame) > 500:
+        qq_frame = qq_frame.iloc[np.linspace(0, len(qq_frame) - 1, 500, dtype=int)].reset_index(drop=True)
     icc = random_var / (random_var + residual_var) if random_var + residual_var > 0 else None
     summary = pd.DataFrame([{"Observations": len(complete), "Groups": groups.nunique(), "Minimum observations per group": int(counts.min()), "Maximum observations per group": int(counts.max()), "Random-intercept variance": random_var, "Residual variance": residual_var, "Intraclass correlation (ICC)": icc, "Log-likelihood": float(fitted.llf), "AIC": float(fitted.aic) if np.isfinite(fitted.aic) else None, "BIC": float(fitted.bic) if np.isfinite(fitted.bic) else None, "Converged": bool(fitted.converged), "Rows excluded": excluded}])
     limits = ["Random-intercept structure only; random slopes and non-Gaussian outcomes are not implemented.", "REML is used for variance estimation; do not compare REML likelihoods across models with different fixed effects.", "Not adjusted for complex survey weights, stratification, sampling clusters or finite-population corrections.", "Wald z p-values use large-sample approximations; small-sample degrees-of-freedom corrections are not provided."]
@@ -2096,4 +2137,4 @@ def run_linear_mixed_effects_model(df: pd.DataFrame, outcome_variable: str, grou
     if random_var <= 1e-8: limits.append("The random-intercept variance is near zero; assess whether a mixed model is warranted.")
     warning_text = [str(w.message) for w in caught if issubclass(w.category, (ConvergenceWarning, RuntimeWarning))]
     if warning_text: limits.append("Model fitting warnings: " + " | ".join(warning_text[:3]))
-    return AnalysisResult(title=f"Linear mixed-effects model: {outcome_variable}", method="Linear mixed-effects model (random intercept)", status="success", tables={"fixed_effects": pd.DataFrame(rows), "model_summary": summary}, findings=[f"Model fitted {len(complete):,} observations across {groups.nunique():,} groups.", f"Estimated random-intercept variance: {random_var:.4g}; residual variance: {residual_var:.4g}."] + ([f"Estimated intraclass correlation: {icc:.3f}."] if icc is not None else []), assumptions=["The outcome is continuous and the conditional mean is adequately represented by the fixed effects.", "Random intercepts are approximately normally distributed and independent across groups.", "Conditional residuals are approximately normal with constant variance.", "Observations are conditionally independent given random effects and fixed effects."], limitations=limits, metadata={"outcome_variable": outcome_variable, "group_variable": group_variable, "fixed_effect_variables": list(fixed_effect_variables), "n_observations": len(complete), "n_groups": int(groups.nunique()), "missing_rows_excluded": excluded, "random_intercept_variance": random_var, "residual_variance": residual_var, "intraclass_correlation": icc, "converged": bool(fitted.converged), "estimation": "REML", "confidence_level": float(confidence_level), "random_effect_structure": "random_intercept", "sampling_design_aware": False, "study_design": "longitudinal"})
+    return AnalysisResult(title=f"Linear mixed-effects model: {outcome_variable}", method="Linear mixed-effects model (random intercept)", status="success", tables={"fixed_effects": pd.DataFrame(rows), "model_summary": summary, "diagnostic_summary": pd.DataFrame(diagnostic_rows), "residual_diagnostics": residual_frame, "normal_qq": qq_frame, "random_intercepts": pd.DataFrame(random_intercepts)}, findings=[f"Model fitted {len(complete):,} observations across {groups.nunique():,} groups.", f"Estimated random-intercept variance: {random_var:.4g}; residual variance: {residual_var:.4g}.", f"Residual diagnostic checks were calculated for {n_diag:,} fitted observations; review the diagnostic summary and plots before drawing conclusions."] + ([f"Estimated intraclass correlation: {icc:.3f}."] if icc is not None else []), assumptions=["The outcome is continuous and the conditional mean is adequately represented by the fixed effects.", "Random intercepts are approximately normally distributed and independent across groups.", "Conditional residuals are approximately normal with constant variance.", "Observations are conditionally independent given random effects and fixed effects."], limitations=limits, metadata={"outcome_variable": outcome_variable, "group_variable": group_variable, "fixed_effect_variables": list(fixed_effect_variables), "n_observations": len(complete), "n_groups": int(groups.nunique()), "missing_rows_excluded": excluded, "random_intercept_variance": random_var, "residual_variance": residual_var, "intraclass_correlation": icc, "converged": bool(fitted.converged), "estimation": "REML", "confidence_level": float(confidence_level), "random_effect_structure": "random_intercept", "sampling_design_aware": False, "study_design": "longitudinal"})

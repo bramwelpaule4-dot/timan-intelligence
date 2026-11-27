@@ -210,3 +210,36 @@ def test_linear_mixed_effects_model_rejects_invalid_confidence_level():
                           "score": [1,2,2,3,3,4]})
     with pytest.raises(ValueError, match="Confidence level"):
         run_linear_mixed_effects_model(frame, "score", "subject", ["time"], 1.0)
+
+
+def test_linear_mixed_effects_model_returns_residual_and_random_effect_diagnostics():
+    from timan_intelligence.core.statistical_engine import run_linear_mixed_effects_model
+    rows = []
+    for subject in range(1, 13):
+        for time in range(4):
+            noise = ((subject * 7 + time * 3) % 11 - 5) * 0.07
+            rows.append({"subject": f"S{subject}", "time": float(time),
+                         "score": subject * 0.35 + 1.8 * time + noise})
+    result = run_linear_mixed_effects_model(pd.DataFrame(rows), "score", "subject", ["time"])
+    assert {"diagnostic_summary", "residual_diagnostics", "normal_qq", "random_intercepts"}.issubset(result.tables)
+    diagnostics = result.tables["diagnostic_summary"]
+    assert "Residual normality (Shapiro-Wilk)" in diagnostics["Diagnostic"].tolist()
+    assert len(result.tables["residual_diagnostics"]) <= 500
+    assert len(result.tables["normal_qq"]) <= 500
+    assert len(result.tables["random_intercepts"]) == 12
+    assert set(["Fitted value", "Residual", "Standardized residual", "Group"]).issubset(result.tables["residual_diagnostics"].columns)
+
+
+def test_linear_mixed_effects_model_diagnostics_flag_large_standardized_residuals():
+    from timan_intelligence.core.statistical_engine import run_linear_mixed_effects_model
+    rows = []
+    for subject in range(1, 11):
+        for time in range(3):
+            value = subject * 0.2 + time * 1.1 + ((subject + time) % 3) * 0.05
+            if subject == 10 and time == 2:
+                value += 15
+            rows.append({"subject": subject, "time": float(time), "score": value})
+    result = run_linear_mixed_effects_model(pd.DataFrame(rows), "score", "subject", ["time"])
+    diag = result.tables["diagnostic_summary"]
+    row = diag.loc[diag["Diagnostic"] == "Standardized residuals with absolute value > 3"].iloc[0]
+    assert row["Statistic"] >= 1
