@@ -36,7 +36,7 @@ def test_only_existing_execution_methods_are_marked_implemented():
     }
 
     assert implemented == IMPLEMENTED_METHODS
-    assert len(implemented) == 42
+    assert len(implemented) == 43
 
 
 def test_sarima_is_registered_as_conditionally_executable():
@@ -194,8 +194,8 @@ def test_catalogue_summary_reports_lifecycle_and_priorities():
 
     assert summary["catalogue_version"] == CATALOGUE_VERSION
     assert summary["total_methods"] == 43
-    assert summary["implementation_status"]["implemented"] == 42
-    assert summary["implementation_status"].get("planned", 0) == 1
+    assert summary["implementation_status"]["implemented"] == 43
+    assert summary["implementation_status"].get("planned", 0) == 0
     assert set(summary["release_priorities"]) == {"P1", "P2", "P3"}
 
 
