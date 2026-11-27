@@ -2390,3 +2390,8 @@ STL (Seasonal-Trend decomposition using LOESS) decomposes a regular univariate s
 ## ADF and KPSS stationarity diagnostics
 
 The stationarity diagnostic workflow reports the Augmented Dickey-Fuller (ADF) unit-root test and the KPSS stationarity test for a regular univariate series. ADF has a unit-root null hypothesis; KPSS has a level- or trend-stationarity null hypothesis. Results include test statistics, p-values, selected lags and critical values. Both tests should be interpreted jointly and in the context of the selected deterministic terms, structural breaks and data-generating process. These diagnostics guide differencing and model specification but do not automatically choose an ARIMA/SARIMA order or prove stationarity. At least 30 complete, finite, regularly spaced observations are required; complex survey adjustments are not supported.
+
+
+## ACF and PACF autocorrelation diagnostics
+
+The autocorrelation diagnostic workflow reports sample autocorrelation (ACF), partial autocorrelation (PACF), approximate confidence intervals and Ljung-Box joint tests at selected lags. It supports inspection of serial dependence before ARIMA/SARIMA specification and residual review after model fitting. At least 30 complete, finite, regularly spaced observations are required; the lag count is limited to 20 and must be less than half the sample size. ACF/PACF patterns support analyst-led model identification but do not automatically select orders. Trends, seasonal patterns, structural breaks and outliers must be considered. Complex survey adjustments are not supported.

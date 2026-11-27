@@ -9,7 +9,7 @@ import pandas as pd
 from scipy.stats import jarque_bera
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.stats.diagnostic import acorr_ljungbox
-from statsmodels.tsa.stattools import adfuller, kpss
+from statsmodels.tsa.stattools import adfuller, kpss, acf, pacf
 
 from timan_intelligence.core.contracts import AnalysisResult
 
@@ -673,6 +673,115 @@ def run_stationarity_diagnostics(
             "adf_max_lag": max_lag,
             "adf_lags_used": int(adf_lags),
             "kpss_lags_used": int(kpss_lags),
+            "sampling_design_aware": False,
+            "study_design": "time_series",
+        },
+    )
+
+
+
+def run_autocorrelation_diagnostics(
+    df: pd.DataFrame,
+    time_variable: str,
+    outcome_variable: str,
+    nlags: int = 20,
+    confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Return ACF/PACF estimates and Ljung-Box residual-dependence diagnostics."""
+    if not isinstance(df, pd.DataFrame) or df.empty:
+        raise ValueError("A non-empty pandas DataFrame is required.")
+    if not isinstance(time_variable, str) or time_variable not in df.columns:
+        raise ValueError("Select a valid time-index variable.")
+    if not isinstance(outcome_variable, str) or outcome_variable not in df.columns:
+        raise ValueError("Select a valid numeric outcome variable.")
+    if time_variable == outcome_variable:
+        raise ValueError("Time-index and outcome variables must be different.")
+    if not pd.api.types.is_numeric_dtype(df[outcome_variable]):
+        raise TypeError("Autocorrelation diagnostics require a numeric outcome variable.")
+    if isinstance(nlags, bool) or not isinstance(nlags, (int, np.integer)):
+        raise TypeError("nlags must be an integer.")
+    if not 1 <= int(nlags) <= 20:
+        raise ValueError("nlags must be between 1 and 20.")
+    if isinstance(confidence_level, bool) or not isinstance(confidence_level, (int, float)):
+        raise TypeError("Confidence level must be numeric.")
+    level = float(confidence_level)
+    if not 0 < level < 1:
+        raise ValueError("Confidence level must be greater than 0 and less than 1.")
+
+    dates = pd.to_datetime(df[time_variable], errors="coerce")
+    if dates.isna().any():
+        raise ValueError("Time-index values must be valid and complete.")
+    if dates.duplicated().any():
+        raise ValueError("Time-index values must be unique.")
+    positions = np.argsort(dates.to_numpy())
+    dates = pd.DatetimeIndex(dates.iloc[positions])
+    values = pd.to_numeric(df[outcome_variable], errors="coerce").to_numpy(dtype=float)[positions]
+    if not np.isfinite(values).all():
+        raise ValueError("Outcome values must be complete and finite; resolve missing or infinite values first.")
+    if len(values) < 30:
+        raise ValueError("At least 30 regularly spaced observations are required for autocorrelation diagnostics.")
+    inferred_frequency = pd.infer_freq(dates)
+    if inferred_frequency is None:
+        raise ValueError("The time index is not regularly spaced.")
+    frequency = getattr(inferred_frequency, "freqstr", str(inferred_frequency))
+    if int(nlags) >= len(values) // 2:
+        raise ValueError("nlags must be smaller than half the number of observations for PACF estimation.")
+    if np.ptp(values) <= np.finfo(float).eps:
+        raise ValueError("Autocorrelation diagnostics are undefined for a constant series.")
+
+    centered = values - float(np.mean(values))
+    alpha = 1.0 - level
+    acf_values, acf_intervals = acf(
+        centered, nlags=int(nlags), alpha=alpha, fft=True, missing="raise"
+    )
+    pacf_values, pacf_intervals = pacf(
+        centered, nlags=int(nlags), alpha=alpha, method="ywm"
+    )
+    lag_table = pd.DataFrame({
+        "lag": np.arange(int(nlags) + 1, dtype=int),
+        "autocorrelation": np.asarray(acf_values, dtype=float),
+        "acf_confidence_lower": np.asarray(acf_intervals[:, 0], dtype=float),
+        "acf_confidence_upper": np.asarray(acf_intervals[:, 1], dtype=float),
+        "partial_autocorrelation": np.asarray(pacf_values, dtype=float),
+        "pacf_confidence_lower": np.asarray(pacf_intervals[:, 0], dtype=float),
+        "pacf_confidence_upper": np.asarray(pacf_intervals[:, 1], dtype=float),
+    })
+    diagnostic_lags = sorted({min(5, int(nlags)), min(10, int(nlags)), int(nlags)})
+    lb = acorr_ljungbox(centered, lags=diagnostic_lags, model_df=0, return_df=True)
+    ljung_box = lb.rename_axis("lag").reset_index().rename(columns={
+        "lb_stat": "ljung_box_q", "lb_pvalue": "p_value"
+    })
+    findings = [
+        f"Computed ACF and PACF through lag {int(nlags)} for {len(values):,} regularly spaced observations.",
+        f"Reported {level:.1%} confidence intervals for the ACF and PACF estimates.",
+        "Ljung-Box tests assess the joint null of no autocorrelation through each reported lag; inspect the correlogram and p-values together.",
+    ]
+    limitations = [
+        "ACF and PACF are sample diagnostics for model identification; confidence bands are approximate and do not select ARIMA/SARIMA orders automatically.",
+        "Ljung-Box p-values depend on the selected lag range and are not a substitute for residual diagnostics after model fitting.",
+        "Structural breaks, trends, seasonality and outliers can create apparent autocorrelation; assess stationarity and consider differencing or seasonal terms.",
+        "The analysis is univariate and is not adjusted for complex survey weights, clustering or stratification.",
+    ]
+    return AnalysisResult(
+        title=f"ACF/PACF diagnostics: {outcome_variable}",
+        method="Autocorrelation and partial autocorrelation diagnostics",
+        status="success",
+        tables={"acf_pacf": lag_table, "ljung_box": ljung_box},
+        findings=findings,
+        assumptions=[
+            "The time index is unique, ordered and regularly spaced.",
+            "The input series is complete, finite and has non-zero variation.",
+            "The selected lag range is appropriate for the available sample size.",
+        ],
+        limitations=limitations,
+        metadata={
+            "time_variable": time_variable,
+            "outcome_variable": outcome_variable,
+            "frequency": frequency,
+            "n_observations": int(len(values)),
+            "nlags": int(nlags),
+            "confidence_level": level,
+            "ljung_box_lags": diagnostic_lags,
             "sampling_design_aware": False,
             "study_design": "time_series",
         },

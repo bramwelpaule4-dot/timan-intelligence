@@ -44,6 +44,7 @@ from timan_intelligence.core.bootstrap import run_bootstrap_confidence_interval
 from timan_intelligence.core.time_series import (
     run_arima_time_series_model, run_sarima_time_series_model,
     run_stl_time_series_decomposition, run_stationarity_diagnostics,
+    run_autocorrelation_diagnostics,
 )
 from timan_intelligence.core.numeric_association import run_numeric_association
 from timan_intelligence.services.analysis_service import (
@@ -99,6 +100,7 @@ _EXECUTOR_BY_METHOD_ID = {
     "method.forecasting.time_series.sarima": "sarima",
     "method.forecasting.time_series.stl_decomposition": "stl_decomposition",
     "method.diagnostic.time_series.stationarity": "stationarity_diagnostics",
+    "method.diagnostic.time_series.autocorrelation": "autocorrelation_diagnostics",
     "method.inference.comparison.anova.repeated_measures": "repeated_measures_anova",
     "method.inference.regression.linear_mixed_effects": "linear_mixed_effects",
     "method.inference.regression.linear.multiple": "multiple_linear_regression",
@@ -473,6 +475,20 @@ def execute_recommendation(
             outcome_variable=variables[1],
             regression=options.get("regression", "c"),
             max_lag=options.get("max_lag"),
+        )
+    elif executor == "autocorrelation_diagnostics":
+        if len(variables) != 2:
+            raise AnalysisExecutionError("ACF/PACF diagnostics require a time-index variable and one numeric outcome variable.")
+        options = recommendation.get("options") or {}
+        declared_design = str(design_context.get("study_design") or "").casefold().replace("-", "_")
+        if declared_design != "time_series":
+            raise AnalysisExecutionError("ACF/PACF diagnostics require an explicitly declared time_series study design.")
+        result = run_autocorrelation_diagnostics(
+            df,
+            time_variable=variables[0],
+            outcome_variable=variables[1],
+            nlags=options.get("nlags", 20),
+            confidence_level=options.get("confidence_level", 0.95),
         )
     elif executor == "bootstrap_ci":
         if len(variables) != 1:
