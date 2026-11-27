@@ -559,7 +559,7 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             outcome_types=["ordinal", "numeric"], required_roles=["outcome", "grouping_factor"],
             data_requirements=["At least three independent groups with an ordered outcome."],
             assumptions=["Independent observations.", "The outcome is at least ordinal.", "The pooled rank variance is suitable for the independent-groups design."],
-            outputs=["Pairwise mean-rank differences", "Z statistics", "Unadjusted p-values", "Holm-adjusted p-values"],
+            outputs=["Pairwise mean-rank differences", "Pairwise rank-biserial effect sizes", "Z statistics", "Unadjusted p-values", "Holm-adjusted p-values"],
             use_cases=["Identify which independent groups differ after a rank-based omnibus comparison"],
             aliases=["Dunn test", "Dunn's test", "Dunn pairwise comparisons with Holm correction"],
             implementation_status="implemented", verification_status="unit_tested", execution_eligibility="conditional",
@@ -792,7 +792,7 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             required_roles=["numeric_outcome", "grouping_factor"],
             data_requirements=["A suitable fitted group-comparison model with at least three groups."],
             assumptions=["The underlying model assumptions are assessed.", "The family of comparisons is defined."],
-            outputs=["Pairwise mean differences", "Simultaneous confidence intervals", "Tukey-adjusted p-values", "Group sample sizes and means"],
+            outputs=["Pairwise mean differences", "Cohen's d and Hedges' g", "Simultaneous confidence intervals", "Tukey-adjusted p-values", "Group sample sizes and means"],
             use_cases=["Identify which group means differ after a suitable one-way ANOVA"],
             study_designs=["independent_groups"],
             limitations=[

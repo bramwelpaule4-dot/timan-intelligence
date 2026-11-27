@@ -2410,3 +2410,10 @@ The exponential-smoothing implementation supports simple level smoothing, Holt t
 ### STL remainder outlier screening
 
 STL decomposition now adds a robust remainder z-score based on the median absolute deviation (MAD), with a configurable absolute-score threshold (default 3.5). It reports flagged observations and the number of flagged remainders in the summary and metadata. These are heuristic screening signals for analyst review, not formal anomaly tests and not evidence that a record is erroneous. If the remainder MAD is zero or numerically negligible, the scores are unavailable and no observations are flagged.
+
+
+## Pairwise post-hoc effect sizes
+
+- **Tukey HSD:** each Group 2 minus Group 1 mean difference now includes Cohen's d and Hedges' g, standardized using the common pooled within-group residual standard deviation from the equal-variance one-way model. Hedges' g applies the small-sample gamma correction using the residual degrees of freedom. These standardized effects do not replace the Tukey-adjusted p-values or simultaneous confidence intervals.
+- **Dunn-Holm:** each pairwise comparison now includes a pair-specific rank-biserial correlation computed from the two groups' midranks. Its direction is Group 1 minus Group 2. This descriptive effect size is distinct from Dunn's pooled-rank Z statistic and is not itself multiplicity-adjusted.
+- **Wilcoxon signed-rank:** the matched-pairs rank-biserial correlation is now included directly in the result table as well as the findings and metadata. Direction is after minus before.

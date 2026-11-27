@@ -38,6 +38,14 @@ def test_tukey_hsd_reports_all_pairs_simultaneous_intervals_and_adjusted_p_value
     assert result.metadata["adjustment"] == "Tukey HSD"
     assert result.metadata["number_of_comparisons"] == 3
     assert result.metadata["significant_comparisons"] >= 1
+    assert table["Pooled within-group SD"].gt(0).all()
+    assert table["Cohen's d (Group 2 - Group 1)"].equals(
+        table["Mean difference (Group 2 - Group 1)"] / result.metadata["pooled_within_group_sd"]
+    )
+    assert table["Hedges' g (Group 2 - Group 1)"].equals(
+        table["Cohen's d (Group 2 - Group 1)"] * result.metadata["hedges_correction"]
+    )
+    assert result.metadata["residual_degrees_freedom"] == result.metadata["n_observations"] - 3
 
 
 def test_tukey_hsd_excludes_missing_and_infinite_outcomes():

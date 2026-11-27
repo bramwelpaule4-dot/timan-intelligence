@@ -1,4 +1,5 @@
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -386,6 +387,9 @@ def test_paired_mean_change_interval_uses_after_minus_before():
     lower, upper = result.metadata["confidence_interval"]
     assert lower < 2.5 < upper
     assert result.metadata["study_design"] == "paired"
+    assert result.tables["test"].loc[0, "Matched-pairs rank-biserial correlation"] == pytest.approx(
+        result.metadata["rank_biserial_correlation"]
+    )
 
 def test_paired_mean_change_interval_excludes_incomplete_pairs():
     from timan_intelligence.core.statistical_engine import run_paired_mean_difference_confidence_interval
@@ -762,6 +766,10 @@ def test_dunn_posthoc_uses_tie_corrected_ranks_and_holm_adjustment():
     assert (pairs["Holm-adjusted p-value"] >= pairs["Unadjusted p-value"]).all()
     assert (pairs["Holm-adjusted p-value"] <= 1).all()
     assert pairs["Significant at 0.05"].equals(pairs["Holm-adjusted p-value"].lt(0.05))
+    assert pairs["Pairwise rank-biserial correlation (1 - 2)"].between(-1, 1).all()
+    assert np.sign(pairs["Pairwise rank-biserial correlation (1 - 2)"]).equals(
+        np.sign(pairs["Mean rank difference (1 - 2)"])
+    )
 
 
 def test_dunn_posthoc_rejects_invalid_group_counts_and_all_ties():

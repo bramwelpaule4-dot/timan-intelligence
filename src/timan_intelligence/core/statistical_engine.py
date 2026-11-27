@@ -721,6 +721,7 @@ def run_dunn_posthoc_test(df: pd.DataFrame, outcome_variable: str, group_variabl
     if not np.isfinite(variance_factor) or variance_factor <= 0:
         raise ValueError("Dunn's test is undefined when all observations are tied.")
     rows, raw_p = [], []
+    sample_by_label = dict(zip(labels, samples))
     for first, second in combinations(labels, 2):
         r1 = valid.loc[valid[group_variable] == first, "_rank"]
         r2 = valid.loc[valid[group_variable] == second, "_rank"]
@@ -728,8 +729,21 @@ def run_dunn_posthoc_test(df: pd.DataFrame, outcome_variable: str, group_variabl
         se = float(np.sqrt(variance_factor * (1.0 / len(r1) + 1.0 / len(r2))))
         z = difference / se
         p = float(2.0 * norm.sf(abs(z)))
+        first_values = sample_by_label[first]
+        second_values = sample_by_label[second]
+        pair_ranks = rankdata(np.concatenate([first_values, second_values]), method="average")
+        n_first, n_second = len(first_values), len(second_values)
+        u_first = float(pair_ranks[:n_first].sum() - n_first * (n_first + 1) / 2.0)
+        rank_biserial = float(2.0 * u_first / (n_first * n_second) - 1.0)
         raw_p.append(p)
-        rows.append({"Group 1": str(first), "Group 2": str(second), "Group 1 n": int(len(r1)), "Group 2 n": int(len(r2)), "Mean rank difference (1 - 2)": difference, "Standard error": se, "Z statistic": float(z), "Unadjusted p-value": p})
+        rows.append({
+            "Group 1": str(first), "Group 2": str(second),
+            "Group 1 n": int(len(r1)), "Group 2 n": int(len(r2)),
+            "Mean rank difference (1 - 2)": difference,
+            "Pairwise rank-biserial correlation (1 - 2)": rank_biserial,
+            "Standard error": se, "Z statistic": float(z),
+            "Unadjusted p-value": p,
+        })
     order = np.argsort(raw_p)
     adjusted = np.empty(len(raw_p), dtype=float)
     running = 0.0
@@ -745,11 +759,12 @@ def run_dunn_posthoc_test(df: pd.DataFrame, outcome_variable: str, group_variabl
     findings = [
         f"Dunn's procedure compared {len(rows)} group pairs using tie-corrected rank variance.",
         f"Holm adjustment identified {significant} pairwise difference(s) at the 0.05 family-wise level.",
-        "Direction is shown by the mean rank difference (Group 1 minus Group 2).",
+        "Direction is shown by the mean rank difference and pairwise rank-biserial correlation (Group 1 minus Group 2).",
     ]
     limitations = [
         "This independent-groups post-hoc procedure is commonly used after a significant Kruskal–Wallis omnibus test.",
         "The normal approximation may be less reliable with very small samples.",
+        "Pairwise rank-biserial correlations are descriptive two-group effect sizes computed from each pair's midranks; they are distinct from Dunn's pooled-rank Z test and are not multiplicity-adjusted.",
         "The test compares rank distributions, not automatically medians; a location-shift interpretation requires similarly shaped distributions.",
         "Not adjusted for survey weights, clustering, stratification, finite-population corrections or repeated-measures designs.",
         "Missing and infinite outcomes are excluded; missing group labels are rejected.",
@@ -1925,7 +1940,9 @@ def run_wilcoxon_signed_rank_test(
         "Zero differences excluded": zero_count, "Median change (after - before)": float(differences.median()),
         "Mean change (after - before)": float(differences.mean()), "Positive rank sum": positive_rank_sum,
         "Negative rank sum": negative_rank_sum, "Wilcoxon statistic": statistic,
-        "Alternative": alternative, "p-value": p_value, "Matched pairs excluded": incomplete_pairs,
+        "Alternative": alternative, "p-value": p_value,
+        "Matched-pairs rank-biserial correlation": float(rank_biserial),
+        "Matched pairs excluded": incomplete_pairs,
     }])
     findings = [
         f"Median within-pair change (after minus before) is {float(differences.median()):.4g}.",
@@ -2744,6 +2761,7 @@ def run_tukey_hsd_posthoc(
 ) -> AnalysisResult:
     """Run Tukey's HSD for all pairwise means after a suitable one-way ANOVA."""
     from itertools import combinations
+    from scipy.special import gammaln
     from statsmodels.stats.multicomp import pairwise_tukeyhsd
 
     if not isinstance(df, pd.DataFrame):
@@ -2784,8 +2802,18 @@ def run_tukey_hsd_posthoc(
     pooled_error_ss = float(sum(
         np.square(values - values.mean()).sum() for values in group_values
     ))
+    residual_degrees_freedom = total_n - group_count
     if pooled_error_ss <= 0:
         raise ValueError("Tukey HSD is undefined when the pooled within-group error variance is zero.")
+    if residual_degrees_freedom <= 1:
+        raise ValueError("Tukey HSD effect sizes require more than one residual degree of freedom.")
+    pooled_error_variance = pooled_error_ss / residual_degrees_freedom
+    pooled_within_group_sd = float(np.sqrt(pooled_error_variance))
+    hedges_correction = float(np.exp(
+        gammaln(residual_degrees_freedom / 2.0)
+        - 0.5 * np.log(residual_degrees_freedom / 2.0)
+        - gammaln((residual_degrees_freedom - 1.0) / 2.0)
+    ))
 
     alpha = 1.0 - level
     tukey = pairwise_tukeyhsd(
@@ -2799,6 +2827,9 @@ def run_tukey_hsd_posthoc(
     for index, (first, second) in enumerate(pairs):
         first_values = valid.loc[valid["_group"] == first, "_outcome"]
         second_values = valid.loc[valid["_group"] == second, "_outcome"]
+        mean_difference = float(tukey.meandiffs[index])
+        cohen_d = mean_difference / pooled_within_group_sd
+        hedges_g = cohen_d * hedges_correction
         rows.append({
             "Group 1": str(first),
             "Group 2": str(second),
@@ -2806,7 +2837,11 @@ def run_tukey_hsd_posthoc(
             "Group 2 n": int(len(second_values)),
             "Group 1 mean": float(first_values.mean()),
             "Group 2 mean": float(second_values.mean()),
-            "Mean difference (Group 2 - Group 1)": float(tukey.meandiffs[index]),
+            "Mean difference (Group 2 - Group 1)": mean_difference,
+            "Pooled within-group SD": pooled_within_group_sd,
+            "Cohen's d (Group 2 - Group 1)": cohen_d,
+            "Hedges' g (Group 2 - Group 1)": hedges_g,
+            "Hedges correction": hedges_correction,
             "Tukey-adjusted p-value": float(tukey.pvalues[index]),
             f"{level:.0%} simultaneous CI lower": float(tukey.confint[index, 0]),
             f"{level:.0%} simultaneous CI upper": float(tukey.confint[index, 1]),
@@ -2824,11 +2859,13 @@ def run_tukey_hsd_posthoc(
         f"Tukey HSD evaluated {len(pairs)} pairwise mean comparisons across {group_count} independent groups.",
         f"{significant} pairwise difference(s) were significant at alpha={alpha:.3g} after Tukey family-wise adjustment.",
         f"Mean differences are reported as Group 2 minus Group 1 with {level:.1%} simultaneous confidence intervals.",
+        f"Pairwise standardized effects use the common within-group SD (Cohen's d) and small-sample corrected Hedges' g; direction is Group 2 minus Group 1.",
     ]
     limitations = [
         "Use as a post-hoc procedure for a suitable independent-groups one-way ANOVA; it does not replace the omnibus test.",
         "Assumes independent observations, approximately normal within-group errors and a common within-group variance.",
         "This is the equal-variance Tukey HSD procedure; it is not Games-Howell and may be inappropriate under substantial heteroscedasticity.",
+        "Cohen's d and Hedges' g standardize each mean difference by the common pooled within-group residual SD; they are descriptive sample effects, not causal effects.",
         "Not adjusted for survey weights, clustering, stratification, repeated measures or finite-population corrections.",
     ]
     excluded = int(len(df) - total_n)
@@ -2859,6 +2896,10 @@ def run_tukey_hsd_posthoc(
             "significant_comparisons": significant,
             "confidence_level": level,
             "alpha": alpha,
+            "residual_degrees_freedom": residual_degrees_freedom,
+            "pooled_error_variance": pooled_error_variance,
+            "pooled_within_group_sd": pooled_within_group_sd,
+            "hedges_correction": hedges_correction,
             "adjustment": "Tukey HSD",
             "sampling_design_aware": False,
             "study_design": "independent_groups",
