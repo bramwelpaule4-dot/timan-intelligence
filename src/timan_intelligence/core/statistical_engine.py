@@ -213,7 +213,11 @@ def run_descriptive_statistics(
         "Descriptive statistics do not establish causation.",
     ]
 
-    limitations = []
+    limitations = [
+        "Eta-squared is the observed sample proportion of total variation attributable to group membership; omega-squared is a less biased population effect-size estimate.",
+        "The reported omega-squared is truncated at zero for the primary estimate; the untruncated estimate is also retained in the results.",
+        "Effect sizes are unadjusted for complex survey weights, clustering, stratification or finite-population corrections.",
+    ]
 
     if infinite_values > 0:
         limitations.append(
@@ -796,13 +800,29 @@ def run_one_way_anova(
     observations = int(sum(len(values) for values in group_values))
     number_of_groups = len(group_values)
 
+    # Partition total variability into between- and within-group sums of squares.
+    all_values = np.concatenate([values.to_numpy(dtype=float) for values in group_values])
+    grand_mean = float(np.mean(all_values))
+    ss_between = float(sum(len(values) * (float(values.mean()) - grand_mean) ** 2 for values in group_values))
+    ss_within = float(sum(((values.to_numpy(dtype=float) - float(values.mean())) ** 2).sum() for values in group_values))
+    ss_total = ss_between + ss_within
+    if not np.isfinite(ss_total) or ss_total <= 0:
+        raise ValueError("One-way ANOVA effect sizes are undefined when the outcome has no variability.")
+
     test_result = f_oneway(*group_values)
 
     f_statistic = float(test_result.statistic)
     p_value = float(test_result.pvalue)
+    if not np.isfinite(f_statistic) or not np.isfinite(p_value):
+        raise ValueError("One-way ANOVA is undefined for these data; check for zero within-group variability.")
 
     degrees_of_freedom_between = number_of_groups - 1
     degrees_of_freedom_within = observations - number_of_groups
+    ms_within = ss_within / degrees_of_freedom_within
+    eta_squared = float(ss_between / ss_total)
+    omega_squared_raw = float((ss_between - degrees_of_freedom_between * ms_within) / (ss_total + ms_within))
+    omega_squared = float(max(0.0, omega_squared_raw))
+    cohen_f_squared = float(eta_squared / (1.0 - eta_squared)) if eta_squared < 1.0 else float("inf")
 
     summary: dict[str, Any] = {
         "groups": number_of_groups,
@@ -811,6 +831,13 @@ def run_one_way_anova(
         "p_value": p_value,
         "degrees_of_freedom_between": degrees_of_freedom_between,
         "degrees_of_freedom_within": degrees_of_freedom_within,
+        "sum_squares_between": ss_between,
+        "sum_squares_within": ss_within,
+        "sum_squares_total": ss_total,
+        "eta_squared": eta_squared,
+        "omega_squared": omega_squared,
+        "omega_squared_untruncated": omega_squared_raw,
+        "cohen_f_squared": cohen_f_squared,
         "missing_outcomes": missing_outcomes,
         "infinite_outcomes": infinite_outcomes,
     }
@@ -847,6 +874,10 @@ def run_one_way_anova(
             f"The F-statistic is {f_statistic:.4g}, "
             f"with p-value {p_value:.4g}."
         ),
+        (
+            f"Effect sizes: eta-squared = {eta_squared:.4f}, "
+            f"omega-squared = {omega_squared:.4f}, and Cohen's f-squared = {cohen_f_squared:.4g}."
+        ),
     ]
 
     if p_value < 0.05:
@@ -879,6 +910,17 @@ def run_one_way_anova(
             "outcome_variable": outcome_variable,
             "group_variable": group_variable,
             "group_labels": [str(label) for label in unique_groups],
+            "n_observations": observations,
+            "f_statistic": f_statistic,
+            "p_value": p_value,
+            "degrees_of_freedom_between": degrees_of_freedom_between,
+            "degrees_of_freedom_within": degrees_of_freedom_within,
+            "eta_squared": eta_squared,
+            "omega_squared": omega_squared,
+            "omega_squared_untruncated": omega_squared_raw,
+            "cohen_f_squared": cohen_f_squared,
+            "sampling_design_aware": False,
+            "study_design": "independent_groups",
         },
     )
 

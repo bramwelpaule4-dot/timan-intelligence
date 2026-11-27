@@ -69,7 +69,6 @@ def run_simple_linear_regression(
     total_sum_squares = float(np.sum((y - np.mean(y)) ** 2))
     r_squared = float(1 - residual_sum_squares / total_sum_squares)
     r_squared = min(1.0, max(0.0, r_squared))
-    cohen_f_squared = float(r_squared / (1.0 - r_squared)) if r_squared < 1.0 else float("inf")
     residual_standard_error = float(
         np.sqrt(residual_sum_squares / residual_df)
     )
@@ -119,7 +118,7 @@ def run_simple_linear_regression(
         "findings": [
             f"The model used {n:,} complete records and excluded {excluded_n:,}.",
             f"Estimated equation: {outcome_variable} = {intercept:.4g} + ({slope:.4g} × {predictor_variable}).",
-            f"The model explains {r_squared * 100:.2f}% of the observed variation in {outcome_variable} (R²); Cohen's f² is {cohen_f_squared:.4g}.",
+            f"The model explains {r_squared * 100:.2f}% of the observed variation in {outcome_variable} (R²).",
         ],
         "warnings": warnings,
         "metadata": {
@@ -135,8 +134,6 @@ def run_simple_linear_regression(
             "intercept_confidence_interval_95": intercept_ci,
             "slope_confidence_interval_95": slope_ci,
             "r_squared": r_squared,
-            "cohen_f_squared": cohen_f_squared,
-            "effect_size_definition": "Cohen's f-squared = R-squared / (1 - R-squared); overall model effect size, not a causal effect.",
             "adjusted_r_squared": float(
                 1 - (1 - r_squared) * (n - 1) / residual_df
             ),

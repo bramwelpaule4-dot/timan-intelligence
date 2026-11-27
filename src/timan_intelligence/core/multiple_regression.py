@@ -77,7 +77,6 @@ def run_multiple_linear_regression(
         raise ValueError("The outcome has no variation; model fit is undefined.")
     r_squared = float(np.clip(1 - sse / sst, 0, 1))
     adjusted_r_squared = float(1 - (1 - r_squared) * (n - 1) / residual_df)
-    cohen_f_squared = float(r_squared / (1.0 - r_squared)) if r_squared < 1.0 else float("inf")
     mse = sse / residual_df
     rmse = float(np.sqrt(sse / n))
     residual_standard_error = float(np.sqrt(mse))
@@ -145,7 +144,7 @@ def run_multiple_linear_regression(
         "fitted_data": fitted_data,
         "findings": [
             f"The model used {n:,} complete records, estimated {p:,} predictors and excluded {excluded_n:,} records.",
-            f"The model explains {r_squared * 100:.2f}% of observed outcome variation (R²); adjusted R² is {adjusted_r_squared:.4f}; overall Cohen's f² is {cohen_f_squared:.4g}.",
+            f"The model explains {r_squared * 100:.2f}% of observed outcome variation (R²); adjusted R² is {adjusted_r_squared:.4f}.",
             f"Overall model F({model_df}, {residual_df}) = {f_statistic:.4g}; p = {model_p_value:.4g}.",
         ],
         "warnings": warnings,
@@ -159,12 +158,6 @@ def run_multiple_linear_regression(
             "residual_degrees_freedom": residual_df,
             "r_squared": r_squared,
             "adjusted_r_squared": adjusted_r_squared,
-            "cohen_f_squared": cohen_f_squared,
-            "effect_size_definition": "Cohen's f-squared = R-squared / (1 - R-squared); overall model effect size, not a causal effect.",
-            "partial_r_squared_by_predictor": {
-                predictors[i]: float(t_statistics[i + 1] ** 2 / (t_statistics[i + 1] ** 2 + residual_df))
-                for i in range(p)
-            },
             "rmse": rmse,
             "residual_standard_error": residual_standard_error,
             "model_f_statistic": f_statistic,

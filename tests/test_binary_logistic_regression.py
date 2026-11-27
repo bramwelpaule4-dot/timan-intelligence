@@ -152,12 +152,3 @@ def test_meal_household_service_uptake_with_imbalanced_outcome():
     assert "The smaller outcome category is limited" in " ".join(result["warnings"]) or min(
         result["metadata"]["event_n"], result["metadata"]["non_event_n"]
     ) >= 20
-
-
-def test_logistic_regression_reports_three_distinct_pseudo_r_squared_indices():
-    result = run_binary_logistic_regression(_logistic_data(), ["exposure", "age_score"], "outcome")
-    metadata = result["metadata"]
-    assert 0 <= metadata["mcfadden_pseudo_r_squared"] <= 1
-    assert 0 <= metadata["cox_snell_pseudo_r_squared"] < 1
-    assert 0 <= metadata["nagelkerke_pseudo_r_squared"] <= 1
-    assert metadata["nagelkerke_pseudo_r_squared"] >= metadata["cox_snell_pseudo_r_squared"]

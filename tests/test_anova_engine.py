@@ -218,3 +218,23 @@ def test_one_way_anova_does_not_modify_original_data():
     )
 
     pd.testing.assert_frame_equal(df, original)
+
+
+def test_one_way_anova_reports_eta_squared_omega_squared_and_cohen_f_squared():
+    df = pd.DataFrame({
+        "group": ["A"] * 4 + ["B"] * 4 + ["C"] * 4,
+        "score": [1, 2, 2, 3, 4, 5, 5, 6, 7, 8, 8, 9],
+    })
+    result = run_one_way_anova(df, outcome_variable="score", group_variable="group")
+    summary = result.tables["summary"]
+    assert 0 <= summary["eta_squared"] <= 1
+    assert 0 <= summary["omega_squared"] <= 1
+    assert summary["omega_squared"] == pytest.approx(max(0, summary["omega_squared_untruncated"]))
+    assert summary["cohen_f_squared"] == pytest.approx(summary["eta_squared"] / (1 - summary["eta_squared"]))
+    assert result.metadata["eta_squared"] == pytest.approx(summary["eta_squared"])
+
+
+def test_one_way_anova_rejects_constant_outcome_for_effect_size_estimation():
+    df = pd.DataFrame({"group": ["A", "A", "B", "B"], "score": [5, 5, 5, 5]})
+    with pytest.raises(ValueError, match="no variability"):
+        run_one_way_anova(df, outcome_variable="score", group_variable="group")
