@@ -240,7 +240,7 @@ def test_execution_blocks_catalogued_but_unimplemented_method():
         "group": ["A", "A", "A", "B", "B", "B"],
     })
     recommendation = {
-        "method": "ARIMA time-series model",
+        "method": "Complex survey estimation",
         "variables": ["score", "group"],
         "status": "review_required",
     }

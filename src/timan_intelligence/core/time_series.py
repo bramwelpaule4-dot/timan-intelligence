@@ -60,11 +60,13 @@ def run_arima_time_series_model(
         raise ValueError("ARIMA outcome values must be complete and finite; resolve missing or infinite values first.")
     if len(values) < 30:
         raise ValueError("At least 30 regularly spaced observations are required for ARIMA estimation.")
-    frequency = pd.infer_freq(dates)
-    if frequency is None:
+    inferred_frequency = pd.infer_freq(dates)
+    if inferred_frequency is None:
         raise ValueError("The time index is not regularly spaced; provide a regular time series before ARIMA estimation.")
+    frequency = getattr(inferred_frequency, "freqstr", str(inferred_frequency))
+    regular_index = pd.DatetimeIndex(dates, freq=frequency)
 
-    series = pd.Series(values, index=dates, name=outcome_variable)
+    series = pd.Series(values, index=regular_index, name=outcome_variable)
     model = ARIMA(
         series,
         order=(p, d, q),
