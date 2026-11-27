@@ -2888,9 +2888,7 @@ current_role = st.session_state.get("role") if not PUBLIC_ACCESS_MODE else None
 
 if PUBLIC_ACCESS_MODE:
     st.sidebar.info(
-        "PUBLIC PREVIEW
-
-"
+        "PUBLIC PREVIEW\n\n"
         "No account is required. Datasets remain in this browser session. "
         "Do not upload confidential or personally identifiable data."
     )
@@ -4973,12 +4971,9 @@ elif page == "Survey Analysis":
                 two_pps_joint_text = st.text_area(
                     "Second-order PSU joint inclusion probability matrix (CSV)",
                     placeholder=(
-                        ",P1,P2,P3\
-"
-                        "P1,0.50,0.20,0.30\
-"
-                        "P2,0.20,0.70,0.50\
-"
+                        ",P1,P2,P3\\n"
+                        "P1,0.50,0.20,0.30\\n"
+                        "P2,0.20,0.70,0.50\\n"
                         "P3,0.30,0.50,0.80"
                     ),
                     height=150,
