@@ -744,3 +744,57 @@ def test_cross_tabulation_requires_two_distinct_categorical_variables():
     recommendation["variables"] = ["group", "score"]
     with pytest.raises(TypeError, match="categorical"):
         execute_recommendation(frame, recommendation, approved=True)
+
+
+def test_execution_runs_approved_multiple_linear_regression():
+    frame = pd.DataFrame({
+        "experience": [1, 2, 3, 4, 5, 6, 7, 8],
+        "training": [2, 5, 3, 7, 4, 8, 6, 9],
+    })
+    frame["productivity"] = 10 + 3 * frame["experience"] + 2 * frame["training"]
+    recommendation = {
+        "method": "Multiple linear regression",
+        "method_id": "method.inference.regression.linear.multiple",
+        "variables": ["productivity", "experience", "training"],
+        "status": "review_required",
+    }
+    result = execute_recommendation(frame, recommendation, approved=True)
+    assert result.status == "success"
+    assert result.metadata["method_id"] == recommendation["method_id"]
+    assert result.metadata["predictor_count"] == 2
+    assert result.metadata["r_squared"] == pytest.approx(1.0)
+    assert result.tables["coefficients"].set_index("Variable").loc["experience", "Estimate"] == pytest.approx(3.0)
+
+
+def test_execution_runs_approved_binary_logistic_regression():
+    import numpy as np
+    rng = np.random.default_rng(123)
+    exposure = rng.normal(size=350)
+    probability = 1 / (1 + np.exp(-(-0.2 + 0.9 * exposure)))
+    event = rng.binomial(1, probability)
+    frame = pd.DataFrame({"event": event, "exposure": exposure})
+    recommendation = {
+        "method": "Binary logistic regression",
+        "method_id": "method.inference.regression.logistic.binary",
+        "variables": ["event", "exposure"],
+        "status": "review_required",
+    }
+    result = execute_recommendation(frame, recommendation, approved=True)
+    assert result.status == "success"
+    assert result.metadata["method_id"] == recommendation["method_id"]
+    assert result.metadata["event_n"] + result.metadata["non_event_n"] == len(frame)
+    assert "Odds ratio" in result.tables["coefficients"]
+
+
+@pytest.mark.parametrize("method,variables", [
+    ("Multiple linear regression", ["y", "x1", "x2"]),
+    ("Binary logistic regression", ["y", "x1"]),
+])
+def test_regression_execution_blocks_dependent_study_designs(method, variables):
+    frame = pd.DataFrame({"y": [0, 1, 0, 1, 0, 1], "x1": [1, 2, 3, 4, 5, 6], "x2": [2, 4, 1, 3, 6, 5]})
+    recommendation = {
+        "method": method, "variables": variables, "status": "review_required",
+        "design_context": {"study_design": "longitudinal"},
+    }
+    with pytest.raises(AnalysisExecutionError, match="assumes independent groups"):
+        execute_recommendation(frame, recommendation, approved=True)

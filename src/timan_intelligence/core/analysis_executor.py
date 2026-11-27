@@ -40,6 +40,10 @@ from timan_intelligence.core.statistical_engine import (
     run_linear_mixed_effects_model,
 )
 from timan_intelligence.core.numeric_association import run_numeric_association
+from timan_intelligence.services.analysis_service import (
+    run_multiple_linear_regression_service,
+    run_binary_logistic_regression_service,
+)
 
 
 class AnalysisExecutionError(ValueError):
@@ -73,6 +77,8 @@ _EXECUTOR_BY_METHOD_ID = {
     "method.inference.comparison.posthoc.friedman_wilcoxon_holm": "friedman_wilcoxon_holm",
     "method.inference.comparison.anova.repeated_measures": "repeated_measures_anova",
     "method.inference.regression.linear_mixed_effects": "linear_mixed_effects",
+    "method.inference.regression.linear.multiple": "multiple_linear_regression",
+    "method.inference.regression.logistic.binary": "binary_logistic_regression",
 }
 
 
@@ -122,7 +128,7 @@ def _validate_design_compatibility(
         "paired", "repeated_measure", "repeated_measures",
         "longitudinal", "time_series",
     }
-    if executor in {"welch_t", "anova", "mann_whitney", "kruskal_wallis", "dunn_holm", "welch_mean_difference_ci", "chi_square_independence", "fisher_exact", "two_proportions", "two_proportions_ci", "numeric_correlation"} and study_design in repeated_designs:
+    if executor in {"welch_t", "anova", "mann_whitney", "kruskal_wallis", "dunn_holm", "welch_mean_difference_ci", "chi_square_independence", "fisher_exact", "two_proportions", "two_proportions_ci", "numeric_correlation", "multiple_linear_regression", "binary_logistic_regression"} and study_design in repeated_designs:
         raise AnalysisExecutionError(
             "Execution blocked: this executor assumes independent groups and "
             "is not validated for paired, repeated-measures, longitudinal or "
@@ -386,6 +392,23 @@ def execute_recommendation(
         if len(variables) != 2:
             raise AnalysisExecutionError("Wilcoxon signed-rank testing requires before and after measurement variables.")
         result = run_wilcoxon_signed_rank_test(df, variables[0], variables[1], options.get("alternative", "two-sided"))
+    elif executor == "multiple_linear_regression":
+        if len(variables) < 3:
+            raise AnalysisExecutionError(
+                "Multiple linear regression requires one numeric outcome and at least two numeric predictors."
+            )
+        result = run_multiple_linear_regression_service(
+            df, variables[1:], variables[0]
+        )
+    elif executor == "binary_logistic_regression":
+        if len(variables) < 2:
+            raise AnalysisExecutionError(
+                "Binary logistic regression requires one binary outcome and at least one numeric predictor."
+            )
+        result = run_binary_logistic_regression_service(
+            df, variables[1:], variables[0],
+            positive_class=options.get("positive_class"),
+        )
     elif executor == "linear_mixed_effects":
         if len(variables) < 3:
             raise AnalysisExecutionError("A linear mixed-effects model requires an outcome, group identifier and at least one fixed-effect predictor.")

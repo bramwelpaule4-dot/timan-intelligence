@@ -47,6 +47,8 @@ IMPLEMENTED_METHODS = frozenset(
         "method.inference.comparison.posthoc.friedman_wilcoxon_holm",
         "method.inference.comparison.anova.repeated_measures",
         "method.inference.regression.linear_mixed_effects",
+        "method.inference.regression.linear.multiple",
+        "method.inference.regression.logistic.binary",
     }
 )
 
@@ -628,6 +630,9 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             use_cases=["Estimate adjusted associations", "Model a numeric outcome"],
             aliases=["Linear regression"],
             limitations=["Associational regression does not establish causal effects without a defensible causal design."],
+            implementation_status="implemented",
+            verification_status="unit_tested",
+            execution_eligibility="conditional",
         ),
         _method(
             entity_id="method.inference.regression.logistic.binary",
@@ -645,6 +650,9 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             use_cases=["Model binary outcomes", "Estimate adjusted odds"],
             aliases=["Logistic regression"],
             limitations=["Odds ratios should not be interpreted as risk ratios without justification."],
+            implementation_status="implemented",
+            verification_status="unit_tested",
+            execution_eligibility="conditional",
         ),
         _method(
             entity_id="method.measurement.reliability.cronbach_alpha",

@@ -36,7 +36,7 @@ def test_only_existing_execution_methods_are_marked_implemented():
     }
 
     assert implemented == IMPLEMENTED_METHODS
-    assert len(implemented) == 26
+    assert len(implemented) == 28
 
 
 def test_exact_binomial_is_registered_as_conditionally_executable():
@@ -180,8 +180,8 @@ def test_catalogue_summary_reports_lifecycle_and_priorities():
 
     assert summary["catalogue_version"] == CATALOGUE_VERSION
     assert summary["total_methods"] == 35
-    assert summary["implementation_status"]["implemented"] == 26
-    assert summary["implementation_status"]["planned"] == 9
+    assert summary["implementation_status"]["implemented"] == 28
+    assert summary["implementation_status"]["planned"] == 7
     assert set(summary["release_priorities"]) == {"P1", "P2", "P3"}
 
 
@@ -323,3 +323,21 @@ def test_cross_tabulation_is_registered_as_executable():
     assert method.implementation_status == "implemented"
     assert method.verification_status == "unit_tested"
     assert method.execution_eligibility == "eligible"
+
+
+def test_multiple_linear_regression_is_registered_as_conditionally_executable():
+    method = get_statistical_method("method.inference.regression.linear.multiple")
+    assert method is not None
+    assert method.name == "Multiple linear regression"
+    assert method.implementation_status == "implemented"
+    assert method.verification_status == "unit_tested"
+    assert method.execution_eligibility == "conditional"
+
+
+def test_binary_logistic_regression_is_registered_as_conditionally_executable():
+    method = get_statistical_method("method.inference.regression.logistic.binary")
+    assert method is not None
+    assert method.name == "Binary logistic regression"
+    assert method.implementation_status == "implemented"
+    assert method.verification_status == "unit_tested"
+    assert method.execution_eligibility == "conditional"
