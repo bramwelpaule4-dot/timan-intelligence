@@ -213,11 +213,7 @@ def run_descriptive_statistics(
         "Descriptive statistics do not establish causation.",
     ]
 
-    limitations = [
-        "Eta-squared is the observed sample proportion of total variation attributable to group membership; omega-squared is a less biased population effect-size estimate.",
-        "The reported omega-squared is truncated at zero for the primary estimate; the untruncated estimate is also retained in the results.",
-        "Effect sizes are unadjusted for complex survey weights, clustering, stratification or finite-population corrections.",
-    ]
+    limitations = []
 
     if infinite_values > 0:
         limitations.append(
@@ -853,7 +849,11 @@ def run_one_way_anova(
         "The test evaluates whether all group population means are equal.",
     ]
 
-    limitations = []
+    limitations = [
+        "Eta-squared is the observed sample proportion of total variation attributable to group membership; omega-squared is a less biased population effect-size estimate.",
+        "The reported omega-squared is truncated at zero for the primary estimate; the untruncated estimate is also retained in the results.",
+        "Effect sizes are unadjusted for complex survey weights, clustering, stratification or finite-population corrections.",
+    ]
 
     if missing_outcomes > 0:
         limitations.append(
