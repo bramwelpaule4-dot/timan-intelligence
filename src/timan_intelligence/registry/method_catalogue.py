@@ -38,6 +38,7 @@ IMPLEMENTED_METHODS = frozenset(
         "method.survey.estimation.weighted_proportion",
         "method.inference.comparison.posthoc.tukey",
         "method.inference.resampling.bootstrap.confidence_interval",
+        "method.forecasting.time_series.arima",
         "method.inference.confidence_interval.mean_difference.welch",
         "method.inference.confidence_interval.mean_difference.paired",
         "method.inference.comparison.t_test.independent.welch",
@@ -906,8 +907,18 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             required_roles=["time_index", "numeric_outcome"],
             data_requirements=["A consistently indexed time series with sufficient observations."],
             assumptions=["Time index and frequency are valid.", "Stationarity and differencing requirements are assessed.", "Residual diagnostics and forecast validation are performed."],
-            outputs=["Model specification", "Parameter estimates", "Forecasts", "Prediction intervals", "Residual diagnostics"],
+            outputs=["ARIMA order and parameter estimates", "Out-of-sample forecasts", "Forecast prediction intervals", "Information criteria", "Residual diagnostics"],
             use_cases=["Forecast regularly observed numeric outcomes"],
+            study_designs=["time_series"],
+            limitations=[
+                "The current implementation is non-seasonal univariate ARIMA without exogenous regressors or automatic order selection.",
+                "A regular, unique time index and complete numeric outcomes are required; the differencing order must be selected and justified by the analyst.",
+                "Forecast intervals are conditional on the fitted model and do not account for model-selection uncertainty.",
+                "Not adjusted for complex survey weights, clustering or stratification.",
+            ],
+            implementation_status="implemented",
+            verification_status="unit_tested",
+            execution_eligibility="conditional",
         ),
     ]
     return tuple(methods)
