@@ -2015,3 +2015,78 @@ def run_welch_mean_difference_confidence_interval(
             "sampling_design_aware": False,
         },
     )
+
+
+def run_linear_mixed_effects_model(df: pd.DataFrame, outcome_variable: str, group_variable: str, fixed_effect_variables: list[str]) -> AnalysisResult:
+    """Fit a Gaussian random-intercept model to long-format repeated observations."""
+    import warnings
+    from statsmodels.regression.mixed_linear_model import MixedLM
+    from statsmodels.tools.sm_exceptions import ConvergenceWarning
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Expected a pandas DataFrame.")
+    if outcome_variable not in df.columns or group_variable not in df.columns:
+        raise ValueError("Select valid outcome and subject/group variables.")
+    if outcome_variable == group_variable:
+        raise ValueError("Outcome and group identifier must be different.")
+    if not isinstance(fixed_effect_variables, list) or not fixed_effect_variables:
+        raise ValueError("Select at least one fixed-effect predictor.")
+    if len(set(fixed_effect_variables)) != len(fixed_effect_variables) or any(v not in df.columns for v in fixed_effect_variables):
+        raise ValueError("Fixed-effect predictors must be valid and unique.")
+    if outcome_variable in fixed_effect_variables or group_variable in fixed_effect_variables:
+        raise ValueError("Outcome and group identifier cannot also be fixed-effect predictors.")
+    if not pd.api.types.is_numeric_dtype(df[outcome_variable]):
+        raise TypeError("The outcome variable must be numeric.")
+    if df[group_variable].isna().any():
+        raise ValueError("Subject/group identifiers cannot be missing.")
+    if df[group_variable].nunique() < 3:
+        raise ValueError("A random-intercept model requires at least three independent groups.")
+    selected = df[[outcome_variable, group_variable, *fixed_effect_variables]].copy()
+    selected[outcome_variable] = pd.to_numeric(selected[outcome_variable], errors="coerce")
+    selected = selected.replace([np.inf, -np.inf], np.nan)
+    complete = selected.dropna()
+    excluded = len(df) - len(complete)
+    if len(complete) < 10:
+        raise ValueError("At least 10 complete observations are required.")
+    counts = complete[group_variable].value_counts()
+    if counts.size < 3 or int(counts.min()) < 2:
+        raise ValueError("At least three groups with two or more observations each are required.")
+    parts = []
+    for i, variable in enumerate(fixed_effect_variables):
+        series = complete[variable]
+        name = f"x{i + 1}"
+        if pd.api.types.is_numeric_dtype(series):
+            part = pd.DataFrame({name: series.astype(float)}, index=complete.index)
+        else:
+            part = pd.get_dummies(series.astype("category"), prefix=name, drop_first=True, dtype=float)
+        if part.empty:
+            raise ValueError(f"Predictor '{variable}' has no estimable contrast.")
+        parts.append(part)
+    exog = pd.concat(parts, axis=1).astype(float)
+    exog.insert(0, "Intercept", 1.0)
+    if np.linalg.matrix_rank(exog.to_numpy()) < exog.shape[1]:
+        raise ValueError("Fixed-effect design matrix is rank deficient; remove redundant or collinear predictors.")
+    endog = complete[outcome_variable].astype(float)
+    groups = complete[group_variable].astype(str)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        try:
+            fitted = MixedLM(endog, exog, groups=groups, exog_re=np.ones((len(complete), 1))).fit(reml=True, method="lbfgs", maxiter=500, disp=False)
+        except Exception as exc:
+            raise ValueError(f"The linear mixed-effects model could not be fitted: {exc}") from exc
+    if not fitted.converged:
+        raise ValueError("The linear mixed-effects model did not converge. Review the data and model specification.")
+    ci = fitted.conf_int()
+    rows = []
+    for name in exog.columns:
+        lo, hi = map(float, ci.loc[name].tolist())
+        rows.append({"Term": name, "Coefficient": float(fitted.fe_params[name]), "Standard error": float(fitted.bse_fe[name]), "z statistic": float(fitted.tvalues[name]), "p-value": float(fitted.pvalues[name]), "95% CI lower": lo, "95% CI upper": hi})
+    random_var = float(np.asarray(fitted.cov_re)[0, 0])
+    residual_var = float(fitted.scale)
+    icc = random_var / (random_var + residual_var) if random_var + residual_var > 0 else None
+    summary = pd.DataFrame([{"Observations": len(complete), "Groups": groups.nunique(), "Minimum observations per group": int(counts.min()), "Maximum observations per group": int(counts.max()), "Random-intercept variance": random_var, "Residual variance": residual_var, "Intraclass correlation (ICC)": icc, "Log-likelihood": float(fitted.llf), "AIC": float(fitted.aic) if np.isfinite(fitted.aic) else None, "BIC": float(fitted.bic) if np.isfinite(fitted.bic) else None, "Converged": bool(fitted.converged), "Rows excluded": excluded}])
+    limits = ["Random-intercept structure only; random slopes and non-Gaussian outcomes are not implemented.", "REML is used for variance estimation; do not compare REML likelihoods across models with different fixed effects.", "Not adjusted for complex survey weights, stratification, sampling clusters or finite-population corrections.", "Wald z p-values use large-sample approximations; small-sample degrees-of-freedom corrections are not provided."]
+    if excluded: limits.append(f"{excluded} incomplete or non-finite rows were excluded.")
+    if random_var <= 1e-8: limits.append("The random-intercept variance is near zero; assess whether a mixed model is warranted.")
+    warning_text = [str(w.message) for w in caught if issubclass(w.category, (ConvergenceWarning, RuntimeWarning))]
+    if warning_text: limits.append("Model fitting warnings: " + " | ".join(warning_text[:3]))
+    return AnalysisResult(title=f"Linear mixed-effects model: {outcome_variable}", method="Linear mixed-effects model (random intercept)", status="success", tables={"fixed_effects": pd.DataFrame(rows), "model_summary": summary}, findings=[f"Model fitted {len(complete):,} observations across {groups.nunique():,} groups.", f"Estimated random-intercept variance: {random_var:.4g}; residual variance: {residual_var:.4g}."] + ([f"Estimated intraclass correlation: {icc:.3f}."] if icc is not None else []), assumptions=["The outcome is continuous and the conditional mean is adequately represented by the fixed effects.", "Random intercepts are approximately normally distributed and independent across groups.", "Conditional residuals are approximately normal with constant variance.", "Observations are conditionally independent given random effects and fixed effects."], limitations=limits, metadata={"outcome_variable": outcome_variable, "group_variable": group_variable, "fixed_effect_variables": list(fixed_effect_variables), "n_observations": len(complete), "n_groups": int(groups.nunique()), "missing_rows_excluded": excluded, "random_intercept_variance": random_var, "residual_variance": residual_var, "intraclass_correlation": icc, "converged": bool(fitted.converged), "estimation": "REML", "random_effect_structure": "random_intercept", "sampling_design_aware": False, "study_design": "longitudinal"})

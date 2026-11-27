@@ -41,7 +41,7 @@ IMPLEMENTED_METHODS = frozenset(
         "method.inference.comparison.wilcoxon_signed_rank",
         "method.inference.comparison.friedman",
         "method.inference.comparison.posthoc.friedman_wilcoxon_holm",
-        "method.inference.comparison.anova.repeated_measures",
+        "method.inference.comparison.anova.repeated_measures",\n        "method.inference.regression.linear_mixed_effects",
     }
 )
 

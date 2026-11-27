@@ -79,7 +79,7 @@ from timan_intelligence.services.analysis_service import (
     run_wilcoxon_signed_rank_test_service,
     run_friedman_test_service,
     run_friedman_pairwise_posthoc_service,
-    run_repeated_measures_anova_service,
+    run_repeated_measures_anova_service,\n    run_linear_mixed_effects_model_service,
     run_ppswor_total_service,
     run_ppswor_ratio_service,
     run_ppswor_domain_ratio_service,
@@ -7166,7 +7166,7 @@ elif page == "Statistical Inference":
                 "Wilcoxon signed-rank test",
                 "Friedman test",
                 "Pairwise Wilcoxon post-hoc test with Holm adjustment",
-                "One-way repeated-measures ANOVA",
+                "One-way repeated-measures ANOVA",\n                "Linear mixed-effects model (random intercept)",
             ],
             key="inference_method_choice",
         )
@@ -7378,6 +7378,14 @@ elif page == "Statistical Inference":
             outcome_variable = measurement_variables[0] if measurement_variables else None
             group_variable = None
             st.caption("Runs pairwise Wilcoxon signed-rank comparisons across selected measurements and applies Holm adjustment to the full family of p-values. Prefer this after a significant Friedman test.")
+        elif inference_method == "Linear mixed-effects model (random intercept)":
+            outcome_variable = st.selectbox("Numeric outcome variable", numeric_cols, key="inference_lmm_outcome") if numeric_cols else None
+            group_options = [c for c in inference_df.columns if c != outcome_variable and inference_df[c].nunique(dropna=True) >= 3]
+            group_variable = st.selectbox("Subject / group identifier", group_options, key="inference_lmm_group") if group_options else None
+            predictor_options = [c for c in inference_df.columns if c not in {outcome_variable, group_variable}]
+            fixed_effect_variables = st.multiselect("Fixed-effect predictors", predictor_options, default=[], key="inference_lmm_predictors")
+            measurement_variables = []
+            st.caption("Use long-format data: one row per observation, a repeated subject/group ID, a continuous outcome and one or more fixed-effect predictors. Fits a random intercept using REML. Random slopes and complex-survey adjustments are not included.")
         elif inference_method == "One-way repeated-measures ANOVA":
             measurement_variables = st.multiselect(
                 "Repeated measurement columns (select at least three, in time/condition order)",
@@ -7484,7 +7492,7 @@ elif page == "Statistical Inference":
                     )
                 elif inference_method == "Kruskal–Wallis test":
                     inference_result = run_kruskal_wallis_test_service(inference_df, outcome_variable, group_variable)
-                elif inference_method == "One-way repeated-measures ANOVA":
+                elif inference_method == "Linear mixed-effects model (random intercept)":\n                    inference_result = run_linear_mixed_effects_model_service(inference_df, outcome_variable, group_variable, fixed_effect_variables)\n                elif inference_method == "One-way repeated-measures ANOVA":
                     inference_result = run_repeated_measures_anova_service(inference_df, measurement_variables, confidence_level)
                 elif inference_method == "Pairwise Wilcoxon post-hoc test with Holm adjustment":
                     inference_result = run_friedman_pairwise_posthoc_service(inference_df, measurement_variables)
