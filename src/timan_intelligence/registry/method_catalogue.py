@@ -37,6 +37,7 @@ IMPLEMENTED_METHODS = frozenset(
         "method.inference.confidence_interval.proportion",
         "method.survey.estimation.weighted_proportion",
         "method.inference.comparison.posthoc.tukey",
+        "method.inference.comparison.posthoc.games_howell",
         "method.inference.resampling.bootstrap.confidence_interval",
         "method.forecasting.time_series.arima",
         "method.forecasting.time_series.sarima",
