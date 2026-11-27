@@ -429,3 +429,122 @@ def run_sarima_time_series_model(
             "study_design": "time_series",
         },
     )
+
+
+def run_stl_time_series_decomposition(
+    df: pd.DataFrame,
+    time_variable: str,
+    outcome_variable: str,
+    seasonal_period: int = 12,
+    robust: bool = True,
+) -> AnalysisResult:
+    """Decompose a regular univariate time series into trend, seasonal and remainder."""
+    from statsmodels.tsa.seasonal import STL
+
+    if not isinstance(df, pd.DataFrame) or df.empty:
+        raise ValueError("A non-empty pandas DataFrame is required.")
+    if not isinstance(time_variable, str) or time_variable not in df.columns:
+        raise ValueError("Select a valid time-index variable.")
+    if not isinstance(outcome_variable, str) or outcome_variable not in df.columns:
+        raise ValueError("Select a valid numeric outcome variable.")
+    if time_variable == outcome_variable:
+        raise ValueError("Time-index and outcome variables must be different.")
+    if not pd.api.types.is_numeric_dtype(df[outcome_variable]):
+        raise TypeError("STL decomposition requires a numeric outcome variable.")
+    if isinstance(seasonal_period, bool) or not isinstance(seasonal_period, (int, np.integer)):
+        raise TypeError("seasonal_period must be an integer.")
+    period = int(seasonal_period)
+    if not 2 <= period <= 52:
+        raise ValueError("seasonal_period must be between 2 and 52.")
+    if not isinstance(robust, bool):
+        raise TypeError("robust must be a boolean.")
+
+    dates = pd.to_datetime(df[time_variable], errors="coerce")
+    if dates.isna().any():
+        raise ValueError("Time-index values must be valid and complete.")
+    if dates.duplicated().any():
+        raise ValueError("Time-index values must be unique; aggregate duplicate time points before STL decomposition.")
+    positions = np.argsort(dates.to_numpy())
+    dates = pd.DatetimeIndex(dates.iloc[positions])
+    values = pd.to_numeric(df[outcome_variable], errors="coerce").to_numpy(dtype=float)[positions]
+    if not np.isfinite(values).all():
+        raise ValueError("STL outcome values must be complete and finite; resolve missing or infinite values first.")
+    minimum_n = max(30, 2 * period)
+    if len(values) < minimum_n:
+        raise ValueError(f"At least {minimum_n} observations (30 and two seasonal cycles) are required for this seasonal period.")
+    inferred_frequency = pd.infer_freq(dates)
+    if inferred_frequency is None:
+        raise ValueError("The time index is not regularly spaced; provide a regular time series before STL decomposition.")
+    frequency = getattr(inferred_frequency, "freqstr", str(inferred_frequency))
+    index = pd.DatetimeIndex(dates, freq=frequency)
+    series = pd.Series(values, index=index, name=outcome_variable)
+    fitted = STL(series, period=period, robust=robust).fit()
+
+    trend = np.asarray(fitted.trend, dtype=float)
+    seasonal = np.asarray(fitted.seasonal, dtype=float)
+    remainder = np.asarray(fitted.resid, dtype=float)
+    observed = np.asarray(series, dtype=float)
+
+    def _strength(component: np.ndarray) -> float:
+        denominator = float(np.var(component + remainder, ddof=1))
+        if not np.isfinite(denominator) or denominator <= np.finfo(float).eps:
+            return 0.0
+        value = 1.0 - float(np.var(remainder, ddof=1)) / denominator
+        return float(np.clip(value, 0.0, 1.0))
+
+    trend_strength = _strength(trend)
+    seasonal_strength = _strength(seasonal)
+    decomposition = pd.DataFrame({
+        time_variable: dates,
+        "observed": observed,
+        "trend": trend,
+        "seasonal": seasonal,
+        "remainder": remainder,
+    })
+    summary = pd.DataFrame([{
+        "observations": int(len(values)),
+        "seasonal_period": period,
+        "frequency": frequency,
+        "robust_fitting": robust,
+        "trend_strength": trend_strength,
+        "seasonal_strength": seasonal_strength,
+        "remainder_mean": float(np.mean(remainder)),
+        "remainder_standard_deviation": float(np.std(remainder, ddof=1)),
+    }])
+    findings = [
+        f"STL decomposed {len(values):,} observations at frequency {frequency} using seasonal period {period}.",
+        f"Descriptive trend strength is {trend_strength:.3f}; seasonal strength is {seasonal_strength:.3f}.",
+        "Review the component plot and remainder pattern; component strengths are descriptive summaries, not significance tests.",
+    ]
+    limitations = [
+        "STL is an additive descriptive decomposition, not a forecasting model or inferential test.",
+        "The selected seasonal period is analyst-specified and should match the actual calendar cycle.",
+        "Only one seasonal period is modelled; multiple or evolving seasonal cycles may require other methods.",
+        "A regular unique time index and complete finite observations are required; no missing-period imputation is performed.",
+        "Trend and seasonal strength values are descriptive diagnostics and do not have inferential p-values or confidence intervals.",
+    ]
+    return AnalysisResult(
+        title=f"STL time-series decomposition: {outcome_variable}",
+        method="Seasonal-Trend decomposition using LOESS (STL)",
+        status="success",
+        tables={"decomposition": decomposition, "summary": summary},
+        findings=findings,
+        assumptions=[
+            "The time index is unique, ordered and regularly spaced.",
+            "The selected seasonal period represents a meaningful recurring cycle.",
+            "An additive decomposition is informative for the observed series.",
+        ],
+        limitations=limitations,
+        metadata={
+            "time_variable": time_variable,
+            "outcome_variable": outcome_variable,
+            "seasonal_period": period,
+            "frequency": frequency,
+            "n_observations": int(len(values)),
+            "robust": robust,
+            "trend_strength": trend_strength,
+            "seasonal_strength": seasonal_strength,
+            "sampling_design_aware": False,
+            "study_design": "time_series",
+        },
+    )

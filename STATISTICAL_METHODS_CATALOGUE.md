@@ -2380,3 +2380,8 @@ The complex survey estimation method now executes design-based means, totals and
 ## Seasonal ARIMA (SARIMA)
 
 SARIMA extends non-seasonal ARIMA with seasonal autoregressive, differencing and moving-average terms. The implementation fits a univariate SARIMAX model with no exogenous regressors, requires a unique complete regular time index and at least two seasonal cycles, and returns forecasts with model-based prediction intervals, parameter estimates, information criteria and residual diagnostics. The analyst must specify and justify both the non-seasonal order (p,d,q) and seasonal order (P,D,Q,s). It does not automatically select orders, handle multiple seasonal periods, impute missing periods or account for complex survey designs. Execution remains approval-gated and restricted to time-series designs.
+
+
+## STL time-series decomposition
+
+STL (Seasonal-Trend decomposition using LOESS) decomposes a regular univariate series into observed, trend, seasonal and remainder components. The implementation uses robust fitting by default and reports descriptive trend- and seasonal-strength diagnostics. The analyst specifies the seasonal period; at least two complete cycles, a unique regular time index and complete finite observations are required. Component-strength values are descriptive diagnostics, not hypothesis tests. STL does not forecast, model multiple seasonal periods or adjust for complex survey designs.

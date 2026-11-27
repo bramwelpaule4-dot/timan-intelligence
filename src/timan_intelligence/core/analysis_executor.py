@@ -41,7 +41,7 @@ from timan_intelligence.core.statistical_engine import (
     run_linear_mixed_effects_model,
 )
 from timan_intelligence.core.bootstrap import run_bootstrap_confidence_interval
-from timan_intelligence.core.time_series import run_arima_time_series_model, run_sarima_time_series_model
+from timan_intelligence.core.time_series import run_arima_time_series_model, run_sarima_time_series_model, run_stl_time_series_decomposition
 from timan_intelligence.core.numeric_association import run_numeric_association
 from timan_intelligence.services.analysis_service import (
     run_multiple_linear_regression_service,
@@ -94,6 +94,7 @@ _EXECUTOR_BY_METHOD_ID = {
     "method.inference.resampling.bootstrap.confidence_interval": "bootstrap_ci",
     "method.forecasting.time_series.arima": "arima",
     "method.forecasting.time_series.sarima": "sarima",
+    "method.forecasting.time_series.stl_decomposition": "stl_decomposition",
     "method.inference.comparison.anova.repeated_measures": "repeated_measures_anova",
     "method.inference.regression.linear_mixed_effects": "linear_mixed_effects",
     "method.inference.regression.linear.multiple": "multiple_linear_regression",
@@ -443,6 +444,17 @@ def execute_recommendation(
             forecast_steps=options.get("forecast_steps", 12),
             confidence_level=options.get("confidence_level", 0.95),
             validation_steps=options.get("validation_steps", 0),
+        )
+    elif executor == "stl_decomposition":
+        if len(variables) != 2:
+            raise AnalysisExecutionError("STL decomposition requires a time-index variable and one numeric outcome variable.")
+        options = recommendation.get("options") or {}
+        result = run_stl_time_series_decomposition(
+            df,
+            time_variable=variables[0],
+            outcome_variable=variables[1],
+            seasonal_period=options.get("seasonal_period", 12),
+            robust=options.get("robust", True),
         )
     elif executor == "bootstrap_ci":
         if len(variables) != 1:
