@@ -62,7 +62,7 @@ def test_naive_forecast_validates_series_and_options():
     with pytest.raises(ValueError, match="seasonal_period"):
         run_naive_forecast_benchmarks(frame, "month", "value", seasonal_period=1)
     with pytest.raises(ValueError, match="two seasonal cycles"):
-        run_naive_forecast_benchmarks(frame.head(35), "month", "value", seasonal_period=12)
+        run_naive_forecast_benchmarks(frame.head(35), "month", "value", seasonal_period=18)
 
 
 def test_naive_forecast_holdout_requires_minimum_training_data():
