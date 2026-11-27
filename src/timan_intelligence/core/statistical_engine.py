@@ -258,6 +258,7 @@ def run_independent_samples_t_test(
     df: pd.DataFrame,
     outcome_variable: str,
     group_variable: str,
+    confidence_level: float = 0.95,
 ) -> AnalysisResult:
     """Run Welch's independent-samples t-test.
 
@@ -269,6 +270,10 @@ def run_independent_samples_t_test(
     """
     if not isinstance(df, pd.DataFrame):
         raise TypeError("Expected a pandas DataFrame.")
+    if isinstance(confidence_level, bool) or not isinstance(confidence_level, (int, float)):
+        raise TypeError("Confidence level must be numeric.")
+    if not 0 < float(confidence_level) < 1:
+        raise ValueError("Confidence level must be greater than 0 and less than 1.")
 
     if outcome_variable not in df.columns:
         raise ValueError(
@@ -393,6 +398,17 @@ def run_independent_samples_t_test(
     else:
         hedges_j, hedges_g = None, None
 
+    from scipy.stats import norm, t as t_distribution
+    standard_error = float(np.sqrt(standard_error_squared))
+    alpha = 1.0 - float(confidence_level)
+    critical_value = (
+        float(norm.ppf(1.0 - alpha / 2.0))
+        if not np.isfinite(degrees_of_freedom)
+        else float(t_distribution.ppf(1.0 - alpha / 2.0, degrees_of_freedom))
+    )
+    ci_lower = float(mean_difference - critical_value * standard_error)
+    ci_upper = float(mean_difference + critical_value * standard_error)
+
     summary: dict[str, Any] = {
         "group_1_n": group_1_n,
         "group_2_n": group_2_n,
@@ -406,6 +422,10 @@ def run_independent_samples_t_test(
         "cohen_d": cohen_d,
         "hedges_g": hedges_g,
         "hedges_correction": hedges_j,
+        "standard_error": standard_error,
+        "confidence_level": float(confidence_level),
+        "confidence_interval_lower": ci_lower,
+        "confidence_interval_upper": ci_upper,
         "missing_outcomes": missing_outcomes,
         "infinite_outcomes": infinite_outcomes,
     }
@@ -435,6 +455,7 @@ def run_independent_samples_t_test(
         )
 
     findings = [
+        f"{float(confidence_level):.1%} Welch confidence interval for the mean difference (Group 1 minus Group 2): [{ci_lower:.4g}, {ci_upper:.4g}].",
         (
             f"Group {group_1_label} has {group_1_n} usable observations "
             f"and a mean of {group_1_mean:.4g}."
@@ -482,6 +503,9 @@ def run_independent_samples_t_test(
             "cohen_d": cohen_d,
             "hedges_g": hedges_g,
             "hedges_correction": hedges_j,
+            "standard_error": standard_error,
+            "confidence_level": float(confidence_level),
+            "confidence_interval": (ci_lower, ci_upper),
             "sampling_design_aware": False,
             "study_design": "independent_groups",
         },

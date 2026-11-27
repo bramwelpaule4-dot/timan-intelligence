@@ -2340,3 +2340,8 @@ Neither coefficient establishes construct validity or measurement invariance. Th
 - **One-sample Student's t-test:** reports Cohen's d for the sample-mean difference from the specified reference value, standardized by the sample standard deviation, plus Hedges' g when the small-sample correction is estimable. Direction is sample mean minus reference.
 - **Two-independent-proportions score test:** reports Cohen's h, the arcsine-transformed difference between the two observed proportions. Direction is Group 1 minus Group 2; the raw proportion difference and Newcombe-Wilson interval remain primary interpretable estimates.
 - Effect sizes are unavailable when the relevant standard deviation is zero. Hedges' correction is withheld when only one degree of freedom is available.
+
+
+## Welch independent-samples t-test confidence interval
+
+The Welch independent-samples t-test now reports a two-sided confidence interval for the Group 1 minus Group 2 mean difference. Its standard error and Satterthwaite degrees of freedom are used for the interval; the normal critical value is used only when the degrees of freedom are infinite. The confidence level is configurable and defaults to 95%.
