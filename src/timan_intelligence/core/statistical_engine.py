@@ -2905,3 +2905,146 @@ def run_tukey_hsd_posthoc(
             "study_design": "independent_groups",
         },
     )
+
+
+
+def run_games_howell_posthoc(
+    df: pd.DataFrame,
+    outcome_variable: str,
+    group_variable: str,
+    confidence_level: float = 0.95,
+) -> AnalysisResult:
+    """Run Games-Howell pairwise comparisons for independent heteroscedastic groups."""
+    from itertools import combinations
+    from scipy.stats import studentized_range
+
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Expected a pandas DataFrame.")
+    if not isinstance(outcome_variable, str) or outcome_variable not in df.columns:
+        raise ValueError("Select a valid numeric outcome variable.")
+    if not isinstance(group_variable, str) or group_variable not in df.columns:
+        raise ValueError("Select a valid grouping variable.")
+    if outcome_variable == group_variable:
+        raise ValueError("Outcome and grouping variables must be different.")
+    if isinstance(confidence_level, bool) or not isinstance(confidence_level, (int, float)):
+        raise TypeError("Confidence level must be numeric.")
+    level = float(confidence_level)
+    if not np.isfinite(level) or not 0 < level < 1:
+        raise ValueError("Confidence level must be greater than 0 and less than 1.")
+    if not pd.api.types.is_numeric_dtype(df[outcome_variable]):
+        raise TypeError("Games-Howell requires a numeric outcome variable.")
+    if df[group_variable].isna().any():
+        raise ValueError("The grouping variable contains missing group labels.")
+
+    outcome = pd.to_numeric(df[outcome_variable], errors="coerce")
+    finite_mask = outcome.notna() & np.isfinite(outcome.to_numpy(dtype=float, na_value=np.nan))
+    valid = pd.DataFrame({
+        "_outcome": outcome.loc[finite_mask].astype(float),
+        "_group": df.loc[finite_mask, group_variable],
+    })
+    labels = list(pd.unique(valid["_group"]))
+    if len(labels) < 3:
+        raise ValueError("Games-Howell requires at least three independent groups.")
+    group_values = [
+        valid.loc[valid["_group"] == label, "_outcome"].to_numpy(dtype=float)
+        for label in labels
+    ]
+    if any(len(values) < 2 for values in group_values):
+        raise ValueError("Games-Howell requires at least two finite observations in each group.")
+
+    alpha = 1.0 - level
+    group_count = len(group_values)
+    rows = []
+    for first, second in combinations(range(group_count), 2):
+        first_values, second_values = group_values[first], group_values[second]
+        n_first, n_second = len(first_values), len(second_values)
+        mean_difference = float(np.mean(second_values) - np.mean(first_values))
+        first_variance = float(np.var(first_values, ddof=1))
+        second_variance = float(np.var(second_values, ddof=1))
+        first_component = first_variance / n_first
+        second_component = second_variance / n_second
+        variance_sum = first_component + second_component
+        denominator = (
+            first_component ** 2 / (n_first - 1)
+            + second_component ** 2 / (n_second - 1)
+        )
+        if not np.isfinite(variance_sum) or variance_sum <= np.finfo(float).eps or denominator <= np.finfo(float).eps:
+            raise ValueError(
+                f"Games-Howell is undefined for groups '{labels[first]}' and '{labels[second]}' "
+                "because both groups have zero or negligible within-group variance."
+            )
+        degrees_freedom = float(variance_sum ** 2 / denominator)
+        q_statistic = float(np.sqrt(2.0) * abs(mean_difference) / np.sqrt(variance_sum))
+        critical_q = float(studentized_range.ppf(level, group_count, degrees_freedom))
+        p_value = float(studentized_range.sf(q_statistic, group_count, degrees_freedom))
+        half_width = float(critical_q * np.sqrt(variance_sum / 2.0))
+        rows.append({
+            "Group 1": str(labels[first]),
+            "Group 2": str(labels[second]),
+            "Group 1 n": int(n_first),
+            "Group 2 n": int(n_second),
+            "Group 1 mean": float(np.mean(first_values)),
+            "Group 2 mean": float(np.mean(second_values)),
+            "Mean difference (Group 2 - Group 1)": mean_difference,
+            "Games-Howell q statistic": q_statistic,
+            "Welch-Satterthwaite degrees of freedom": degrees_freedom,
+            "Games-Howell p-value": p_value,
+            f"{level:.0%} simultaneous CI lower": mean_difference - half_width,
+            f"{level:.0%} simultaneous CI upper": mean_difference + half_width,
+            "Reject equal means": bool(p_value < alpha),
+        })
+
+    pairwise = pd.DataFrame(rows)
+    group_summary = pd.DataFrame([{
+        "Group": str(label),
+        "Observations": int(len(values)),
+        "Mean": float(np.mean(values)),
+        "Standard deviation": float(np.std(values, ddof=1)),
+        "Variance": float(np.var(values, ddof=1)),
+    } for label, values in zip(labels, group_values)])
+    significant = int(pairwise["Reject equal means"].sum())
+    findings = [
+        f"Games-Howell evaluated {len(rows)} pairwise mean comparisons across {group_count} independent groups.",
+        f"{significant} pairwise difference(s) were significant at alpha={alpha:.3g} using the studentized-range family-wise procedure.",
+        f"Mean differences are reported as Group 2 minus Group 1 with {level:.1%} simultaneous confidence intervals.",
+        "Each comparison uses a pair-specific Welch-Satterthwaite degrees-of-freedom estimate and does not assume equal group variances.",
+    ]
+    limitations = [
+        "Games-Howell is a post-hoc procedure commonly used after a Welch one-way ANOVA when equal variances are not assumed.",
+        "The method assumes independent observations and approximately normal within-group distributions; small samples and severe non-normality can affect inference.",
+        "Not adjusted for survey weights, clustering, stratification, repeated measures or finite-population corrections.",
+        "Missing and non-finite outcome values are excluded; missing group labels are rejected.",
+    ]
+    excluded = int(len(df) - len(valid))
+    if excluded:
+        limitations.append(f"{excluded:,} rows with missing or non-finite outcome values were excluded.")
+    return AnalysisResult(
+        title=f"Games-Howell post-hoc comparisons: {outcome_variable} by {group_variable}",
+        method="Games-Howell post-hoc test",
+        status="success",
+        tables={"pairwise_comparisons": pairwise, "group_summary": group_summary},
+        findings=findings,
+        assumptions=[
+            "The outcome is numeric and the grouping factor defines at least three independent groups.",
+            "Observations are independent within and between groups.",
+            "Within-group distributions are sufficiently well behaved for the studentized-range approximation.",
+            "Unequal population variances are allowed; pairwise variances are estimated separately.",
+        ],
+        limitations=limitations,
+        metadata={
+            "outcome_variable": outcome_variable,
+            "group_variable": group_variable,
+            "group_labels": [str(label) for label in labels],
+            "group_sizes": [int(len(values)) for values in group_values],
+            "n_observations": int(len(valid)),
+            "excluded_outcomes": excluded,
+            "number_of_comparisons": len(rows),
+            "significant_comparisons": significant,
+            "confidence_level": level,
+            "alpha": alpha,
+            "adjustment": "Games-Howell studentized range",
+            "equal_variances_assumed": False,
+            "sampling_design_aware": False,
+            "study_design": "independent_groups",
+        },
+    )

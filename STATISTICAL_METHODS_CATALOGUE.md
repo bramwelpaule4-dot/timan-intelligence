@@ -2417,3 +2417,8 @@ STL decomposition now adds a robust remainder z-score based on the median absolu
 - **Tukey HSD:** each Group 2 minus Group 1 mean difference now includes Cohen's d and Hedges' g, standardized using the common pooled within-group residual standard deviation from the equal-variance one-way model. Hedges' g applies the small-sample gamma correction using the residual degrees of freedom. These standardized effects do not replace the Tukey-adjusted p-values or simultaneous confidence intervals.
 - **Dunn-Holm:** each pairwise comparison now includes a pair-specific rank-biserial correlation computed from the two groups' midranks. Its direction is Group 1 minus Group 2. This descriptive effect size is distinct from Dunn's pooled-rank Z statistic and is not itself multiplicity-adjusted.
 - **Wilcoxon signed-rank:** the matched-pairs rank-biserial correlation is now included directly in the result table as well as the findings and metadata. Direction is after minus before.
+
+
+## Games-Howell post-hoc comparisons
+
+Games-Howell provides pairwise independent-group mean comparisons without assuming equal variances. Each pair uses its own sample variances, Welch-Satterthwaite degrees of freedom and studentized-range adjustment for family-wise error across the comparison set. It reports Group 2 minus Group 1 mean differences, q statistics, adjusted p-values and simultaneous confidence intervals. It is commonly used after Welch one-way ANOVA when heteroscedasticity makes Tukey HSD inappropriate. Independent observations and reasonably well-behaved within-group distributions are still required; it is not adjusted for complex survey designs or repeated measures.
