@@ -2395,3 +2395,8 @@ The stationarity diagnostic workflow reports the Augmented Dickey-Fuller (ADF) u
 ## ACF and PACF autocorrelation diagnostics
 
 The autocorrelation diagnostic workflow reports sample autocorrelation (ACF), partial autocorrelation (PACF), approximate confidence intervals and Ljung-Box joint tests at selected lags. It supports inspection of serial dependence before ARIMA/SARIMA specification and residual review after model fitting. At least 30 complete, finite, regularly spaced observations are required; the lag count is limited to 20 and must be less than half the sample size. ACF/PACF patterns support analyst-led model identification but do not automatically select orders. Trends, seasonal patterns, structural breaks and outliers must be considered. Complex survey adjustments are not supported.
+
+
+## Naïve forecasting benchmarks
+
+The naïve benchmark repeats the latest observed value across the forecast horizon. An optional seasonal-naïve benchmark repeats the latest complete seasonal cycle. When a terminal holdout is specified, the method reports MAE and RMSE for each benchmark using only the training observations to construct predictions. At least 30 training observations are required; seasonal-naïve evaluation requires at least two seasonal cycles in the training data. These are point-forecast baselines without prediction intervals, trend extrapolation, exogenous predictors or rolling-origin validation. Compare their holdout errors with those from more complex forecasting models on the same holdout window.

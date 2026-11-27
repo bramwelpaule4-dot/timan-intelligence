@@ -36,7 +36,7 @@ def test_only_existing_execution_methods_are_marked_implemented():
     }
 
     assert implemented == IMPLEMENTED_METHODS
-    assert len(implemented) == 46
+    assert len(implemented) == 47
 
 
 def test_stl_decomposition_is_registered_as_conditionally_executable():
@@ -202,8 +202,8 @@ def test_catalogue_summary_reports_lifecycle_and_priorities():
     summary = get_statistical_method_summary()
 
     assert summary["catalogue_version"] == CATALOGUE_VERSION
-    assert summary["total_methods"] == 46
-    assert summary["implementation_status"]["implemented"] == 46
+    assert summary["total_methods"] == 47
+    assert summary["implementation_status"]["implemented"] == 47
     assert summary["implementation_status"].get("planned", 0) == 0
     assert set(summary["release_priorities"]) == {"P1", "P2", "P3"}
 

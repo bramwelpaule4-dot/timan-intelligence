@@ -786,3 +786,144 @@ def run_autocorrelation_diagnostics(
             "study_design": "time_series",
         },
     )
+
+
+
+def run_naive_forecast_benchmarks(
+    df: pd.DataFrame,
+    time_variable: str,
+    outcome_variable: str,
+    forecast_steps: int = 12,
+    seasonal_period: int | None = None,
+    validation_steps: int = 0,
+) -> AnalysisResult:
+    """Produce naïve and optional seasonal-naïve point-forecast benchmarks."""
+    if not isinstance(df, pd.DataFrame) or df.empty:
+        raise ValueError("A non-empty pandas DataFrame is required.")
+    if not isinstance(time_variable, str) or time_variable not in df.columns:
+        raise ValueError("Select a valid time-index variable.")
+    if not isinstance(outcome_variable, str) or outcome_variable not in df.columns:
+        raise ValueError("Select a valid numeric outcome variable.")
+    if time_variable == outcome_variable:
+        raise ValueError("Time-index and outcome variables must be different.")
+    if not pd.api.types.is_numeric_dtype(df[outcome_variable]):
+        raise TypeError("Naïve forecasting requires a numeric outcome variable.")
+    for name, value, lower, upper in (
+        ("forecast_steps", forecast_steps, 1, 100),
+        ("validation_steps", validation_steps, 0, 100),
+    ):
+        if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
+            raise TypeError(f"{name} must be an integer.")
+        if not lower <= int(value) <= upper:
+            raise ValueError(f"{name} must be between {lower} and {upper}.")
+    if seasonal_period is not None:
+        if isinstance(seasonal_period, bool) or not isinstance(seasonal_period, (int, np.integer)):
+            raise TypeError("seasonal_period must be an integer or None.")
+        if not 2 <= int(seasonal_period) <= 52:
+            raise ValueError("seasonal_period must be between 2 and 52.")
+
+    dates = pd.to_datetime(df[time_variable], errors="coerce")
+    if dates.isna().any():
+        raise ValueError("Time-index values must be valid and complete.")
+    if dates.duplicated().any():
+        raise ValueError("Time-index values must be unique.")
+    positions = np.argsort(dates.to_numpy())
+    dates = pd.DatetimeIndex(dates.iloc[positions])
+    values = pd.to_numeric(df[outcome_variable], errors="coerce").to_numpy(dtype=float)[positions]
+    if not np.isfinite(values).all():
+        raise ValueError("Outcome values must be complete and finite; resolve missing or infinite values first.")
+    if len(values) < 30:
+        raise ValueError("At least 30 regularly spaced observations are required for forecasting benchmarks.")
+    inferred_frequency = pd.infer_freq(dates)
+    if inferred_frequency is None:
+        raise ValueError("The time index is not regularly spaced.")
+    frequency = getattr(inferred_frequency, "freqstr", str(inferred_frequency))
+
+    validation_steps = int(validation_steps)
+    if validation_steps and len(values) - validation_steps < 30:
+        raise ValueError("Holdout validation requires at least 30 training observations.")
+    if seasonal_period is not None:
+        period = int(seasonal_period)
+        training_n = len(values) - validation_steps
+        if training_n < 2 * period:
+            raise ValueError("At least two seasonal cycles are required in the training data.")
+    else:
+        period = None
+
+    def _naive(train: np.ndarray, horizon: int) -> np.ndarray:
+        return np.repeat(float(train[-1]), horizon)
+
+    def _seasonal_naive(train: np.ndarray, horizon: int) -> np.ndarray:
+        return np.resize(train[-period:], horizon).astype(float)
+
+    future_dates = pd.date_range(
+        start=dates[-1], periods=int(forecast_steps) + 1, freq=frequency
+    )[1:]
+    forecast_data: dict[str, Any] = {
+        time_variable: future_dates,
+        "naive_forecast": _naive(values, int(forecast_steps)),
+    }
+    if period is not None:
+        forecast_data["seasonal_naive_forecast"] = _seasonal_naive(values, int(forecast_steps))
+    forecasts = pd.DataFrame(forecast_data)
+
+    validation = pd.DataFrame()
+    if validation_steps:
+        train = values[:-validation_steps]
+        actual = values[-validation_steps:]
+        methods = [("naive", _naive(train, validation_steps))]
+        if period is not None:
+            methods.append(("seasonal_naive", _seasonal_naive(train, validation_steps)))
+        rows = []
+        for method_name, predicted in methods:
+            errors = actual - predicted
+            rows.append({
+                "benchmark": method_name,
+                "training_observations": int(len(train)),
+                "holdout_observations": int(validation_steps),
+                "validation_start": dates[-validation_steps].isoformat(),
+                "validation_end": dates[-1].isoformat(),
+                "mean_absolute_error": float(np.mean(np.abs(errors))),
+                "root_mean_squared_error": float(np.sqrt(np.mean(errors ** 2))),
+            })
+        validation = pd.DataFrame(rows)
+
+    findings = [
+        f"Generated naïve benchmark forecasts for {int(forecast_steps)} future time point(s) at frequency {frequency}.",
+        *([f"Generated seasonal-naïve forecasts by repeating the last {period}-observation cycle."] if period is not None else []),
+        *([f"Compared benchmark accuracy on a terminal holdout of {validation_steps} observations; the holdout was excluded from model construction."] if validation_steps else ["No holdout validation was requested; forecast accuracy has not been evaluated out of sample."]),
+    ]
+    limitations = [
+        "Naïve forecasts assume the latest observed level persists; seasonal-naïve forecasts repeat the most recent seasonal cycle.",
+        "These are transparent benchmark forecasts, not trend, explanatory or probabilistic models; no prediction intervals are produced.",
+        "Holdout accuracy is based on a single terminal holdout and may not represent performance across different forecast origins or regimes.",
+        "MAE and RMSE are scale-dependent; compare them on the same outcome and holdout window when benchmarking alternative models.",
+        "The method is univariate and not adjusted for complex survey weights, clustering or stratification.",
+    ]
+    return AnalysisResult(
+        title=f"Naïve forecasting benchmarks: {outcome_variable}",
+        method="Naïve and seasonal-naïve forecasting benchmarks",
+        status="success",
+        tables={
+            "forecasts": forecasts,
+            **({"holdout_validation": validation} if validation_steps else {}),
+        },
+        findings=findings,
+        assumptions=[
+            "The time index is unique, ordered and regularly spaced.",
+            "The most recent observation is a meaningful baseline for the naïve forecast.",
+            *([f"The specified seasonal period ({period}) represents a recurring cycle."] if period is not None else []),
+        ],
+        limitations=limitations,
+        metadata={
+            "time_variable": time_variable,
+            "outcome_variable": outcome_variable,
+            "frequency": frequency,
+            "n_observations": int(len(values)),
+            "forecast_steps": int(forecast_steps),
+            "seasonal_period": period,
+            "validation_steps": validation_steps,
+            "sampling_design_aware": False,
+            "study_design": "time_series",
+        },
+    )
