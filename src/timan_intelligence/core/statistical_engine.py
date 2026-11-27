@@ -1086,6 +1086,14 @@ def run_one_sample_t_test(
         raise ValueError("A one-sample t-test requires at least two finite observations.")
     mean = float(finite.mean())
     sd = float(finite.std(ddof=1))
+    mean_difference = mean - reference_value
+    cohen_d = float(mean_difference / sd) if sd > 0 else None
+    if cohen_d is not None and n - 1 > 1:
+        from scipy.special import gammaln
+        hedges_j = float(np.exp(gammaln((n - 1) / 2.0) - 0.5 * np.log((n - 1) / 2.0) - gammaln((n - 2) / 2.0)))
+        hedges_g = float(hedges_j * cohen_d)
+    else:
+        hedges_j, hedges_g = None, None
     if sd == 0:
         difference = mean - reference_value
         if difference == 0:
@@ -1111,11 +1119,13 @@ def run_one_sample_t_test(
         f"Sample mean of {variable}: {mean:,.6g}; reference value: {reference_value:,.6g}.",
         f"Mean difference (sample minus reference): {mean - reference_value:,.6g}.",
         f"t({degrees_of_freedom}) = {statistic:,.4g}; {alternative} p-value = {p_value:.6g}.",
+        (f"Standardized mean difference from reference: Cohen's d = {cohen_d:.4g}" + (f"; Hedges' g = {hedges_g:.4g}." if hedges_g is not None else "; Hedges' g correction is unavailable for this sample size.")) if cohen_d is not None else "Standardized mean difference is undefined because the sample standard deviation is zero.",
         f"95% confidence interval for the population mean: [{lower:,.6g}, {upper:,.6g}].",
     ]
     limitations = [
         "Assumes independent observations from a population for which the one-sample Student-t model is appropriate.",
         "Does not adjust for survey weights, clustering, stratification, repeated measures or finite-population corrections; use Survey Analysis for complex samples.",
+        "Cohen's d standardizes the sample-minus-reference difference by the sample standard deviation; Hedges' g applies a small-sample correction when estimable.",
     ]
     if missing_count:
         limitations.append(f"{missing_count:,} missing observation(s) were excluded.")
@@ -1130,6 +1140,7 @@ def run_one_sample_t_test(
             "Reference value": reference_value, "Mean difference": mean - reference_value,
             "Standard deviation": sd, "Standard error": standard_error,
             "t statistic": statistic, "Degrees of freedom": degrees_of_freedom,
+            "Cohen's d": cohen_d, "Hedges' g": hedges_g,
             "Alternative": alternative, "p-value": p_value,
             "Confidence level": confidence_level, "Lower confidence limit": lower,
             "Upper confidence limit": upper,
@@ -1144,6 +1155,7 @@ def run_one_sample_t_test(
         metadata={
             "variable": variable, "reference_value": reference_value,
             "estimate": mean, "mean_difference": mean - reference_value,
+            "cohen_d": cohen_d, "hedges_g": hedges_g, "hedges_correction": hedges_j,
             "standard_error": standard_error, "t_statistic": statistic,
             "degrees_of_freedom": degrees_of_freedom, "p_value": p_value,
             "alternative": alternative, "confidence_level": confidence_level,
@@ -1340,6 +1352,7 @@ def run_two_independent_proportions_test(df: pd.DataFrame, outcome_variable: str
     x1, x2 = (int(x.sum()) for x in samples)
     p1, p2 = x1 / n1, x2 / n2
     difference = p1 - p2
+    cohen_h = float(2.0 * (np.arcsin(np.sqrt(p1)) - np.arcsin(np.sqrt(p2))))
     pooled = (x1 + x2) / (n1 + n2)
     pooled_se = (pooled * (1 - pooled) * (1 / n1 + 1 / n2)) ** 0.5
     z = difference / pooled_se if pooled_se else (0.0 if difference == 0 else (float("inf") if difference > 0 else float("-inf")))
@@ -1356,12 +1369,12 @@ def run_two_independent_proportions_test(df: pd.DataFrame, outcome_variable: str
     lower = max(-1.0, difference - ((p1-l1)**2 + (u2-p2)**2)**0.5)
     upper = min(1.0, difference + ((u1-p1)**2 + (p2-l2)**2)**0.5)
     se = (p1*(1-p1)/n1 + p2*(1-p2)/n2)**0.5
-    summary = pd.DataFrame([{"Group 1": str(labels[0]), "Group 2": str(labels[1]), "Group 1 successes": x1, "Group 1 n": n1, "Group 1 proportion": p1, "Group 2 successes": x2, "Group 2 n": n2, "Group 2 proportion": p2, "Difference (group 1 - group 2)": difference, "Standard error": se, "Pooled z statistic": z, "p-value": p_value, "Alternative": alternative, "Confidence level": level, "CI lower": lower, "CI upper": upper, "Incomplete pairs excluded": excluded}])
-    findings = [f"Group {labels[0]}: {x1}/{n1} events ({p1:.1%}); group {labels[1]}: {x2}/{n2} events ({p2:.1%}).", f"Estimated difference (group 1 minus group 2): {difference:.1%}.", f"Pooled score z = {z:.4g}; p = {p_value:.4g} ({alternative}).", f"{level:.0%} Newcombe-Wilson confidence interval: [{lower:.1%}, {upper:.1%}]."]
-    limitations = ["Assumes two independent groups and independent Bernoulli observations within each group.", "The hypothesis test uses the pooled two-proportion score z statistic without continuity correction.", "The confidence interval uses Newcombe's method combining two Wilson score intervals.", "Not adjusted for survey weights, clustering, stratification, repeated measures or finite-population corrections."]
+    summary = pd.DataFrame([{"Group 1": str(labels[0]), "Group 2": str(labels[1]), "Group 1 successes": x1, "Group 1 n": n1, "Group 1 proportion": p1, "Group 2 successes": x2, "Group 2 n": n2, "Group 2 proportion": p2, "Difference (group 1 - group 2)": difference, "Cohen's h": cohen_h, "Standard error": se, "Pooled z statistic": z, "p-value": p_value, "Alternative": alternative, "Confidence level": level, "CI lower": lower, "CI upper": upper, "Incomplete pairs excluded": excluded}])
+    findings = [f"Group {labels[0]}: {x1}/{n1} events ({p1:.1%}); group {labels[1]}: {x2}/{n2} events ({p2:.1%}).", f"Estimated difference (group 1 minus group 2): {difference:.1%}.", f"Cohen's h = {cohen_h:.4g} (group 1 minus group 2).", f"Pooled score z = {z:.4g}; p = {p_value:.4g} ({alternative}).", f"{level:.0%} Newcombe-Wilson confidence interval: [{lower:.1%}, {upper:.1%}]."]
+    limitations = ["Assumes two independent groups and independent Bernoulli observations within each group.", "Cohen's h is a directional arcsine-transformed standardized difference in proportions; direction is Group 1 minus Group 2.", "The hypothesis test uses the pooled two-proportion score z statistic without continuity correction.", "The confidence interval uses Newcombe's method combining two Wilson score intervals.", "Not adjusted for survey weights, clustering, stratification, repeated measures or finite-population corrections."]
     if excluded:
         limitations.append(f"{excluded:,} rows with a missing outcome or group label were excluded.")
-    return AnalysisResult(title=f"Two independent proportions: {outcome_variable} by {group_variable}", method="Two-independent-proportions score test", status="success", tables={"test_summary": summary}, findings=findings, assumptions=["Outcome is binary (1=event, 0=non-event).", "The grouping variable defines exactly two independent groups.", "Observations are independent within each group."], limitations=limitations, metadata={"outcome_variable": outcome_variable, "group_variable": group_variable, "group_1_label": str(labels[0]), "group_2_label": str(labels[1]), "group_1_successes": x1, "group_1_n": n1, "group_1_proportion": p1, "group_2_successes": x2, "group_2_n": n2, "group_2_proportion": p2, "estimate": difference, "standard_error": se, "z_statistic": float(z), "p_value": p_value, "alternative": alternative, "confidence_level": level, "confidence_interval": (float(lower), float(upper)), "incomplete_pairs_excluded": excluded, "sampling_design_aware": False, "study_design": "independent_groups", "inference_framework": "pooled_two_proportion_score_newcombe_wilson"})
+    return AnalysisResult(title=f"Two independent proportions: {outcome_variable} by {group_variable}", method="Two-independent-proportions score test", status="success", tables={"test_summary": summary}, findings=findings, assumptions=["Outcome is binary (1=event, 0=non-event).", "The grouping variable defines exactly two independent groups.", "Observations are independent within each group."], limitations=limitations, metadata={"outcome_variable": outcome_variable, "group_variable": group_variable, "group_1_label": str(labels[0]), "group_2_label": str(labels[1]), "group_1_successes": x1, "group_1_n": n1, "group_1_proportion": p1, "group_2_successes": x2, "group_2_n": n2, "group_2_proportion": p2, "estimate": difference, "cohen_h": cohen_h, "standard_error": se, "z_statistic": float(z), "p_value": p_value, "alternative": alternative, "confidence_level": level, "confidence_interval": (float(lower), float(upper)), "incomplete_pairs_excluded": excluded, "sampling_design_aware": False, "study_design": "independent_groups", "inference_framework": "pooled_two_proportion_score_newcombe_wilson"})
 
 def run_one_sample_binomial_test(df: pd.DataFrame, variable: str, reference_proportion: float,
                                 alternative: str = "two-sided", confidence_level: float = 0.95) -> AnalysisResult:
