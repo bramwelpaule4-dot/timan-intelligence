@@ -36,7 +36,7 @@ def test_only_existing_execution_methods_are_marked_implemented():
     }
 
     assert implemented == IMPLEMENTED_METHODS
-    assert len(implemented) == 25
+    assert len(implemented) == 26
 
 
 def test_exact_binomial_is_registered_as_conditionally_executable():
@@ -180,8 +180,8 @@ def test_catalogue_summary_reports_lifecycle_and_priorities():
 
     assert summary["catalogue_version"] == CATALOGUE_VERSION
     assert summary["total_methods"] == 35
-    assert summary["implementation_status"]["implemented"] == 25
-    assert summary["implementation_status"]["planned"] == 10
+    assert summary["implementation_status"]["implemented"] == 26
+    assert summary["implementation_status"]["planned"] == 9
     assert set(summary["release_priorities"]) == {"P1", "P2", "P3"}
 
 
@@ -310,6 +310,15 @@ def test_repeated_measures_anova_is_registered_as_conditionally_executable():
 
 def test_frequency_distribution_is_registered_as_executable():
     method = get_statistical_method("method.descriptive.categorical.frequency")
+    assert method is not None
+    assert method.implementation_status == "implemented"
+    assert method.verification_status == "unit_tested"
+    assert method.execution_eligibility == "eligible"
+
+
+
+def test_cross_tabulation_is_registered_as_executable():
+    method = get_statistical_method("method.descriptive.categorical.cross_tabulation")
     assert method is not None
     assert method.implementation_status == "implemented"
     assert method.verification_status == "unit_tested"

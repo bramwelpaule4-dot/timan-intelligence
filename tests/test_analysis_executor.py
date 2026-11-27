@@ -695,3 +695,52 @@ def test_execution_blocks_correlation_for_dependent_study_designs(study_design):
     }
     with pytest.raises(AnalysisExecutionError, match="assumes independent groups"):
         execute_recommendation(df, recommendation, approved=True)
+
+
+
+def test_executor_runs_categorical_cross_tabulation_with_explicit_missing_values():
+    frame = pd.DataFrame({
+        "sex": ["F", "F", "M", "M", None, "F"],
+        "employment": ["Yes", "No", "Yes", "Yes", "No", None],
+    })
+    recommendation = {
+        "method": "Cross-tabulation",
+        "method_id": "method.descriptive.categorical.cross_tabulation",
+        "variables": ["sex", "employment"],
+        "status": "review_required",
+    }
+    result = execute_recommendation(frame, recommendation, approved=True)
+    counts = result.tables["counts"]
+    row_pct = result.tables["row_percentages"]
+    col_pct = result.tables["column_percentages"]
+    total_pct = result.tables["total_percentages"]
+
+    assert result.status == "success"
+    assert result.method == "Cross-tabulation"
+    assert result.metadata["total_n"] == 6
+    assert result.metadata["complete_case_n"] == 4
+    assert result.metadata["row_missing_n"] == 1
+    assert result.metadata["column_missing_n"] == 1
+    assert counts.loc["F", "Yes"] == 1
+    assert counts.loc["(Missing)", "No"] == 1
+    assert row_pct.loc["F"].sum() == pytest.approx(100.0)
+    assert col_pct["Yes"].sum() == pytest.approx(100.0)
+    assert total_pct.to_numpy().sum() == pytest.approx(100.0)
+    assert result.metadata["population_representative"] is False
+
+
+def test_cross_tabulation_requires_two_distinct_categorical_variables():
+    frame = pd.DataFrame({"group": ["A", "B"], "score": [1, 2]})
+    recommendation = {
+        "method": "Cross-tabulation",
+        "variables": ["group"],
+        "status": "review_required",
+    }
+    with pytest.raises(AnalysisExecutionError, match="exactly two"):
+        execute_recommendation(frame, recommendation, approved=True)
+    recommendation["variables"] = ["group", "group"]
+    with pytest.raises(ValueError, match="different variables"):
+        execute_recommendation(frame, recommendation, approved=True)
+    recommendation["variables"] = ["group", "score"]
+    with pytest.raises(TypeError, match="categorical"):
+        execute_recommendation(frame, recommendation, approved=True)

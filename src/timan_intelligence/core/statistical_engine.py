@@ -2232,7 +2232,7 @@ def run_categorical_frequency_distribution(
     ])
     findings = [
         f"{variable} contains {len(counts) - (1 if missing_n else 0)} observed category/categories across {valid_n:,} valid responses.",
-        f"{missing_n:,} of {total_n:,} records ({missing_n / total_n:.1%} if total_n else 0) are missing.",
+        f"{missing_n:,} of {total_n:,} records ({missing_n / total_n:.1%}) are missing.",
     ]
     limitations = [
         "Percentages are unweighted and describe the observed dataset; they are not population estimates.",
@@ -2255,6 +2255,112 @@ def run_categorical_frequency_distribution(
             "valid_n": valid_n,
             "missing_n": missing_n,
             "observed_categories": int(len(counts) - (1 if missing_n else 0)),
+            "estimate_scope": "observed_dataset",
+            "population_representative": False,
+            "sampling_design_aware": False,
+        },
+    )
+
+
+
+def run_categorical_cross_tabulation(
+    df: pd.DataFrame,
+    row_variable: str,
+    column_variable: str,
+) -> AnalysisResult:
+    """Create an unweighted two-way table with explicit missing categories.
+
+    Row percentages use each row total, column percentages use each column
+    total, and total percentages use all records. Missing values are retained
+    as visible categories rather than silently excluded.
+    """
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Expected a pandas DataFrame.")
+    if (
+        not isinstance(row_variable, str)
+        or not isinstance(column_variable, str)
+        or row_variable not in df.columns
+        or column_variable not in df.columns
+    ):
+        raise ValueError("Select two valid categorical variables.")
+    if row_variable == column_variable:
+        raise ValueError("Cross-tabulation requires two different variables.")
+    if df.empty:
+        raise ValueError("Cross-tabulation requires at least one record.")
+
+    variables = {row_variable: df[row_variable], column_variable: df[column_variable]}
+    for name, series in variables.items():
+        if pd.api.types.is_numeric_dtype(series) and not pd.api.types.is_bool_dtype(series):
+            raise TypeError(
+                f"{name} is numeric. Cross-tabulation requires categorical, "
+                "ordinal, binary or boolean variables. Convert numeric category "
+                "codes to a categorical type first."
+            )
+        if series.notna().sum() == 0:
+            raise ValueError(f"{name} contains no non-missing categories.")
+
+    def display_labels(series: pd.Series) -> pd.Series:
+        observed = pd.Series(series.dropna().unique(), dtype="object")
+        labels = observed.map(str)
+        if labels.duplicated().any():
+            raise ValueError(
+                "Distinct category values have identical text labels. "
+                "Recode the categories to unique labels before cross-tabulation."
+            )
+        values = series.astype("object")
+        return values.map(lambda value: "(Missing)" if pd.isna(value) else str(value))
+
+    row_labels = display_labels(df[row_variable])
+    column_labels = display_labels(df[column_variable])
+    counts = pd.crosstab(row_labels, column_labels, dropna=False)
+    if counts.empty:
+        raise ValueError("No category combinations are available to tabulate.")
+
+    row_totals = counts.sum(axis=1)
+    column_totals = counts.sum(axis=0)
+    total_n = int(len(df))
+    row_percentages = counts.div(row_totals.replace(0, float("nan")), axis=0) * 100
+    column_percentages = counts.div(column_totals.replace(0, float("nan")), axis=1) * 100
+    total_percentages = counts.astype(float).div(total_n) * 100
+
+    row_missing_n = int(df[row_variable].isna().sum())
+    column_missing_n = int(df[column_variable].isna().sum())
+    complete_case_n = int(df[[row_variable, column_variable]].notna().all(axis=1).sum())
+    limitations = [
+        "Counts and percentages are unweighted descriptions of the observed dataset, not population estimates.",
+        "Missing values are retained as explicit categories; row, column and total percentage denominators include the displayed missing category.",
+        "No inferential test of association is performed by this descriptive cross-tabulation.",
+    ]
+    return AnalysisResult(
+        title=f"Cross-tabulation: {row_variable} by {column_variable}",
+        method="Cross-tabulation",
+        status="success",
+        tables={
+            "counts": counts,
+            "row_percentages": row_percentages,
+            "column_percentages": column_percentages,
+            "total_percentages": total_percentages,
+        },
+        findings=[
+            f"Cross-tabulated {total_n:,} records across {counts.shape[0]:,} row categories and {counts.shape[1]:,} column categories.",
+            f"{complete_case_n:,} records have non-missing values on both variables.",
+            f"Missing values: {row_missing_n:,} for {row_variable}; {column_missing_n:,} for {column_variable}.",
+        ],
+        assumptions=[
+            "Each row represents one observational unit.",
+            "Category definitions are mutually interpretable and consistent.",
+            "The selected row, column and total percentage denominators are appropriate for the reporting question.",
+        ],
+        limitations=limitations,
+        metadata={
+            "row_variable": row_variable,
+            "column_variable": column_variable,
+            "total_n": total_n,
+            "complete_case_n": complete_case_n,
+            "row_missing_n": row_missing_n,
+            "column_missing_n": column_missing_n,
+            "row_category_count": int(counts.shape[0]),
+            "column_category_count": int(counts.shape[1]),
             "estimate_scope": "observed_dataset",
             "population_representative": False,
             "sampling_design_aware": False,
