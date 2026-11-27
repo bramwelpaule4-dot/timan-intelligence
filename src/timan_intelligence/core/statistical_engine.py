@@ -2371,3 +2371,82 @@ def run_categorical_cross_tabulation(
             "sampling_design_aware": False,
         },
     )
+
+
+def run_cronbach_alpha(df: pd.DataFrame, item_variables: list[str]) -> AnalysisResult:
+    """Estimate conventional raw-score Cronbach's alpha and item diagnostics."""
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Expected a pandas DataFrame.")
+    if not isinstance(item_variables, list) or len(item_variables) < 2:
+        raise ValueError("Cronbach's alpha requires at least two item variables.")
+    if len(set(item_variables)) != len(item_variables):
+        raise ValueError("Select each scale item only once.")
+    missing = [name for name in item_variables if not isinstance(name, str) or name not in df.columns]
+    if missing:
+        raise ValueError(f"Unknown scale item variable(s): {missing}.")
+    items = df[item_variables]
+    non_numeric = [name for name in item_variables if not pd.api.types.is_numeric_dtype(items[name])]
+    if non_numeric:
+        raise TypeError("All scale items must be numeric. Review and code ordinal responses consistently before analysis.")
+    numeric = items.astype(float).replace([np.inf, -np.inf], np.nan)
+    complete = numeric.dropna(axis=0, how="any")
+    excluded = int(len(numeric) - len(complete))
+    if len(complete) < 3:
+        raise ValueError("Cronbach's alpha requires at least three complete respondent records.")
+    variances = complete.var(axis=0, ddof=1)
+    total_score = complete.sum(axis=1)
+    total_variance = float(total_score.var(ddof=1))
+    if not np.isfinite(total_variance) or total_variance <= 0:
+        raise ValueError("The total scale score has zero or invalid variance; alpha cannot be estimated.")
+    k = len(item_variables)
+    alpha = float((k / (k - 1)) * (1.0 - float(variances.sum()) / total_variance))
+    rows = []
+    for item in item_variables:
+        remainder = total_score - complete[item]
+        corrected = float(complete[item].corr(remainder)) if remainder.nunique() > 1 and complete[item].nunique() > 1 else float("nan")
+        remaining = complete.drop(columns=[item])
+        if remaining.shape[1] >= 2:
+            remaining_total = remaining.sum(axis=1)
+            remaining_variance = float(remaining_total.var(ddof=1))
+            deleted_alpha = float((remaining.shape[1] / (remaining.shape[1] - 1)) * (1.0 - float(remaining.var(axis=0, ddof=1).sum()) / remaining_variance)) if remaining_variance > 0 else float("nan")
+        else:
+            deleted_alpha = float("nan")
+        rows.append({"Item": item, "Item mean": float(complete[item].mean()),
+            "Item standard deviation": float(complete[item].std(ddof=1)),
+            "Corrected item-total correlation": corrected, "Alpha if item deleted": deleted_alpha})
+    item_table = pd.DataFrame(rows)
+    findings = [
+        f"Cronbach's alpha is {alpha:.3f} across {k} items and {len(complete):,} complete respondents.",
+        "Review corrected item-total correlations and item-deletion diagnostics alongside item wording and the construct definition.",
+    ]
+    limitations = [
+        "Cronbach's alpha is a function of item count, inter-item covariance and score variance; it is not proof of unidimensionality or validity.",
+        "Items must be coded in a consistent direction. Reverse-keyed items are not automatically detected or recoded.",
+        "This conventional raw-score estimator treats numeric item scores as approximately equidistant; ordinal-specific reliability estimators are not provided.",
+        "Listwise deletion was used; missing-data bias is possible if complete cases differ systematically from excluded respondents.",
+        "The estimate is unweighted and is not adjusted for complex survey sampling or clustering.",
+    ]
+    if excluded:
+        limitations.append(f"{excluded:,} records with one or more missing or non-finite item values were excluded by listwise deletion.")
+    if (variances <= 0).any():
+        limitations.append("One or more items have zero variance; inspect these items because they provide no respondent-level discrimination.")
+    if alpha < 0:
+        limitations.append("Negative alpha indicates that the observed item covariance structure is inconsistent with a positively keyed scale; check reverse coding and item coherence.")
+    if (item_table["Corrected item-total correlation"] < 0).any():
+        limitations.append("One or more items have negative corrected item-total correlation; inspect item direction, coding and construct alignment before considering removal.")
+    return AnalysisResult(
+        title="Internal consistency: Cronbach's alpha",
+        method="Conventional raw-score Cronbach's alpha", status="success",
+        tables={"reliability_summary": pd.DataFrame([{
+            "Cronbach's alpha": alpha, "Items": k, "Complete respondents": int(len(complete)),
+            "Excluded respondents": excluded, "Total-score variance": total_variance}]),
+            "item_diagnostics": item_table, "inter_item_correlation": complete.corr()},
+        findings=findings,
+        assumptions=["Items are intended to measure a common or coherent construct.",
+            "All items are coded in the same direction before estimation.",
+            "Respondent records are independent for the conventional interpretation."],
+        limitations=limitations,
+        metadata={"item_variables": list(item_variables), "item_count": k,
+            "valid_n": int(len(complete)), "excluded_n": excluded,
+            "estimate_scope": "observed_complete_cases", "sampling_design_aware": False},
+    )

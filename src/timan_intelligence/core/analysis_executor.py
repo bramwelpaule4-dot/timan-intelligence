@@ -50,6 +50,7 @@ from timan_intelligence.services.analysis_service import (
     run_negative_binomial_regression_service,
     run_kaplan_meier_service,
     run_cox_survival_service,
+    run_cronbach_alpha_service,
 )
 
 
@@ -93,6 +94,7 @@ _EXECUTOR_BY_METHOD_ID = {
     "method.inference.regression.count.negative_binomial": "negative_binomial_regression",
     "method.inference.survival.kaplan_meier": "kaplan_meier",
     "method.inference.survival.cox": "cox_survival",
+    "method.measurement.reliability.cronbach_alpha": "cronbach_alpha",
 }
 
 
@@ -239,7 +241,11 @@ def execute_recommendation(
 
     options = recommendation.get("options") or {}
 
-    if executor == "cross_tabulation":
+    if executor == "cronbach_alpha":
+        if len(variables) < 2:
+            raise AnalysisExecutionError("Cronbach's alpha requires at least two scale item variables.")
+        result = run_cronbach_alpha_service(df, variables)
+    elif executor == "cross_tabulation":
         if len(variables) != 2:
             raise AnalysisExecutionError(
                 "Cross-tabulation requires exactly two categorical variables."

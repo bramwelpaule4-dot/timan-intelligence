@@ -2037,3 +2037,9 @@ def run_linear_mixed_effects_model_service(df: pd.DataFrame, outcome_variable: s
     """Run a validated random-intercept linear mixed-effects model."""
     from timan_intelligence.core.statistical_engine import run_linear_mixed_effects_model
     return run_linear_mixed_effects_model(df, outcome_variable, group_variable, fixed_effect_variables, confidence_level, random_slope_variable)
+
+
+def run_cronbach_alpha_service(df: pd.DataFrame, item_variables: list[str]) -> AnalysisResult:
+    """Run Cronbach's alpha through the shared analysis service."""
+    from timan_intelligence.core.statistical_engine import run_cronbach_alpha
+    return run_cronbach_alpha(df, item_variables)

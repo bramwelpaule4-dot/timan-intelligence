@@ -674,7 +674,13 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             assumptions=["Items are coded in consistent directions.", "The scale structure and measurement assumptions are considered."],
             outputs=["Cronbach's alpha", "Item-total statistics", "Item-deletion diagnostics"],
             use_cases=["Assess internal consistency of questionnaire scales", "Review multi-item measurement instruments"],
-            limitations=["A high alpha does not establish unidimensionality or validity."],
+            limitations=[
+                "A high alpha does not establish unidimensionality, construct validity or measurement invariance.",
+                "The current estimator uses listwise complete cases and treats item scores as numeric/equidistant; ordinal categorical estimators are not provided.",
+            ],
+            implementation_status="implemented",
+            verification_status="unit_tested",
+            execution_eligibility="conditional",
         ),
         _method(
             entity_id="method.survey.estimation.weighted_proportion",
