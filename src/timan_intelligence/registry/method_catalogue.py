@@ -201,6 +201,13 @@ def _build_catalogue() -> tuple[MethodEntity, ...]:
             outputs=["Observed cell counts", "Row percentages", "Column percentages", "Total percentages"],
             use_cases=["Compare response patterns across groups", "Disaggregate survey indicators"],
             aliases=["Contingency table", "Crosstab"],
+            implementation_status="implemented",
+            verification_status="unit_tested",
+            execution_eligibility="eligible",
+            limitations=[
+                "Counts and percentages are unweighted descriptions of the observed dataset, not population estimates.",
+                "Missing values are retained as explicit categories; no inferential test of association is performed.",
+            ],
         ),
         _method(
             entity_id="method.inference.comparison.t_test.one_sample",

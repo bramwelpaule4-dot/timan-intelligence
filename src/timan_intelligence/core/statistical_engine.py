@@ -2308,7 +2308,12 @@ def run_categorical_cross_tabulation(
                 "Recode the categories to unique labels before cross-tabulation."
             )
         values = series.astype("object")
-        return values.map(lambda value: "(Missing)" if pd.isna(value) else str(value))
+        missing_label = "(Missing)"
+        while missing_label in set(labels.tolist()):
+            missing_label = f"{missing_label} value"
+        return values.map(
+            lambda value: missing_label if pd.isna(value) else str(value)
+        )
 
     row_labels = display_labels(df[row_variable])
     column_labels = display_labels(df[column_variable])
